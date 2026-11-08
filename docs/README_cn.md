@@ -1,6 +1,6 @@
 # FlatRadar 房源监控
 
-[![Website](https://img.shields.io/badge/Website-flatradar.app-0057CC?style=flat-square)](https://flatradar.app) [![Guide](https://img.shields.io/badge/Guide-Chinese-10B981?style=flat-square)](https://flatradar.app/guide?lang=zh) [![Support](https://img.shields.io/badge/Support-help-64748B?style=flat-square)](https://flatradar.app/support) [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/751K) [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square)](../LICENSE) [![Release](https://img.shields.io/github/v/release/751K/holland2stay-monitor?style=flat-square)](https://github.com/751K/holland2stay-monitor/releases) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![iOS](https://img.shields.io/badge/iOS-SwiftUI-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/751K/FlatRadar-iOS) [![Android](https://img.shields.io/badge/Android-Compose-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/751K/FlatRadar-Android)
+[![Website](https://img.shields.io/badge/Website-flatradar.app-0057CC?style=flat-square)](https://flatradar.app) [![Guide](https://img.shields.io/badge/Guide-Chinese-10B981?style=flat-square)](https://flatradar.app/guide?lang=zh) [![Support](https://img.shields.io/badge/Support-help-64748B?style=flat-square)](https://flatradar.app/support) [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/751K) [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square)](../LICENSE) [![Release](https://img.shields.io/github/v/release/751K/Flatradar?style=flat-square)](https://github.com/751K/Flatradar/releases) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![iOS](https://img.shields.io/badge/iOS-SwiftUI-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/751K/FlatRadar-iOS) [![Android](https://img.shields.io/badge/Android-Compose-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/751K/FlatRadar-Android)
 
 > English version: [README.md](README.md)
 
@@ -19,7 +19,7 @@ Plaza 则可在用户单独启用后自动提交应征。
 |---|---|---|
 | **托管服务** | 大多数人 | 打开 [flatradar.app](https://flatradar.app)。首次登录会自动创建账户；在面板里设置筛选条件和通知渠道即可，无需安装。 |
 | **移动端 App** | 在手机上接收提醒 | [iOS](https://apps.apple.com/us/app/flarradar/id6769857080) · [Android APK](https://github.com/751K/FlatRadar-Android/releases/latest/download/app-release.apk) |
-| **桌面安装包** | macOS / Windows | 从 [Releases](https://github.com/751K/holland2stay-monitor/releases) 下载 |
+| **桌面安装包** | macOS / Windows | 从 [Releases](https://github.com/751K/Flatradar/releases) 下载 |
 | **自行部署** | 自己掌控数据库与投递 | 见下方[快速开始](#快速开始)：自己电脑上一条 Python 命令，或用 Docker 部署到公网服务器。约需 2 GB 内存；公网服务器可能还需要住宅代理。 |
 
 托管服务与自行部署运行同一套代码。
@@ -71,7 +71,7 @@ Plaza 则可在用户单独启用后自动提交应征。
 | Web 面板 | 稳定，为自部署的主要入口 |
 | [iOS App](https://apps.apple.com/us/app/flarradar/id6769857080) | 维护阶段，已上架 App Store，在当前范围内功能完整 |
 | [Android App](https://github.com/751K/FlatRadar-Android/releases/latest/download/app-release.apk) | Beta，提供已签名的 `.apk`，直接安装即可。FCM 推送已验证。不上架 Play Store，直接下载即为其分发方式 |
-| 桌面版 | macOS `.dmg` 与 Windows `.zip`，见 [Releases](https://github.com/751K/holland2stay-monitor/releases) |
+| 桌面版 | macOS `.dmg` 与 Windows `.zip`，见 [Releases](https://github.com/751K/Flatradar/releases) |
 
 ---
 
@@ -96,8 +96,8 @@ Plaza 则可在用户单独启用后自动提交应征。
 只给自己收提醒。不需要 Docker、域名、密码或代理：
 
 ```bash
-git clone https://github.com/751K/holland2stay-monitor.git
-cd holland2stay-monitor
+git clone https://github.com/751K/Flatradar.git
+cd Flatradar
 pip install -r requirements.txt
 python launcher.py
 ```
@@ -213,7 +213,7 @@ python monitor.py   # 抓取循环
 ## 升级与备份
 
 ```bash
-cd /path/to/holland2stay-monitor
+cd /path/to/Flatradar
 docker exec h2s python -c "import sqlite3; sqlite3.connect('data/listings.db').execute('VACUUM INTO ?', ('data/listings.db.bak.$(date +%Y%m%dT%H%M%S)',))"
 git pull
 docker compose build h2s

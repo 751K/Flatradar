@@ -186,7 +186,7 @@ the platforms it monitors, and it does not list or let properties itself.
 
 ## Source
 
-- [Source code](https://github.com/751K/holland2stay-monitor): Python, Flask, SQLite; self-hosting instructions in the README.
+- [Source code](https://github.com/751K/Flatradar): Python, Flask, SQLite; self-hosting instructions in the README.
 """
 
 

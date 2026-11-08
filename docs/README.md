@@ -1,6 +1,6 @@
 # FlatRadar
 
-[![Website](https://img.shields.io/badge/Website-flatradar.app-0057CC?style=flat-square)](https://flatradar.app) [![User Guide](https://img.shields.io/badge/Guide-docs-10B981?style=flat-square)](https://flatradar.app/guide) [![Support](https://img.shields.io/badge/Support-help-64748B?style=flat-square)](https://flatradar.app/support) [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/751K) [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square)](../LICENSE) [![Release](https://img.shields.io/github/v/release/751K/holland2stay-monitor?style=flat-square)](https://github.com/751K/holland2stay-monitor/releases) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![iOS](https://img.shields.io/badge/iOS-SwiftUI-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/751K/FlatRadar-iOS) [![Android](https://img.shields.io/badge/Android-Compose-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/751K/FlatRadar-Android)
+[![Website](https://img.shields.io/badge/Website-flatradar.app-0057CC?style=flat-square)](https://flatradar.app) [![User Guide](https://img.shields.io/badge/Guide-docs-10B981?style=flat-square)](https://flatradar.app/guide) [![Support](https://img.shields.io/badge/Support-help-64748B?style=flat-square)](https://flatradar.app/support) [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-EA4AAA?style=flat-square&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/751K) [![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue?style=flat-square)](../LICENSE) [![Release](https://img.shields.io/github/v/release/751K/Flatradar?style=flat-square)](https://github.com/751K/Flatradar/releases) [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/) [![iOS](https://img.shields.io/badge/iOS-SwiftUI-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/751K/FlatRadar-iOS) [![Android](https://img.shields.io/badge/Android-Compose-3DDC84?style=flat-square&logo=android&logoColor=white)](https://github.com/751K/FlatRadar-Android)
 
 > 中文版：[README_cn.md](README_cn.md)
 
@@ -23,7 +23,7 @@ on the platform.
 |---|---|---|
 | **Hosted service** | Most people | Open [flatradar.app](https://flatradar.app). The first sign-in creates an account automatically; set filters and notification channels in the panel. Nothing to install. |
 | **Mobile apps** | Alerts on your phone | [iOS](https://apps.apple.com/us/app/flarradar/id6769857080) · [Android APK](https://github.com/751K/FlatRadar-Android/releases/latest/download/app-release.apk) |
-| **Desktop builds** | macOS / Windows | Download from [Releases](https://github.com/751K/holland2stay-monitor/releases) |
+| **Desktop builds** | macOS / Windows | Download from [Releases](https://github.com/751K/Flatradar/releases) |
 | **Self-hosting** | Your own instance, database and delivery | [Quick start](#quick-start) below: one Python command on your own computer, or Docker for a public server. About 2 GB of RAM; a public server may also need a residential proxy. |
 
 The hosted service and self-hosting run the same codebase.
@@ -78,7 +78,7 @@ Coverage shifts as third-party sites change. The scrapers are documented in
 | Web dashboard | Stable — the primary interface for self-hosting |
 | [iOS app](https://apps.apple.com/us/app/flarradar/id6769857080) | Maintenance — on the App Store, feature-complete for current scope |
 | [Android app](https://github.com/751K/FlatRadar-Android/releases/latest/download/app-release.apk) | Beta — signed `.apk`, sideload it. FCM push verified. Not going to Play Store — direct download is the distribution channel |
-| Desktop packages | macOS `.dmg` and Windows `.zip` from [Releases](https://github.com/751K/holland2stay-monitor/releases) |
+| Desktop packages | macOS `.dmg` and Windows `.zip` from [Releases](https://github.com/751K/Flatradar/releases) |
 
 ---
 
@@ -103,8 +103,8 @@ Coverage shifts as third-party sites change. The scrapers are documented in
 For alerts just for you. No Docker, domain, password or proxy:
 
 ```bash
-git clone https://github.com/751K/holland2stay-monitor.git
-cd holland2stay-monitor
+git clone https://github.com/751K/Flatradar.git
+cd Flatradar
 pip install -r requirements.txt
 python launcher.py
 ```
@@ -237,7 +237,7 @@ new data.
 ## Upgrading and backups
 
 ```bash
-cd /path/to/holland2stay-monitor
+cd /path/to/Flatradar
 docker exec h2s python -c "import sqlite3; sqlite3.connect('data/listings.db').execute('VACUUM INTO ?', ('data/listings.db.bak.$(date +%Y%m%dT%H%M%S)',))"
 git pull
 docker compose build h2s
