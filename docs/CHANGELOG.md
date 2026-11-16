@@ -1,6 +1,96 @@
 # Changelog
 
-## 未发布
+## v2.2.0 (2026-11-16)
+
+Holland2Stay 改名 Codomo，旧接口全部失效，H2S 抓取随之中断。这一版把抓取改成纯 HTTP，
+平台 key 改为 `codomo`，并借这次机会把项目里对 H2S 的特殊处理全部拿掉——Codomo 与
+Magis / Plaza 走同一套订阅、熔断和设置逻辑。Codomo 暂不支持自动预订。另外收紧了网页端
+的脚本安全策略，修了一批前端功能与无障碍问题，后端拆分了配置、预订与通知层。
+
+### Holland2Stay 改名 Codomo
+
+* **抓取改为纯 HTTP**
+
+    `www.holland2stay.com` 全站 301 到 `codomo.eu`，加密 GraphQL 接口、operation
+    白名单与 REST 快速通道一并失效。新站是服务端渲染，`scrapers/codomo.py` 直接解析
+    全国列表页（`/homes/nl/en?page=N`），每批次抓一遍再按城市分发，不再需要
+    CloakBrowser。「Book directly」记为 Available to book，「Show interest」（登记意向，
+    按人数排队）记为 Available in lottery；价格仍取含服务费的到手价。只有所有页都取到、
+    卡片数与站点自报总数一致时才算完整扫描。见 [CODOMO.md](CODOMO.md)。
+
+* **平台 key 改为 `codomo`**
+
+    显示名 Codomo，缩写 CD（推送与邮件标题前缀从 `[H2S]` 变为 `[CD]`）。房源 id 仍是
+    URL 末段 slug，与旧站同形，新旧房源接得上，不会重复推送。
+
+* **不再特殊对待 H2S**
+
+    Codomo 登记为普通的订阅平台（`CODOMO_CITIES`，城市 key 沿用旧数字 ID），设置页、
+    任务展开、熔断、健康判定与其他平台共用一套逻辑；H2S 专用的熔断策略、单城试探、
+    详情补齐缓存、状态 ID 筛选都已删除。代理全挂时 Codomo 可以直连抓取。
+
+* **Codomo 暂不支持自动预订**
+
+    旧站的 GraphQL 下单流程随改名失效；新站预订需要登录，尚未侦察。H2S 下单器、
+    预登录、常驻下单浏览器、预订工作进程、账号级预订保护及对应的设置项和界面全部删除，
+    共删除约 8600 行代码。Plaza 自动应征不受影响。
+
+* **筛选表单隐藏没有平台支持的条件**
+
+    「合同类型」与「片区」此前只有 H2S 提供，现在没有平台按它们过滤，勾了也不会生效，
+    表单不再显示。Codomo 支持楼层、人数、房型、装修与优惠标签；能耗只剩 Magis。
+
+### 安全
+
+* **脚本改用 nonce CSP**（[b949ee4]）
+
+    `script-src` 去掉 `'unsafe-inline'`，每个请求生成 nonce，加 `object-src 'none'`；
+    模板里 34 处内联事件改为 `addEventListener` / `data-*` 绑定。
+
+* **第三方房源链接只放行 http/https**（[6bec15d]、[b949ee4]）
+
+    分享页、收件箱、API、实时通知以及 Telegram / 邮件 / 推送里的房源链接统一经过
+    `safe_external_url()`，`javascript:` 之类的 scheme 不再能点；监控与日志页的转义补全
+    引号。
+
+* **退出登录与会话 cookie**（[b949ee4]）
+
+    退出登录清除浏览器缓存，共用电脑上按返回不再看到上一个人的页面；HTML 改发真正的
+    `Cache-Control: no-cache, private`。`SESSION_COOKIE_SECURE` 留空时按
+    `PUBLIC_BASE_URL` 是否 https 自动判断。
+
+### 网页修复与改进
+
+* **功能**（[c5a2baa]、[88304d5]）
+
+    返回上一页不再整页空白（改用原生 view transition）；暂停 / 重启监控的确认框不再
+    显示字面 `\n\n`；登录用户名关闭自动大写，避免手机把 `alice` 改成 `Alice` 后被当作
+    新用户；用户拖拽排序失败时恢复原顺序；统计页快速切换范围只渲染最后一次结果。主题
+    判断收敛到一处，去掉从未生效的「夜间强制深色」，跟随系统时实时切换。
+
+* **无障碍**（[44b4784]、[b5e6f17]）
+
+    toast 有关闭按钮、悬停或聚焦时不自动消失，并通过常驻的 `role="status"` 播报；状态
+    色对比度达到 4.5:1 以上。窄屏下详情盖住列表时列表设为 inert、焦点移到标题；恢复
+    登录框与搜索框的焦点框，Windows 高对比度下选中状态可见；补齐若干控件名称。
+
+* **性能与细节**（[6be85a5]、[b5e6f17]）
+
+    Chart.js 改为 defer，不再加载未使用的 Inter 字体，带版本号的静态资源缓存一年，赞助
+    页收款码从 468KB 缩到 82KB。触屏输入框至少 16px，iOS 聚焦时不再整页放大；三个弹窗
+    改用 `<dialog closedby="any">`；「减少动态效果」只去掉位移动画。
+
+* **SEO 与赞助入口**（[caddf4c]）
+
+    未登录时首页使用落地页的标题、描述与分享卡片，sitemap 与 `llms.txt` 列出首页；
+    侧栏底部加回赞助入口（仅官方站）。
+
+### 后端结构
+
+* 拆分配置、预订与通知层：平台注册表移到 `mcore/registry.py`，筛选规则移到
+  `filters.py`，RentCafe 解析与指纹冷却拆成独立模块，推送标题与分流规则只生成一份
+  （[a042e79]）。
+* 仓库更名为 `751K/Flatradar`，文档与 CHANGELOG 链接随之更新（[f570c0a]）。
 
 ### 升级注意
 
@@ -9,6 +99,38 @@
   （2026-08 加入）。从更早的版本直接升级时，monitor 和 Web 面板都会拒绝启动并
   提示先升级到 v2.1.x。先装 v2.1.x 启动一次，确认用户都在，再升级到本版本。
   全新安装不受影响。
+* **首次启动自动迁移平台 key，升级前请备份数据库。** 迁移只跑一次（meta 键
+  `codomo_rename_v1`）：房源、轮次统计、用户筛选与自动预订筛选、`SOURCES` /
+  `SHADOW_SOURCES` / `SHARD_SIZES` / `SOURCE_MIN_INTERVALS` 里的 `holland2stay` 改为
+  `codomo`；设置 `CITIES` 改名 `CODOMO_CITIES`（`.env` 里仍写 `CITIES` 时照样读）；
+  删除旧 H2S 预订保护表 `booking_attempts` 和用户保存的 H2S 下单凭据。
+* **退役的配置项**：`AVAILABILITY_FILTERS`、`H2S_REST_*`、`WARM_BROWSER_LANE`、
+  `PREWARM_WORKER_TIMEOUT_SEC`。留在 `.env` 里不会报错，启动时会提示已退役。
+* **API 结构不变，数据取值变化**：`source` 从 `holland2stay` 变为 `codomo`，房源 `url`
+  指向 `codomo.eu`；`/filter/options` 的 `dim_sources` 不再含 `contract` /
+  `neighborhood`。旧版 iOS / Android App 可以继续使用，但 Codomo 的平台徽标会显示成
+  灰色的 `COD`，登录页的平台数少一个；更新 App 后恢复正常。
+* 没改名的标识：Docker 服务与容器名 `h2s`、`H2S_SKIP_PREFLIGHT`、推送深链
+  `h2smonitor://`、浏览器里的 `h2s-lang` / `h2s-theme`、桌面版数据目录
+  `~/.h2s-monitor`。改了会让现有部署、App 跳转或用户偏好失效。
+
+### 已知限制
+
+* Codomo 自动预订尚未实现；只抓荷兰站（站点还有奥地利、西班牙、葡萄牙）。
+* Codomo 列表页不给能耗、合同类型与片区，这三项筛选对它不生效。
+* Xior、OurDomain、OurCampus 的 RENTCafe 预订仍未开放。
+* 单机 SQLite，不支持多实例水平扩展。
+
+[b949ee4]: https://github.com/751K/Flatradar/commit/b949ee4
+[6bec15d]: https://github.com/751K/Flatradar/commit/6bec15d
+[c5a2baa]: https://github.com/751K/Flatradar/commit/c5a2baa
+[88304d5]: https://github.com/751K/Flatradar/commit/88304d5
+[44b4784]: https://github.com/751K/Flatradar/commit/44b4784
+[b5e6f17]: https://github.com/751K/Flatradar/commit/b5e6f17
+[6be85a5]: https://github.com/751K/Flatradar/commit/6be85a5
+[caddf4c]: https://github.com/751K/Flatradar/commit/caddf4c
+[a042e79]: https://github.com/751K/Flatradar/commit/a042e79
+[f570c0a]: https://github.com/751K/Flatradar/commit/f570c0a
 
 ## v2.1.0 (2026-11-03)
 

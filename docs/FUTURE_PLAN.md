@@ -1,9 +1,9 @@
 # Future Plan / 未来规划
 
-本文区分已实现的能力、v2.2 待完成的工作和未排期方向。版本历史见
+本文区分已实现的能力、v2.3 待完成的工作和未排期方向。版本历史见
 [CHANGELOG.md](CHANGELOG.md)，当前架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
-核对日期：2026-11-03。核对基线：v2.1.0 发布时的代码、测试、工作流及现有平台验证
+核对日期：2026-11-16。核对基线：v2.2.0 发布时的代码、测试、工作流及现有平台验证
 记录。代码已实现、自动检查已通过和生产环境已验收分别记录，
 不互相替代。
 
@@ -13,9 +13,10 @@ v2.0.0 已发布，完成了监控管线整理、平台能力登记、配置快�
 进程、通知事件处理和预订结果不确定时的保护。项目继续采用单机 SQLite 与 Web /
 monitor 双进程架构。
 
-v2.1.0 按 Web 改版发布，变更见 [CHANGELOG.md](CHANGELOG.md)。原定在 v2.1 进行的
-OurDomain、OurCampus 与 Xior 预订验证移到 v2.2。后续开发以实际验收问题、性能瓶颈
-和明确的功能需求为依据。
+v2.1.0 按 Web 改版发布。v2.2.0 应对 Holland2Stay 改名 Codomo：抓取改为纯 HTTP，
+平台 key 改为 `codomo`，去掉了对 H2S 的特殊处理，H2S 自动预订随旧接口一并删除。
+变更见 [CHANGELOG.md](CHANGELOG.md)。原定的 OurDomain、OurCampus 与 Xior 预订验证
+顺延到 v2.3。后续开发以实际验收问题、性能瓶颈和明确的功能需求为依据。
 
 ### 已实现的 Web 能力
 
@@ -34,7 +35,7 @@ OurDomain、OurCampus 与 Xior 预订验证移到 v2.2。后续开发以实际�
 语言和主要页面入口；收件箱、账号、日历与地图另有行为测试。本地 Chromium 已完成三类身份的主要操作、响应式布局及
 局部失败恢复检查，发现的问题已经修复并复测；尚未覆盖的范围见下方「Web 补验」。
 
-## v2.2：待完成
+## v2.3：待完成
 
 ### Web 补验
 
@@ -51,10 +52,11 @@ OurDomain、OurCampus 与 Xior 预订验证移到 v2.2。后续开发以实际�
 
 ### 平台与预订验证
 
-Holland2Stay 预订链路与 Plaza 应征已有验证记录。当前只有这两个平台在
-[SourceSpec](../mcore/sources.py) 中声明为可自动预订，Plaza 还需要用户单独启用。
+Plaza 应征已有验证记录，是当前唯一在 [SourceSpec](../mcore/sources.py) 中声明为
+可自动预订的平台，且需要用户单独启用。Holland2Stay 的预订链路随 2026-11 改名 Codomo
+失效并已删除；Codomo 新站的预订流程（需登录）尚未侦察，见 [CODOMO.md](CODOMO.md#6-自动预订)。
 
-OurDomain、OurCampus 与 Xior 的验证从 v2.1 移到 v2.2，Web 改版完成不代表这些链路
+OurDomain、OurCampus 与 Xior 的验证从 v2.1 顺延到 v2.3，Web 改版完成不代表这些链路
 已经验证。各平台需要完成以下工作：
 
 | 平台 | 已有记录与剩余验证 |
@@ -94,3 +96,7 @@ OurDomain、OurCampus 与 Xior 的验证从 v2.1 移到 v2.2，Web 改版完成�
 - iOS 与 Android 已迁到各自仓库：[FlatRadar-iOS](https://github.com/751K/FlatRadar-iOS)、
   [FlatRadar-Android](https://github.com/751K/FlatRadar-Android)，客户端排期以对应仓库为准。
 - Android Play Store 上架计划已放弃，改为从 Release 分发签名 APK。
+- v2.2 起平台 key `holland2stay` 改为 `codomo`。旧版 App 能继续使用，但平台映射表里
+  没有 `codomo`：徽标显示为灰色的 `COD`、登录页平台数少一个，Mac 版提醒认不出 `[CD]`
+  前缀。两个客户端需要在平台表里登记 `codomo`（Codomo / CD），并去掉
+  `source ?? "holland2stay"` 这类默认值。
