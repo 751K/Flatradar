@@ -3,36 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  {#
-    主题决策（同步内联，运行 <1ms）：
-      1) localStorage 'h2s-theme' — 用户显式选择
-      2) 19:00–06:59 走 dark
-      3) prefers-color-scheme fallback
-
-    取消了原来的 `html{visibility:hidden}` 阻塞——这个 trick 把整页渲染
-    押在 script 执行后，会拖慢 LCP（即便 script 只跑 1ms，浏览器也无法
-    在它之前 paint）。现代浏览器同步 inline script 一定在 body parse 前
-    执行完，data-theme 必然就位，不会闪。
-  #}
-  <script>
-    (function(){
-      var stored = localStorage.getItem('h2s-theme');
-      var t;
-      if (stored === 'dark' || stored === 'light') {
-        t = stored;
-      } else {
-        var h = new Date().getHours();
-        if (h >= 19 || h < 7) {
-          t = 'dark';
-        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches) {
-          t = 'dark';
-        } else {
-          t = 'light';
-        }
-      }
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
+  {% include '_theme_head.html' %}
   {#
     no-store 会禁用浏览器 bfcache，导致"返回"必须重拉页面（参考之前
     user_edit 卡顿的 fix）。改用 no-cache + must-revalidate：仍然保证每次

@@ -11,14 +11,7 @@
   <meta name="robots" content="noindex">
   <title>{{ heading }} · {{ brand_name }}</title>
   <link rel="icon" href="/static/favicon.png" type="image/png">
-  <script>
-    (function () {
-      var t = null;
-      try { t = localStorage.getItem('h2s-theme'); } catch (e) {}
-      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
+  {% include '_theme_head.html' %}
   <link rel="stylesheet" href="{{ asset('public.css') }}">
 </head>
 <body class="public-page">

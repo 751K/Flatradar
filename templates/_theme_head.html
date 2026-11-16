@@ -1,0 +1,47 @@
+{#
+  深浅色主题的唯一来源，所有独立页面（base / _public_base / login / error /
+  share_listing / verify_email）都在 <head> 里、样式表之前 include 它。
+
+  规则：localStorage 'h2s-theme' 是 'light' / 'dark' 就用它（用户显式选择），
+  否则跟随系统 prefers-color-scheme，并在系统切换时实时跟随。和账户页
+  「跟随系统」的说明一致；以前 base.html 另有 19:00–06:59 强制深色的规则，
+  但 app.js 加载后又按系统覆盖回去，夜里会先深后浅地闪一下，已去掉。
+
+  同步内联、样式表之前执行：data-theme 在首帧 paint 前就位，不闪也不拖 LCP
+  （不要用 html{visibility:hidden} 那种阻塞手法）。
+  同时写 <meta name="color-scheme">，让样式表到达之前的画布和原生控件
+  （滚动条、表单控件）也用对的配色；样式表里再按 data-theme 设 color-scheme。
+
+  对外提供 applyTheme(t) 和 toggleTheme()（侧栏 / 登录页按钮、account.js 用）。
+#}
+<meta name="color-scheme" content="light dark">
+<script>
+  (function () {
+    var root = document.documentElement;
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    function stored() {
+      var t = null;
+      try { t = localStorage.getItem('h2s-theme'); } catch (e) {}
+      return t === 'light' || t === 'dark' ? t : null;
+    }
+    function system() { return mq && mq.matches ? 'dark' : 'light'; }
+    window.applyTheme = function (t) {
+      root.setAttribute('data-theme', t);
+      if (meta) meta.content = t;
+    };
+    window.toggleTheme = function () {
+      var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.classList.add('theme-transitioning');
+      window.applyTheme(next);
+      try { localStorage.setItem('h2s-theme', next); } catch (e) {}
+      setTimeout(function () { root.classList.remove('theme-transitioning'); }, 400);
+    };
+    window.applyTheme(stored() || system());
+    if (mq && mq.addEventListener) {
+      mq.addEventListener('change', function () {
+        if (!stored()) window.applyTheme(system());
+      });
+    }
+  })();
+</script>

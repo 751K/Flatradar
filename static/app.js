@@ -2,27 +2,8 @@
    Holland2Stay — Frontend JS
    =================================================================== */
 
-// ── Theme ──────────────────────────────────────────────────────────
-(function(){
-  var t = localStorage.getItem('h2s-theme');
-  if(!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  applyTheme(t);
-})();
-
-function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  var icon = document.getElementById('theme-icon');
-  if(icon) icon.className = 'bi ' + (t === 'dark' ? 'bi-sun' : 'bi-moon-stars-fill');
-}
-
-function toggleTheme() {
-  var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  var html = document.documentElement;
-  html.classList.add('theme-transitioning');
-  applyTheme(cur);
-  localStorage.setItem('h2s-theme', cur);
-  setTimeout(function(){ html.classList.remove('theme-transitioning'); }, 400);
-}
+// Theme: applyTheme() / toggleTheme() live in templates/_theme_head.html,
+// which runs in <head> before first paint. Don't redefine them here.
 
 // ── Mobile Sidebar ────────────────────────────────────────────────
 function toggleSidebar() {

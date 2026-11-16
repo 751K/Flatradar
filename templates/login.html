@@ -16,14 +16,7 @@
   {% include '_social_meta.html' %}
   <link rel="icon" href="/static/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-  <script>
-    (function () {
-      var t = null;
-      try { t = localStorage.getItem('h2s-theme'); } catch (e) {}
-      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
+  {% include '_theme_head.html' %}
   <link rel="stylesheet" href="{{ asset('public.css') }}">
 </head>
 <body class="public-page">
@@ -159,12 +152,6 @@ function confirmLogin() {
     form.appendChild(t);
   }
   submitLoginForm();
-}
-
-function toggleTheme() {
-  var cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', cur);
-  try { localStorage.setItem('h2s-theme', cur); } catch (e) {}
 }
 
 function togglePw() {
