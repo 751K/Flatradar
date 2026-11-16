@@ -14,7 +14,7 @@
   </div>
   {% if crashes %}
   <div class="admin-head-tools">
-    <button id="bulk-delete-btn" type="button" class="admin-link is-danger" disabled onclick="bulkDelete()">
+    <button id="bulk-delete-btn" type="button" class="admin-link is-danger" disabled>
       {{ _('crashes_bulk_delete') }} <span id="bulk-count">0</span>
     </button>
   </div>
@@ -34,7 +34,7 @@
       <table class="admin-table">
         <thead>
           <tr>
-            <th><input type="checkbox" id="check-all" class="admin-box" onchange="toggleAll(this.checked)" aria-label="{{ '全选' if lang == 'zh' else 'Select all' }}"></th>
+            <th><input type="checkbox" id="check-all" class="admin-box" aria-label="{{ '全选' if lang == 'zh' else 'Select all' }}"></th>
             <th>{{ _('crashes_col_time') }}</th>
             <th>{{ _('crashes_col_kind') }}</th>
             <th>{{ _('crashes_col_user') }}</th>
@@ -47,7 +47,7 @@
         <tbody>
         {% for c in crashes %}
           <tr data-crash-id="{{ c.id }}">
-            <td><input type="checkbox" class="crash-check admin-box" data-id="{{ c.id }}" onchange="updateBulk()" aria-label="{{ c.id }}"></td>
+            <td><input type="checkbox" class="crash-check admin-box" data-id="{{ c.id }}" aria-label="{{ c.id }}"></td>
             <td class="nowrap"><code>{{ c.received_at or '—' }}</code></td>
             <td><span class="admin-tag{% if c.kind == 'crash' %} is-bad{% elif c.kind in ('hang', 'cpuexception', 'diskwrite') %} is-warn{% endif %}">
               {{- {'cpuexception': 'cpu', 'diskwrite': 'disk'}.get(c.kind, c.kind) -}}
@@ -57,8 +57,8 @@
             <td>{{ c.device_model or '—' }}</td>
             <td>{{ c.ios_version or '—' }}</td>
             <td class="end"><span class="admin-actions">
-              <button type="button" class="admin-link" onclick="viewCrash('{{ c.id }}')">{{ '查看' if lang == 'zh' else 'View' }}</button>
-              <button type="button" class="admin-link is-danger" onclick="deleteCrash('{{ c.id }}')">{{ '删除' if lang == 'zh' else 'Delete' }}</button>
+              <button type="button" class="admin-link" data-crash-view>{{ '查看' if lang == 'zh' else 'View' }}</button>
+              <button type="button" class="admin-link is-danger" data-crash-delete>{{ '删除' if lang == 'zh' else 'Delete' }}</button>
             </span></td>
           </tr>
         {% endfor %}
@@ -74,10 +74,10 @@
 <dialog id="detailModal" class="admin-wide" aria-labelledby="detail-title">
   <h2 id="detail-title">{{ _('crashes_detail_title') }}</h2>
   <pre id="detail-body" class="admin-pre"></pre>
-  <div class="mail-dialog-actions"><button type="button" onclick="closeDetail()">{{ '关闭' if lang == 'zh' else 'Close' }}</button></div>
+  <div class="mail-dialog-actions"><button type="button" data-close-detail>{{ '关闭' if lang == 'zh' else 'Close' }}</button></div>
 </dialog>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   const CSRF = '{{ csrf_token() }}';
 
   async function viewCrash(id) {
@@ -151,9 +151,20 @@
     }
   }
 
-  // <dialog> 自带 Esc 关闭；点遮罩也关
+  // <dialog> 自带 Esc 关闭；点遮罩或「关闭」也关
   document.getElementById('detailModal').addEventListener('click', e => {
-    if (e.target === e.currentTarget) closeDetail();
+    if (e.target === e.currentTarget || e.target.closest('[data-close-detail]')) closeDetail();
+  });
+
+  // 事件绑定（CSP 不允许内联 onclick/onchange）。行内按钮从所在行的 data-crash-id 取 id。
+  document.getElementById('bulk-delete-btn').addEventListener('click', bulkDelete);
+  document.getElementById('check-all').addEventListener('change', e => toggleAll(e.target.checked));
+  document.addEventListener('change', e => { if (e.target.matches('.crash-check')) updateBulk(); });
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-crash-view], [data-crash-delete]');
+    const id = btn && btn.closest('tr[data-crash-id]')?.dataset.crashId;
+    if (!id) return;
+    if (btn.hasAttribute('data-crash-view')) viewCrash(id); else deleteCrash(id);
   });
 </script>
 {% endif %}

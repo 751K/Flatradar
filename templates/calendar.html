@@ -6,4 +6,4 @@
 <p id="calendar-load-status" class="calendar-load-status" role="status" hidden></p>
 {% include '_calendar_workspace.html' %}
 {% endblock %}
-{% block scripts %}{{ super() }}<script src="{{ asset('calendar.js') }}" defer></script>{% endblock %}
+{% block scripts %}{{ super() }}<script nonce="{{ csp_nonce() }}" src="{{ asset('calendar.js') }}" defer></script>{% endblock %}

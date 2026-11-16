@@ -269,7 +269,12 @@ def guest_login() -> Any:
 @csrf_required
 def logout() -> Any:
     session.clear()
-    return redirect(url_for("login"))
+    resp = redirect(url_for("login"))
+    # 共用电脑上退出后按「返回」不该还能看到上一个人的收件箱/账户页：
+    # 清掉本站的 HTTP 缓存和 bfcache。只清 "cache"——"cookies" 会连语言偏好
+    # (h2s-lang) 一起删，"storage" 会删主题偏好；session cookie 已由 clear() 作废。
+    resp.headers["Clear-Site-Data"] = '"cache"'
+    return resp
 
 
 def set_lang() -> Any:

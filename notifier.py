@@ -49,6 +49,7 @@ import curl_cffi.requests as req
 
 from net import direct_curl_session
 
+from app.safety import safe_external_url
 from config import get_impersonate
 from models import Listing, is_application_only
 
@@ -995,7 +996,7 @@ class WebNotifier(BaseNotifier):
             type="new_listing",
             title=f"[{source}] {listing.name}",
             body=f"{listing.status} · {price}/mo · → {move_in}",
-            url=listing.url,
+            url=safe_external_url(listing.url),
             listing_id=listing.id,
         )
         return True
@@ -1009,7 +1010,7 @@ class WebNotifier(BaseNotifier):
             type="status_change",
             title=f"[{source}] {listing.name}",
             body=f"{old_status} → {new_status} · {price}/mo",
-            url=listing.url,
+            url=safe_external_url(listing.url),
             listing_id=listing.id,
         )
         return True
@@ -1052,9 +1053,9 @@ class WebNotifier(BaseNotifier):
         price = getattr(listing, "price_display", "") or "?"
         if is_application_only(listing):
             # 没有付款页：url 指向房源本身，标题不说 Booking
-            title, url = f"[{source}] Applied: {listing.name}", listing.url
+            title, url = f"[{source}] Applied: {listing.name}", safe_external_url(listing.url)
         else:
-            title, url = f"[{source}] Booking: {listing.name}", pay_url or listing.url
+            title, url = f"[{source}] Booking: {listing.name}", safe_external_url(pay_url or listing.url)
         self._storage.add_web_notification(
             type="booking",
             title=title,
@@ -1076,7 +1077,7 @@ class WebNotifier(BaseNotifier):
             type="booking",
             title=f"[{source}] Booking failed: {listing.name}",
             body=reason,
-            url=listing.url,
+            url=safe_external_url(listing.url),
             listing_id=listing.id,
             user_id=user_id,
         )
@@ -1498,7 +1499,7 @@ def _format_new(l: Listing, *, lang: str = "en") -> str:
             f"{_tl('Energy', lang)}: {fm.get('energy_label', '—')}",
             "",
         ]
-    lines.append(f"{l.url}")
+    lines.append(f"{safe_external_url(l.url)}")
     return "\n".join(lines)
 
 
@@ -1527,7 +1528,7 @@ def _format_new_batch(listings: list[Listing], *, lang: str = "en") -> str:
         if area:
             bits.append(area)
         lines.append(" · ".join(bits))
-        lines.append(f"  {l.url}")
+        lines.append(f"  {safe_external_url(l.url)}")
     extra = len(listings) - _BATCH_LIST_LIMIT
     if extra > 0:
         lines += ["", f"{_tl('and', lang)} {extra} {_tl('more', lang)}"]
@@ -1544,7 +1545,7 @@ def _format_status_change(l: Listing, old: str, new: str, *, lang: str = "en") -
         f"{_tl('Rent', lang)}: {l.price_display}{_tl('/mo', lang)}{_rent_note(l, lang)}",
         f"{_tl('Available', lang)}: {l.available_from or '?'}",
         "",
-        f"{l.url}",
+        f"{safe_external_url(l.url)}",
     ])
 
 
@@ -1562,7 +1563,7 @@ def _format_application_submitted(l: Listing, *, lang: str = "en") -> str:
         "",
         f"{_tl('View listing', lang)}:",
         "",
-        f"{l.url}",
+        f"{safe_external_url(l.url)}",
     ])
 
 
@@ -1605,7 +1606,7 @@ def _format_booking_failed(l: Listing, reason: str, *, lang: str = "en") -> str:
         f"{_tl('Rent', lang)}: {l.price_display}{_tl('/mo', lang)}{_rent_note(l, lang)}",
         "",
         f"{_tl('Reason', lang)}: {reason}",
-        f"{_tl('Manual booking', lang)}: {l.url}",
+        f"{_tl('Manual booking', lang)}: {safe_external_url(l.url)}",
     ])
 
 

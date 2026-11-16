@@ -12,10 +12,10 @@
   同时写 <meta name="color-scheme">，让样式表到达之前的画布和原生控件
   （滚动条、表单控件）也用对的配色；样式表里再按 data-theme 设 color-scheme。
 
-  对外提供 applyTheme(t) 和 toggleTheme()（侧栏 / 登录页按钮、account.js 用）。
+  对外提供 applyTheme(t) 和 toggleTheme()（account.js 用）；带 data-theme-toggle 的按钮自动绑定。
 #}
 <meta name="color-scheme" content="light dark">
-<script>
+<script nonce="{{ csp_nonce() }}">
   (function () {
     var root = document.documentElement;
     var meta = document.querySelector('meta[name="color-scheme"]');
@@ -38,6 +38,10 @@
       setTimeout(function () { root.classList.remove('theme-transitioning'); }, 400);
     };
     window.applyTheme(stored() || system());
+    // 页面上的切换按钮带 data-theme-toggle（不用内联 onclick：CSP 不允许）
+    document.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('[data-theme-toggle]')) window.toggleTheme();
+    });
     if (mq && mq.addEventListener) {
       mq.addEventListener('change', function () {
         if (!stored()) window.applyTheme(system());

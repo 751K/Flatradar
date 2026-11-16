@@ -67,4 +67,4 @@
 {% endif %}
 <script type="application/json" id="mail-items">{{ items | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ asset('inbox.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce() }}" src="{{ asset('inbox.js') }}" defer></script>{% endblock %}

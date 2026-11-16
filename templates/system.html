@@ -32,9 +32,9 @@
         <div><dt>{{ _('web_process') }}</dt><dd>PID {{ info.web_pid }}</dd></div>
       </dl>
       <div class="admin-row-actions monitor-control-panel" data-monitor-running="{{ '1' if info.monitor_running else '0' }}">
-        <button type="button" id="monitor-start-btn" class="admin-button is-primary{% if info.monitor_running %} hidden{% endif %}" onclick="controlMonitor(this, 'start')">{{ _('monitor_start') }}</button>
-        <button type="button" id="monitor-stop-btn" class="admin-button{% if not info.monitor_running %} hidden{% endif %}" onclick="controlMonitor(this, 'stop')">{{ _('monitor_stop') }}</button>
-        <button type="button" id="monitor-restart-btn" class="admin-button" onclick="controlMonitor(this, 'restart')">{{ _('settings_restart') }}</button>
+        <button type="button" id="monitor-start-btn" class="admin-button is-primary{% if info.monitor_running %} hidden{% endif %}" data-monitor-action="start">{{ _('monitor_start') }}</button>
+        <button type="button" id="monitor-stop-btn" class="admin-button{% if not info.monitor_running %} hidden{% endif %}" data-monitor-action="stop">{{ _('monitor_stop') }}</button>
+        <button type="button" id="monitor-restart-btn" class="admin-button" data-monitor-action="restart">{{ _('settings_restart') }}</button>
       </div>
     </section>
 
@@ -87,7 +87,10 @@
 </div>
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
+document.querySelectorAll('[data-monitor-action]').forEach(function (btn) {
+  btn.addEventListener('click', function () { controlMonitor(btn, btn.dataset.monitorAction); });
+});
 // ── 定时刷新（替代原来的 meta refresh）──
 setTimeout(function () { location.reload(); }, 30000);
 </script>

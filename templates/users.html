@@ -147,5 +147,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ asset('users.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset('users.js') }}"></script>
 {% endblock %}

@@ -138,15 +138,14 @@ mkdir -p data logs logs/caddy
 WEB_PASSWORD=一串足够长的随机字符
 HTTPS_PROXY=http://user:pass@proxy-host:port
 PUBLIC_BASE_URL=https://your.domain.com
-SESSION_COOKIE_SECURE=true
 ```
 
 - `WEB_PASSWORD`——留空时容器拒绝启动。
 - `HTTPS_PROXY`——服务器出口被限制时可配置住宅或移动代理。机房出口曾出现 403，
   是否可用以实际网络和平台响应为准。
 - `PUBLIC_BASE_URL`——验证邮件的链接由它拼出；未设置时程序拒绝发送。
-- `SESSION_COOKIE_SECURE`——`.env.example` 里的默认值是 `false`，HTTPS 部署需改为
-  `true`。
+- `SESSION_COOKIE_SECURE`——留空即可：`PUBLIC_BASE_URL` 是 `https://` 时自动开启。
+  HTTPS 部署却显式写了 `false`，启动时会记一条告警。
 
 `SUPPORT_EMAIL` 与 `TIMEZONE` 已预填好（`support@example.com`、
 `Europe/Amsterdam`），其余键也都有可用默认值——只在默认值不适用时才需要改。

@@ -59,11 +59,11 @@
           <td class="end">
             {% if not t.revoked %}
             <span class="admin-actions">
-              <form method="post" action="{{ url_for('app_accounts_test_push', token_id=t.id) }}" onsubmit="this.querySelector('button').disabled=true;">
+              <form method="post" action="{{ url_for('app_accounts_test_push', token_id=t.id) }}" data-disable-on-submit>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="admin-link" title="{{ _('devices_test_push_hint') }}">{{ '测试推送' if lang == 'zh' else 'Test push' }}</button>
               </form>
-              <form method="post" action="{{ url_for('app_accounts_revoke', token_id=t.id) }}" onsubmit="return confirm('{{ _('app_accounts_confirm') }}');">
+              <form method="post" action="{{ url_for('app_accounts_revoke', token_id=t.id) }}" data-confirm="{{ _('app_accounts_confirm') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="admin-link is-danger">{{ _('app_accounts_revoke') }}</button>
               </form>
@@ -116,7 +116,7 @@
           </td>
           <td class="end">
             {% if not is_disabled %}
-            <form method="post" action="{{ url_for('app_accounts_disable_device', device_id=d.id) }}" onsubmit="return confirm('{{ _('devices_disable_confirm') }}');">
+            <form method="post" action="{{ url_for('app_accounts_disable_device', device_id=d.id) }}" data-confirm="{{ _('devices_disable_confirm') }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="admin-link is-danger">{{ _('devices_disable') }}</button>
             </form>

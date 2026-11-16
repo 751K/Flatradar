@@ -9,7 +9,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
   <title>{{ _('login_title') }}{% if self_hosted_label %} · {{ self_hosted_label }}{% endif %}</title>
   {% set social_title = _('login_title') %}
   {% set social_desc  = _('login_meta_description') %}
@@ -40,7 +39,7 @@
         {% endfor %}
       {% endwith %}
 
-      <form method="POST" action="{{ url_for('login') }}" id="login-form" autocomplete="on" onsubmit="return handleLoginSubmit(this)">
+      <form method="POST" action="{{ url_for('login') }}" id="login-form" autocomplete="on">
         <input type="hidden" name="next" value="{{ next }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {# 「登录即注册」确认后，confirmLogin() 把表单整个改投到这里。
@@ -57,7 +56,7 @@
           <label for="password">{{ _('login_password') }}</label>
           <span class="login-pw">
             <input id="password" type="password" name="password" autocomplete="current-password" placeholder=" " required>
-            <button type="button" id="pw-toggle" onclick="togglePw()" aria-controls="password" aria-pressed="false">{{ '显示' if zh else 'Show' }}</button>
+            <button type="button" id="pw-toggle" aria-controls="password" aria-pressed="false">{{ '显示' if zh else 'Show' }}</button>
           </span>
         </div>
 
@@ -77,8 +76,8 @@
         <a href="{{ url_for('privacy_page') }}" target="_blank">{{ '隐私政策' if zh else 'Privacy Policy' }}</a>{{ '。' if zh else '.' }}
       </p>
       <div class="login-dialog-actions">
-        <button type="button" onclick="cancelLogin()">{{ '取消' if zh else 'Cancel' }}</button>
-        <button type="button" class="login-primary" onclick="confirmLogin()">{{ '同意并注册' if zh else 'Agree & register' }}</button>
+        <button type="button" id="register-cancel">{{ '取消' if zh else 'Cancel' }}</button>
+        <button type="button" class="login-primary" id="register-confirm">{{ '同意并注册' if zh else 'Agree & register' }}</button>
       </div>
     </dialog>
 
@@ -89,13 +88,13 @@
         <a href="{{ url_for('terms_page') }}">{{ '条款' if zh else 'Terms' }}</a>
         {% if official_site %}<a href="{{ url_for('donate_page') }}">{{ '赞助' if zh else 'Donate' }}</a>{% endif %}
       </nav>
-      <button type="button" class="login-theme" onclick="toggleTheme()" title="{{ _('toggle_theme') }}">
+      <button type="button" class="login-theme" data-theme-toggle title="{{ _('toggle_theme') }}">
         <span class="login-theme-dark">{{ '深色模式' if zh else 'Dark mode' }}</span><span class="login-theme-light">{{ '浅色模式' if zh else 'Light mode' }}</span>
       </button>
     </footer>
   </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 var _loginBtnText = '{{ '登录 / 注册' if zh else 'Sign in / Register' }}';
 
 function handleLoginSubmit(form) {
@@ -162,6 +161,14 @@ function togglePw() {
   btn.setAttribute('aria-pressed', String(show));
   btn.textContent = show ? '{{ '隐藏' if zh else 'Hide' }}' : '{{ '显示' if zh else 'Show' }}';
 }
+
+// 事件绑定（CSP 不允许内联 onsubmit/onclick）。脚本在表单之后，元素已存在。
+document.getElementById('login-form').addEventListener('submit', function (e) {
+  if (handleLoginSubmit(this) === false) e.preventDefault();
+});
+document.getElementById('pw-toggle').addEventListener('click', togglePw);
+document.getElementById('register-cancel').addEventListener('click', cancelLogin);
+document.getElementById('register-confirm').addEventListener('click', confirmLogin);
 </script>
 {% include '_self_hosted.html' %}
 </body>

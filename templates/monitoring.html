@@ -43,7 +43,7 @@
 </div>
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 const STATUS_LABEL = {
   ok:      '{{ _("monitoring_status_ok") }}',
   warn:    '{{ _("monitoring_status_warn") }}',

@@ -149,7 +149,6 @@ mkdir -p data logs logs/caddy
 WEB_PASSWORD=a-long-random-string
 HTTPS_PROXY=http://user:pass@proxy-host:port
 PUBLIC_BASE_URL=https://your.domain.com
-SESSION_COOKIE_SECURE=true
 ```
 
 - `WEB_PASSWORD` — the container refuses to start while it is empty.
@@ -158,8 +157,9 @@ SESSION_COOKIE_SECURE=true
   availability depends on the actual network and platform response.
 - `PUBLIC_BASE_URL` — verification emails are built from it; unset, the app
   refuses to send them.
-- `SESSION_COOKIE_SECURE` — `.env.example` ships `false`; set it to `true` for
-  the HTTPS deployment.
+- `SESSION_COOKIE_SECURE` — leave it empty: it turns on automatically when
+  `PUBLIC_BASE_URL` is `https://`. An explicit `false` with an HTTPS base URL is
+  logged as a warning at startup.
 
 `SUPPORT_EMAIL` and `TIMEZONE` arrive pre-filled (`support@example.com`,
 `Europe/Amsterdam`) and every other key has a working default — change them only

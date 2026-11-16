@@ -22,7 +22,7 @@
 {% block title %}{{ '统计' if zh else 'Statistics' }} · {{ brand_name }}{% endblock %}
 {% block body_class %}mail-page stats-page{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ asset('inbox.css') }}"><link rel="stylesheet" href="{{ asset('stats.css') }}">
-<script src="{{ asset('vendor/chart.umd.min.js') }}"></script>{% endblock %}
+<script nonce="{{ csp_nonce() }}" src="{{ asset('vendor/chart.umd.min.js') }}"></script>{% endblock %}
 {% block sidebar_navigation %}{% include '_inbox_nav.html' %}{% endblock %}
 {% block sidebar_footer %}{% include '_workspace_footer.html' %}{% endblock %}
 
@@ -85,4 +85,4 @@
 } | tojson }}</script>
 {% endblock %}
 
-{% block scripts %}<script src="{{ asset('stats.js') }}" defer></script>{% endblock %}
+{% block scripts %}<script nonce="{{ csp_nonce() }}" src="{{ asset('stats.js') }}" defer></script>{% endblock %}

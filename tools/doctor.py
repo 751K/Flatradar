@@ -140,10 +140,18 @@ def check_env(ctx: DoctorContext) -> list[CheckResult]:
     else:
         results.append(CheckResult(WARN, "FLASK_SECRET", "empty; app may auto-generate, existing sessions may reset"))
 
-    if _bool(env.get("SESSION_COOKIE_SECURE", "")):
+    public_https = env.get("PUBLIC_BASE_URL", "").strip().lower().startswith("https://")
+    cookie_raw = env.get("SESSION_COOKIE_SECURE", "").strip()
+    if not cookie_raw:
+        results.append(CheckResult(OK, "SESSION_COOKIE_SECURE",
+                                   f"auto -> {'true' if public_https else 'false'} (from PUBLIC_BASE_URL)"))
+    elif _bool(cookie_raw):
         results.append(CheckResult(OK, "SESSION_COOKIE_SECURE", "true"))
+    elif public_https:
+        results.append(CheckResult(WARN, "SESSION_COOKIE_SECURE",
+                                   "false but PUBLIC_BASE_URL is https; remove the line (auto) or set true"))
     else:
-        results.append(CheckResult(WARN, "SESSION_COOKIE_SECURE", "false; set true behind HTTPS/Caddy"))
+        results.append(CheckResult(OK, "SESSION_COOKIE_SECURE", "false (no https PUBLIC_BASE_URL; local use)"))
 
     db_raw = env.get("DB_PATH", "data/listings.db").strip() or "data/listings.db"
     results.append(CheckResult(OK, "DB_PATH", str(DB_PATH), f"raw value: {db_raw}"))

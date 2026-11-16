@@ -21,6 +21,21 @@ function toggleSidebar() {
   if(first) first.focus();
 }
 
+// app.js 在 body 末尾加载，按钮此时已在 DOM 里（CSP 不允许内联 onclick）
+document.querySelector('.nav-toggle')?.addEventListener('click', toggleSidebar);
+
+// 普通表单的通用行为，替代内联 onsubmit：
+//   data-confirm="…"        提交前 confirm()，取消则不提交
+//   data-disable-on-submit  提交后禁用按钮，防重复点击
+document.addEventListener('submit', function(e) {
+  var form = e.target;
+  if(form.dataset.confirm && !confirm(form.dataset.confirm)) { e.preventDefault(); return; }
+  if(form.hasAttribute('data-disable-on-submit')) {
+    var btn = form.querySelector('button');
+    if(btn) btn.disabled = true;
+  }
+});
+
 function sidebarIsMobile() {
   return window.matchMedia(document.body.classList.contains('mail-page') ?
     '(max-width:900px)' : '(max-width:768px)').matches;

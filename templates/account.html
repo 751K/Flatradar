@@ -230,5 +230,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ asset('account.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset('account.js') }}"></script>
 {% endblock %}

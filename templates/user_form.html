@@ -224,7 +224,7 @@
     <p class="account-help">{{ _('user_form_ab_safety') }}</p>
     {{ ui.save_actions(label=save_label) }}
   {% elif s.key == 'autobook' and row.key == 'abfilter' %}
-    <div class="account-panel-actions"><button type="button" onclick="copyNotifFilters()">{{ _('user_form_copy_filter') }}</button></div>
+    <div class="account-panel-actions"><button type="button" data-copy-notif-filters>{{ _('user_form_copy_filter') }}</button></div>
     {% for key in ['rent', 'location', 'sources', 'home', 'terms', 'extras'] %}
     <h3 class="account-subhead">{{ subheads[key] }}</h3>
     {{ ui.filter_fields(key, ab.listing_filter, prefix='AUTO_BOOK_') }}
@@ -251,7 +251,7 @@
         <span class="xior-bldg" title="{{ b.key }}">{{ b.display }}</span>
         <input type="email" name="AUTO_BOOK_XIOR_EMAIL" value="{{ accts[b.key].email }}" placeholder="{{ _('user_form_ab_email') }}" aria-label="{{ b.display }} {{ _('user_form_ab_email') }}">
         <input type="password" name="AUTO_BOOK_XIOR_PW" placeholder="{{ _('user_form_pw_keep') if accts[b.key].password else _('user_form_ab_pass') }}" autocomplete="new-password" aria-label="{{ b.display }} {{ _('user_form_ab_pass') }}">
-        <button type="button" class="xior-del" onclick="removeXiorRow(this)">{{ _('user_form_xior_remove') }}</button>
+        <button type="button" class="xior-del">{{ _('user_form_xior_remove') }}</button>
       </div>
       {% endfor %}
     </div>
@@ -260,7 +260,7 @@
         <option value="">{{ _('user_form_xior_pick') }}</option>
         {% for b in xior_buildings if b.key not in accts %}<option value="{{ b.key }}" data-display="{{ b.display }}">{{ b.display }}</option>{% endfor %}
       </select>
-      <button type="button" onclick="addXiorRow()">{{ _('user_form_xior_add') }}</button>
+      <button type="button" data-xior-add>{{ _('user_form_xior_add') }}</button>
     </div>
     {% if not xior_buildings %}<p class="account-help">{{ _('user_form_xior_none_monitored') }}</p>{% endif %}
     {{ ui.save_actions(label=save_label) }}
@@ -347,8 +347,7 @@
       <label class="prof-file-btn">
         <span>{{ _('profile_id_doc_replace') if id_doc else _('profile_id_doc_choose') }}</span>
         <input type="file" class="prof-file-input" name="AUTO_BOOK_ID_DOC"
-               accept=".gif,.jpeg,.jpg,.png,.bmp,.pdf,.doc,.docx,.xlsx"
-               onchange="showPickedIdDoc(this)">
+               accept=".gif,.jpeg,.jpg,.png,.bmp,.pdf,.doc,.docx,.xlsx">
       </label>
     </div>
     <div class="prof-row">
@@ -372,8 +371,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ asset('account.js') }}"></script>
-<script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset('account.js') }}"></script>
+<script nonce="{{ csp_nonce() }}">
 // 证件：原生文件框藏在按钮里，选中后把文件名写出来，否则看不到选了什么
 function showPickedIdDoc(input) {
   var out = document.getElementById('prof-file-picked');
@@ -396,7 +395,7 @@ function addXiorRow() {
     '<span class="xior-bldg"></span>' +
     '<input type="email" name="AUTO_BOOK_XIOR_EMAIL" placeholder="{{ _("user_form_ab_email") }}">' +
     '<input type="password" name="AUTO_BOOK_XIOR_PW" placeholder="{{ _("user_form_ab_pass") }}" autocomplete="new-password">' +
-    '<button type="button" class="xior-del" onclick="removeXiorRow(this)">{{ _("user_form_xior_remove") }}</button>';
+    '<button type="button" class="xior-del">{{ _("user_form_xior_remove") }}</button>';
   // 用 DOM 赋值而不是拼进 HTML 字符串——楼栋名来自配置，拼字符串等于给 XSS 开门
   row.querySelector('input[name="AUTO_BOOK_XIOR_KEY"]').value = sel.value;
   var label = row.querySelector('.xior-bldg');
@@ -458,5 +457,16 @@ function copyNotifFilters() {
   var city = document.querySelector('input[name="AUTO_BOOK_ALLOWED_CITIES"]');
   if (city) city.dispatchEvent(new Event('change', {bubbles: true}));
 }
+
+// 事件绑定（CSP 不允许内联 onclick/onchange）。面板按条件渲染，所以统一在 document 上委托。
+document.addEventListener('click', function (e) {
+  var t = e.target;
+  if (t.closest('[data-copy-notif-filters]')) copyNotifFilters();
+  else if (t.closest('[data-xior-add]')) addXiorRow();
+  else if (t.closest('.xior-del')) removeXiorRow(t.closest('.xior-del'));
+});
+document.addEventListener('change', function (e) {
+  if (e.target.matches('.prof-file-input')) showPickedIdDoc(e.target);
+});
 </script>
 {% endblock %}

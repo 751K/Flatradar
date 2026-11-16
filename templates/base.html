@@ -4,12 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   {% include '_theme_head.html' %}
-  {#
-    no-store 会禁用浏览器 bfcache，导致"返回"必须重拉页面（参考之前
-    user_edit 卡顿的 fix）。改用 no-cache + must-revalidate：仍然保证每次
-    都拿新内容，但允许 bfcache 复活。
-  #}
-  <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="lang" content="{{ lang }}">
   <title>{% block title %}{{ brand_name }}{% endblock %}</title>
@@ -40,7 +34,7 @@
 <div class="app-layout">
 
   <!-- Mobile toggle -->
-  <button class="nav-toggle" onclick="toggleSidebar()" aria-label="{{ '菜单' if lang == 'zh' else 'Menu' }}" aria-controls="workspace-sidebar" aria-expanded="false">
+  <button type="button" class="nav-toggle" aria-label="{{ '菜单' if lang == 'zh' else 'Menu' }}" aria-controls="workspace-sidebar" aria-expanded="false">
     <i class="bi bi-list"></i>
   </button>
 
@@ -91,7 +85,7 @@
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 window._isAdmin = {{ 'true' if is_admin else 'false' }};
 window.SOURCE_LABELS = {{ source_display_names | tojson }};
 </script>
@@ -99,7 +93,7 @@ window.SOURCE_LABELS = {{ source_display_names | tojson }};
    之所以要有版本号：新增的函数在浏览器缓存的旧文件里不存在，调用它的页面
    会静默炸掉——2026-08-04 踩过，加了 sourceLabel/sourceShort 忘了改当时
    写死的 ?v=，统计页的平台分布图直接不渲染。 #}
-<script src="{{ asset('app.js') }}"></script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset('app.js') }}"></script>
 {% block scripts %}{% endblock %}
 {% include '_self_hosted.html' %}
 </body>

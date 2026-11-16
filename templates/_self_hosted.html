@@ -26,7 +26,7 @@
   {% endif %}
   <form method="dialog"><button type="submit" value="ok">{{ '我知道了' if zh else 'I understand' }}</button></form>
 </dialog>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
   var KEY = 'flatradar-selfhost-ack';
   var d = document.getElementById('selfhost-dialog');

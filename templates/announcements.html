@@ -21,8 +21,8 @@
       <input type="text" id="ann-title" class="admin-input" placeholder="{{ _('announce_title_ph') }}" maxlength="120" autocomplete="off">
       <textarea id="ann-body" class="admin-input" rows="4" placeholder="{{ _('announce_body_ph') }}" maxlength="1000"></textarea>
       <div class="admin-row-actions">
-        <button type="button" class="admin-button" onclick="sendAnnouncement(true)">{{ _('announce_preview') }}</button>
-        <button type="button" class="admin-button is-primary" onclick="sendAnnouncement(false)">{{ _('announce_send') }}</button>
+        <button type="button" class="admin-button" data-announce="preview">{{ _('announce_preview') }}</button>
+        <button type="button" class="admin-button is-primary" data-announce="send">{{ _('announce_send') }}</button>
         <span id="ann-status" class="admin-muted"></span>
       </div>
     </div>
@@ -53,7 +53,7 @@
             <td class="num">{{ a.external_ok }}</td>
             <td class="num">{{ a.push_devices }}</td>
             <td class="num">{% if a.failed_users or a.pending_users %}<span class="admin-tag is-bad">{{ a.failed_users + a.pending_users }}</span>{% else %}0{% endif %}</td>
-            <td class="end">{% if a.failed_users or a.pending_users %}<button type="button" class="admin-link" onclick="retryAnnouncement({{ a.id }})">{{ _('announce_retry') }}</button>{% endif %}</td>
+            <td class="end">{% if a.failed_users or a.pending_users %}<button type="button" class="admin-link" data-announce-retry="{{ a.id }}">{{ _('announce_retry') }}</button>{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -66,7 +66,15 @@
 </div>
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
+// 事件绑定（CSP 不允许内联 onclick）
+document.querySelectorAll('[data-announce]').forEach(function (btn) {
+  btn.addEventListener('click', function () { sendAnnouncement(btn.dataset.announce === 'preview'); });
+});
+document.querySelectorAll('[data-announce-retry]').forEach(function (btn) {
+  btn.addEventListener('click', function () { retryAnnouncement(btn.dataset.announceRetry); });
+});
+
 // ── 公告群发 ──
 async function sendAnnouncement(dryRun) {
   var title = document.getElementById('ann-title').value.trim();

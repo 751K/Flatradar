@@ -126,7 +126,7 @@ tail -f logs/caddy/access.log
    - 把 `TRUSTED_PROXY_HOPS` 设为实际的**可信**代理跳数；
    - 请求体上限设为 20 MB，与应用一致；
    - 对 `/notifications/stream` 关闭响应缓冲，否则 SSE 会被攒住。
-4. 把 `.env` 中的 `SESSION_COOKIE_SECURE` 设为 `true`（HTTPS 部署必须）。
+4. `SESSION_COOKIE_SECURE` 留空即可：`PUBLIC_BASE_URL` 是 `https://` 时自动为 `true`。若 `.env` 里还留着旧的 `SESSION_COOKIE_SECURE=false`，删掉这一行或改成 `true`。
 5. **处理启动预检。** `docker-compose.yml` 会把 `./Caddyfile` 挂到
    `/app/Caddyfile.check`，entrypoint 见到占位域名就拒绝启动。不用 Caddy 时，可以：
    - 仍然把 `Caddyfile` 的占位域名改掉（最简单），或

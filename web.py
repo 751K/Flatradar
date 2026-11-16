@@ -31,6 +31,7 @@ import argparse
 import hashlib
 import logging.handlers
 import os
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -193,10 +194,22 @@ if _TRUSTED_PROXY_HOPS > 0:
 
 # SameSite=Lax：阻止跨站 POST 请求携带 session cookie（主要 CSRF 防护层）。
 # HttpOnly=True：禁止 JS 读取 session cookie（Flask 默认已是 True，此处显式声明）。
-# Secure=True：仅 HTTPS 下发送 cookie；本地开发通过 SESSION_COOKIE_SECURE=false 关闭。
+# Secure：仅 HTTPS 下发送 cookie。SESSION_COOKIE_SECURE 留空时自动判断：
+# PUBLIC_BASE_URL 是 https:// → True（公网部署），否则 False（本机 http://127.0.0.1）。
+# 显式写了 true/false 就以显式值为准；公网 https 却显式写了 false 会在启动时告警。
+def _session_cookie_secure() -> bool:
+    public_https = os.environ.get("PUBLIC_BASE_URL", "").strip().lower().startswith("https://")
+    secure = env_bool("SESSION_COOKIE_SECURE", public_https)
+    if public_https and not secure:
+        logging.getLogger(__name__).warning(
+            "PUBLIC_BASE_URL 是 https，但 SESSION_COOKIE_SECURE=false：session cookie 会在 "
+            "非 HTTPS 请求里明文发送。删掉这一行（自动判断）或改成 true。")
+    return secure
+
+
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SECURE"]   = env_bool("SESSION_COOKIE_SECURE", False)
+app.config["SESSION_COOKIE_SECURE"]   = _session_cookie_secure()
 app.config["PERMANENT_SESSION_LIFETIME"] = env_int("SESSION_LIFETIME_HOURS", 24) * 3600
 
 # 稳定的 secret key：优先读 .env，不存在则自动生成并写入
@@ -217,6 +230,18 @@ def _close_request_storage(exc=None):
         st.close()
 
 
+@app.template_global()
+def csp_nonce() -> str:
+    """本次请求的 CSP nonce：模板里每个 <script> 都要带 ``nonce="{{ csp_nonce() }}"``。
+
+    每个请求生成一次、存在 g 上，模板和 _add_security_headers 读到的是同一个值。
+    """
+    nonce = g.get("csp_nonce")
+    if nonce is None:
+        nonce = g.csp_nonce = secrets.token_urlsafe(16)
+    return nonce
+
+
 @app.after_request
 def _add_security_headers(resp):
     resp.headers.setdefault("X-Frame-Options",        "DENY")
@@ -224,16 +249,25 @@ def _add_security_headers(resp):
     resp.headers.setdefault("Referrer-Policy",        "strict-origin-when-cross-origin")
     resp.headers.setdefault("Strict-Transport-Security",
                             "max-age=63072000; includeSubDomains; preload")
-    # CSP: allow self, inline styles (design.css vars) and Google Maps. Fonts, icons
-    # and Chart.js are self-hosted under static/vendor; the Google Fonts hosts stay
-    # only because the Maps JS loads its own Roboto from them.
+    # CSP。脚本走严格策略：只执行带本次请求 nonce 的 <script>（模板里每个
+    # <script> 都写了 nonce="{{ csp_nonce() }}"），以及它们用 createElement
+    # 动态加载的脚本（'strict-dynamic'，Google Maps 加载器就是这样进来的）。
+    # 于是内联事件属性（onclick= 等）和 javascript: URL 一律不执行——注入进页面
+    # 的 HTML 即使漏了转义也跑不起来。模板里因此不能再写 on*= 属性，改用
+    # addEventListener / data-* 属性绑定。
+    # 'self' https: 'unsafe-inline' 只给不认 nonce / strict-dynamic 的老浏览器兜底；
+    # 支持 CSP3 的浏览器见到 nonce + strict-dynamic 会忽略这三项。
+    # 样式仍允许 'unsafe-inline'（design.css 变量、Google Maps 的内联样式）。
+    # 字体、图标、Chart.js 自托管在 static/vendor；Google Fonts 域名只为 Maps 自带的 Roboto。
+    nonce = csp_nonce()
     resp.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https://maps.googleapis.com https://maps.gstatic.com; "
-        "script-src 'self' 'unsafe-inline' https://maps.googleapis.com; "
+        f"script-src 'nonce-{nonce}' 'strict-dynamic' 'self' https: 'unsafe-inline'; "
+        "object-src 'none'; "
         "connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com; "
         "worker-src 'self' blob:; "
         "frame-ancestors 'none'; "
@@ -256,6 +290,10 @@ def _add_security_headers(resp):
     # 在所有 after_request 之后追加，这里根本看不到它——最终响应上两个都在，
     # 靠的是 Flask 那一步，不是这里的合并。
     if resp.mimetype == "text/html":
+        # HTML 每次都向服务器确认（no-cache），且不进共享缓存（private）。
+        # 不用 no-store：那会禁用 bfcache，「返回」就得重新拉整页。
+        # 以前写在模板的 <meta http-equiv="Cache-Control"> 浏览器不认，已删。
+        resp.headers.setdefault("Cache-Control", "no-cache, private")
         parts = [p.strip() for p in resp.headers.get("Vary", "").split(",") if p.strip()]
         if not any(p.lower() == "accept-language" for p in parts):
             resp.headers["Vary"] = ", ".join(parts + ["Accept-Language"])

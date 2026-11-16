@@ -18,7 +18,7 @@
 <script type="application/json" id="map-data">{{ {'mapsKey':google_maps_key,'markers':map_markers,'selection':{'history':('1' if map_history else none),'positions':map_positions,'location':(map_location or none),'page':page}} | tojson }}</script>
 {% endblock %}
 {% block scripts %}{{ super() }}
-<script src="{{ asset('vendor/googlemaps-markerclusterer/index.min.js') }}" defer></script>
-<script src="{{ asset('map.js') }}" defer></script>
-{% if is_admin %}<script src="{{ asset('map-geocode.js') }}" defer></script>{% endif %}
+<script nonce="{{ csp_nonce() }}" src="{{ asset('vendor/googlemaps-markerclusterer/index.min.js') }}" defer></script>
+<script nonce="{{ csp_nonce() }}" src="{{ asset('map.js') }}" defer></script>
+{% if is_admin %}<script nonce="{{ csp_nonce() }}" src="{{ asset('map-geocode.js') }}" defer></script>{% endif %}
 {% endblock %}

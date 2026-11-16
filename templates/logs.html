@@ -13,9 +13,9 @@
     <p class="mail-summary"><span id="log-info">—</span></p>
   </div>
   <div class="admin-head-tools">
-    <label class="admin-check"><input type="checkbox" id="pause-check" onchange="togglePause()"> {{ _('pause') }}</label>
+    <label class="admin-check"><input type="checkbox" id="pause-check"> {{ _('pause') }}</label>
     <label class="admin-check"><input type="checkbox" id="autoscroll-check" checked> {{ _('logs_auto_scroll') }}</label>
-    <button type="button" onclick="clearLogs()" class="admin-link is-danger">{{ _('clear_logs') }}</button>
+    <button type="button" id="clear-logs" class="admin-link is-danger">{{ _('clear_logs') }}</button>
   </div>
 </header>
 
@@ -33,18 +33,18 @@
   <label class="mail-search" role="search">
     <span class="sr-only">{{ _('logs_search') }}</span>
     <i class="bi bi-search" aria-hidden="true"></i>
-    <input type="text" id="log-search" placeholder="{{ _('logs_search') }}" oninput="scheduleSearch()" autocomplete="off">
+    <input type="text" id="log-search" placeholder="{{ _('logs_search') }}" autocomplete="off">
   </label>
-  <select id="log-level" onchange="applySearch()" class="admin-input" aria-label="Level">
+  <select id="log-level" class="admin-input" aria-label="Level">
     <option value="">{{ _('logs_level_all') }}</option>
     <option value="ERROR,CRITICAL">ERROR</option>
     <option value="WARNING">WARNING</option>
     <option value="INFO">INFO</option>
     <option value="DEBUG">DEBUG</option>
   </select>
-  <input type="text" id="log-since" class="admin-input log-time" placeholder="{{ _('logs_since_hint') }}" oninput="scheduleSearch()" autocomplete="off">
-  <input type="text" id="log-until" class="admin-input log-time" placeholder="{{ _('logs_until_hint') }}" oninput="scheduleSearch()" autocomplete="off">
-  <button type="button" class="admin-link" onclick="resetSearch()">{{ _('logs_filter_reset') }}</button>
+  <input type="text" id="log-since" class="admin-input log-time" placeholder="{{ _('logs_since_hint') }}" autocomplete="off">
+  <input type="text" id="log-until" class="admin-input log-time" placeholder="{{ _('logs_until_hint') }}" autocomplete="off">
+  <button type="button" class="admin-link" id="log-filter-reset">{{ _('logs_filter_reset') }}</button>
 </div>
 
 <div class="log-frame">
@@ -52,7 +52,7 @@
 </div>
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 // ── State ──
 let currentFile = 'monitor';
 let paused = false;
@@ -292,6 +292,14 @@ function esc(s) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+
+// ── 事件绑定（CSP 不允许内联 onclick/oninput）──
+document.getElementById('pause-check').addEventListener('change', togglePause);
+document.getElementById('clear-logs').addEventListener('click', clearLogs);
+['log-search', 'log-since', 'log-until'].forEach(id =>
+  document.getElementById(id).addEventListener('input', scheduleSearch));
+document.getElementById('log-level').addEventListener('change', applySearch);
+document.getElementById('log-filter-reset').addEventListener('click', resetSearch);
 
 // ── Init ──
 fetchLogFiles();
