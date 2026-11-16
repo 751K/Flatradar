@@ -51,9 +51,11 @@ const STATUS_LABEL = {
   unknown: '{{ _("monitoring_status_unknown") }}',
 };
 
+// 结果会放进属性值（如 title="..."，内容含上游报错原文），引号也必须转义
 function esc(s) {
   return String(s == null ? '' : s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // 后端所有时间戳都是 UTC ISO；这里转成配置的 TIMEZONE 再显示。

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from urllib.parse import urlsplit
 
 from flask import abort, request, url_for
 
@@ -120,11 +119,7 @@ def present_listing(row, *, read_ids, personal, zh, match_ids=None):
     item['display_seen'] = local_time(item['first_seen'])
     item['day'] = local_time(item['first_seen'], '%Y-%m-%d')
     item['area'] = row.get('area_value')
-    try:
-        if urlsplit(item['url']).scheme not in ('http','https'):
-            item['url'] = ''
-    except ValueError:
-        item['url'] = ''
+    # item['url'] 已由 serialize_listing 过滤为仅 http/https（app.safety.safe_external_url）
     item['detail_sections'] = detail_sections(item,zh=zh)
     item['price_note'] = price_note(item,zh=zh)
     return item

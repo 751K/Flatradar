@@ -69,6 +69,16 @@ function escapeHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// 外部链接只放行 http/https，其余返回 ''。URL 解析器会按浏览器规则处理
+// 前导空白、tab/换行等，与服务端 app.safety.safe_external_url 对应。
+function externalUrl(u) {
+  if(!u) return '';
+  try {
+    var parsed = new URL(u, location.href);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+  } catch (e) { return ''; }
+}
+
 function resultToast(ok, msg) {
   var wrap = document.getElementById('toast-container');
   if(!wrap) return;
@@ -223,7 +233,10 @@ function showToast(n) {
   d.className = 'toast';
   var bodyHtml = n.body ? '<div class="toast-body">' + escapeHtml(n.body) + '</div>' : '';
   d.innerHTML = '<div class="toast-title">' + escapeHtml(n.title) + '</div>' + bodyHtml;
-  if(n.url) { d.style.cursor = 'pointer'; d.onclick = function(){ window.open(n.url, '_blank'); }; }
+  // n.url 是抓取到的第三方房源 URL：只放行 http/https（挡 javascript: 等），
+  // 并用 noopener 打开，不让对方页面拿到 window.opener。
+  var safeUrl = externalUrl(n.url);
+  if(safeUrl) { d.style.cursor = 'pointer'; d.onclick = function(){ window.open(safeUrl, '_blank', 'noopener,noreferrer'); }; }
   wrap.appendChild(d);
   setTimeout(function() {
     d.style.transition = 'opacity .3s';

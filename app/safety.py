@@ -1,11 +1,13 @@
 """
-安全工具：URL 重定向校验 + .env 注入防护
+安全工具：URL 重定向校验 + 外部链接 scheme 校验 + .env 注入防护
 ==========================================
 
 无业务逻辑，可独立单元测试（safe_next_url 需要 Flask app context 才能调用 url_for，
 但函数本身行为是纯的）。
 """
 from __future__ import annotations
+
+from urllib.parse import urlsplit
 
 from flask import url_for
 
@@ -42,3 +44,29 @@ def safe_next_url(candidate: str) -> str:
 def sanitize_dotenv(value: str) -> str:
     """剥离换行符，防止 .env 注入攻击（\\n 可伪造新键）。"""
     return value.replace("\r", "").replace("\n", "")
+
+
+# 浏览器解析 href 时会去掉首尾的 C0 控制字符和空格，并删掉中间所有的 tab / 换行，
+# 所以 " javascript:..." 和 "java\tscript:..." 在浏览器里都是 javascript: 链接。
+# 这里按同样的规则先规范化再判断 scheme，避免被这类写法绕过。
+_C0_AND_SPACE = "".join(chr(c) for c in range(0x21))
+_TAB_NEWLINE = str.maketrans("", "", "\t\n\r")
+
+
+def safe_external_url(candidate: object) -> str:
+    """
+    外部链接（抓取到的房源 URL 等）只放行 http / https，其余一律返回空串。
+
+    房源 URL 来自第三方平台（例如 Xior 接口的 applyOnlineURL），属于不可信
+    输入。Jinja 转义挡不住 ``javascript:`` 这类 scheme，一旦进了 href 或
+    window.open，点击就在本站源上执行脚本。所有把房源 URL 交给浏览器或
+    客户端的出口都应经过这里（serialize_listing 已统一处理）。
+    """
+    if not isinstance(candidate, str) or not candidate:
+        return ""
+    url = candidate.strip(_C0_AND_SPACE).translate(_TAB_NEWLINE)
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return ""
+    return url if scheme in ("http", "https") else ""

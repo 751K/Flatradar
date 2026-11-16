@@ -17,6 +17,7 @@ from dataclasses import asdict
 from typing import Any, Iterable, Optional
 
 from app.db import storage
+from app.safety import safe_external_url
 from models import Listing
 from users import UserConfig
 
@@ -278,7 +279,8 @@ def serialize_listing(row: dict) -> dict:
         "available_from": row.get("available_from") or "",
         "city": row.get("city") or "",
         "source": row.get("source") or "holland2stay",
-        "url": row.get("url") or "",
+        # 第三方 URL 只放行 http/https：分享页、收件箱、API 都从这里取
+        "url": safe_external_url(row.get("url")),
         "features": feats,
         "feature_map": feature_map,
         "first_seen": row.get("first_seen") or "",

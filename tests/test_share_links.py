@@ -122,6 +122,27 @@ class TestShareLandingPage:
         body = client.get("/l/id-1").data.decode()
         assert "https://h.com/id-1" in body
 
+    @pytest.mark.parametrize("evil", [
+        "javascript:alert(1)",
+        " JavaScript:alert(1)",
+        "java\tscript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+    ])
+    def test_non_http_url_is_not_linked(self, client, seeded, evil):
+        """房源 URL 来自第三方平台，是不可信输入。
+
+        这一页公开、无需登录，任何人都能把 /l/<id> 发给管理员。若上游塞进
+        ``javascript:``，点「Open on …」就在本站源上执行脚本——Jinja 转义
+        挡不住 scheme，必须在 serialize_listing 里过滤。
+        """
+        seeded.conn.execute("UPDATE listings SET url=? WHERE id='id-1'", (evil,))
+        seeded.conn.commit()
+        r = client.get("/l/id-1")
+        assert r.status_code == 200
+        body = r.data.decode()
+        assert "public-primary" not in body, "非 http(s) URL 不该渲染出平台链接"
+        assert "alert(1)" not in body
+
     def test_missing_listing_is_gone_not_not_found(self, client, seeded):
         """410 而不是 404：房源下架的语义正是"曾经有效、现在没了"。
 

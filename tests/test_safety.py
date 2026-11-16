@@ -10,7 +10,9 @@ sanitize_dotenv 阻止 .env 注入（\\n 伪造新键）。
 from __future__ import annotations
 
 
-from app.safety import safe_next_url, sanitize_dotenv
+import pytest
+
+from app.safety import safe_external_url, safe_next_url, sanitize_dotenv
 
 
 class TestSafeNextUrl:
@@ -89,3 +91,38 @@ class TestSanitizeDotenv:
     def test_only_strips_newlines_keeps_other_whitespace(self):
         """tab/空格不动 —— 它们不能在 .env 里换键。"""
         assert sanitize_dotenv("a\tb c") == "a\tb c"
+
+
+class TestSafeExternalUrl:
+    """抓取到的第三方 URL 只放行 http/https；浏览器会当成脚本执行的写法一律清空。"""
+
+    @pytest.mark.parametrize("url", [
+        "https://www.holland2stay.com/residences/x.html",
+        "http://example.com/a?b=c#d",
+        "HTTPS://Example.com/",
+    ])
+    def test_http_and_https_pass_unchanged(self, url):
+        assert safe_external_url(url) == url
+
+    @pytest.mark.parametrize("url", [
+        "javascript:alert(1)",
+        "JAVASCRIPT:alert(1)",
+        " javascript:alert(1)",          # 浏览器会去掉前导空白
+        "\x01javascript:alert(1)",       # 以及前导 C0 控制字符
+        "java\tscript:alert(1)",         # 和中间的 tab / 换行
+        "java\nscript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "vbscript:msgbox(1)",
+        "//evil.example/path",            # 协议相对：没有 scheme，不放行
+        "/relative/path",
+        "http://[::1",                    # urlsplit 抛 ValueError
+    ])
+    def test_everything_else_is_dropped(self, url):
+        assert safe_external_url(url) == ""
+
+    @pytest.mark.parametrize("value", ["", None, 123])
+    def test_empty_or_non_string(self, value):
+        assert safe_external_url(value) == ""
+
+    def test_strips_surrounding_whitespace_on_valid_url(self):
+        assert safe_external_url("  https://example.com/x\n") == "https://example.com/x"
