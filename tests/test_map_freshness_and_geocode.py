@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -246,3 +247,46 @@ def test_geocode_does_not_ride_on_the_heartbeat():
         f"坐标补齐的守卫缩进 {geo}，心跳是 {hb}——它被挪进心跳块了，"
         "关掉心跳通知会连带停掉坐标补齐"
     )
+
+
+# ── 服务拒绝时整批停下 ──────────────────────────────────────────
+
+class TestGeocodeBackoff:
+    """2026-11-16：拿到 503 还接着打完整批，随后 Photon 封了服务器 IP。"""
+
+    @staticmethod
+    def _urlopen_raising(exc, calls):
+        def _fake(req, timeout=0):
+            calls.append(req.full_url)
+            raise exc
+        return _fake
+
+    @pytest.mark.parametrize("exc", [
+        HTTPError("u", 503, "x", {}, None),
+        HTTPError("u", 429, "x", {}, None),
+        URLError(ConnectionRefusedError(111, "refused")),
+        TimeoutError("timed out"),
+    ])
+    def test_unavailable_stops_the_batch(self, temp_db, exc):
+        st = temp_db
+        addrs = [f"Street {i} Room 1, Eindhoven" for i in range(5)]
+        calls: list[str] = []
+        with patch("net.direct_urlopen", self._urlopen_raising(exc, calls)):
+            done, failed, errors = geocode.geocode_addresses(
+                st, addrs, sleep=lambda _s: None)
+        assert len(calls) == 1, "服务拒绝后不该再发任何请求（包括去房号重试）"
+        assert (done, failed) == (0, 5)
+        assert [e["address"] for e in errors] == addrs
+        assert {e["reason"] for e in errors} == {"geocoding service unavailable"}
+
+    def test_client_error_on_one_address_does_not_stop(self, temp_db):
+        """400 是这条地址的问题，不是服务的问题。"""
+        calls: list[str] = []
+        exc = HTTPError("u", 400, "bad", {}, None)
+        with patch("net.direct_urlopen", self._urlopen_raising(exc, calls)):
+            _, failed, _ = geocode.geocode_addresses(
+                temp_db, ["A 1, X", "B 2, Y"], sleep=lambda _s: None)
+        assert failed == 2 and len(calls) == 2
+
+    def test_interval_is_polite(self):
+        assert geocode._MIN_INTERVAL >= 1.0
