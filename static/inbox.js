@@ -23,10 +23,9 @@
   const feedback = document.getElementById('mail-read-feedback');
   async function markRead(link,item) {
     if (!link.form || !item.is_unread) return;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(),10000);
     try {
-      const response = await fetch(link.form.action, {method:'POST',body:new FormData(link.form),headers:{Accept:'application/json'},credentials:'same-origin',signal:controller.signal});
+      // 10 秒超时：超时以 TimeoutError 拒绝，下面的 catch 不区分错误类型，统一提示可重试
+      const response = await fetch(link.form.action, {method:'POST',body:new FormData(link.form),headers:{Accept:'application/json'},credentials:'same-origin',signal:AbortSignal.timeout(10000)});
       if (!response.ok) throw new Error('Read state was not saved');
       const result = await response.json();
       item.is_unread = false;
@@ -43,7 +42,7 @@
       const retry = document.createElement('button');
       retry.type = 'button'; retry.textContent = label('重试','Retry');
       retry.addEventListener('click',() => markRead(link,item)); feedback.append(retry);
-    } finally { clearTimeout(timeout); }
+    }
   }
   document.addEventListener('click',event => {
     const link = event.target.closest('[data-listing-id]');

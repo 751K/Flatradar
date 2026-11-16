@@ -86,7 +86,7 @@ function logLabel(key) {
 function buildTabs(files) {
   logFiles = files;
   const tabs = document.getElementById('log-tabs');
-  tabs.innerHTML = '';
+  tabs.replaceChildren();
   files.forEach(f => {
     const btn = document.createElement('button');
     btn.type = 'button';

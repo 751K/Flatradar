@@ -447,7 +447,7 @@ function copyNotifFilters() {
     var src = document.querySelector('[data-name="ALLOWED_' + suffix + '"]');
     var dst = document.querySelector('[data-name="AUTO_BOOK_ALLOWED_' + suffix + '"]');
     if (!src || !dst) return;
-    dst.innerHTML = '';
+    dst.replaceChildren();
     src.querySelectorAll('input:checked').forEach(function (cb) {
       var label = document.createElement('label');
       var input = document.createElement('input');

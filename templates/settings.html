@@ -189,7 +189,7 @@
     </div>
   {% elif s.key == 'maintenance' and row.key == 'reset' %}
     <div class="account-panel-actions">
-      <button type="button" class="settings-danger" data-open-reset>{{ _('settings_reset_btn') }}</button>
+      <button type="button" class="settings-danger" command="show-modal" commandfor="reset-dialog">{{ _('settings_reset_btn') }}</button>
     </div>
   {% endif %}
 
@@ -205,7 +205,7 @@
   {# 失败信息显示在弹窗里：toast 在遮罩下面，被盖住且读屏不播报 #}
   <p class="settings-dialog-error" role="alert" data-reset-error hidden></p>
   <div class="mail-dialog-actions">
-    <button type="button" data-close-dialog>{{ _('settings_cancel') }}</button>
+    <button type="button" command="close" commandfor="reset-dialog">{{ _('settings_cancel') }}</button>
     <button type="button" class="settings-danger-solid" data-confirm-reset>{{ _('settings_reset_btn') }}</button>
   </div>
 </dialog>

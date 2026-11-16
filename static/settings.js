@@ -96,10 +96,10 @@
     resetError.textContent = message;
     resetError.hidden = !message;
   }
-  form.querySelector('[data-open-reset]')?.addEventListener('click', () => { showResetError(''); dialog.showModal(); });
+  // 打开 / 取消由按钮上的 command + commandfor 声明式完成（不支持的浏览器由 app.js 回退），
+  // 点遮罩关闭由 closedby="any" 完成。每次关闭时清掉上一次的错误信息。
+  dialog?.addEventListener('close', () => showResetError(''));
   dialog?.addEventListener('click', event => {
-    // 点遮罩关闭交给 closedby="any"（app.js 有回退）；这里只管「取消」按钮
-    if (event.target.closest('[data-close-dialog]')) { dialog.close(); return; }
     const button = event.target.closest('[data-confirm-reset]');
     if (!button) return;
     const original = button.textContent;

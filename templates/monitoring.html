@@ -101,7 +101,7 @@ function pct(v) {
 
 function renderAlerts(alerts) {
   const box = document.getElementById('mon-alerts');
-  if (!alerts || !alerts.length) { box.innerHTML = ''; return; }
+  if (!alerts || !alerts.length) { box.replaceChildren(); return; }
   box.innerHTML = alerts.map(a =>
     '<div class="admin-alert' + (a.level === 'down' ? ' is-bad' : '') + '">'
     + '<strong>' + esc(a.title) + '</strong>'

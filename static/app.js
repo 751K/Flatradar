@@ -141,6 +141,21 @@ if(window.HTMLDialogElement && !('closedBy' in HTMLDialogElement.prototype)) {
   });
 }
 
+// ── Invoker commands（command / commandfor）回退 ────────────────
+// 2025-12 才进入 Baseline。不支持的浏览器只补本项目用到的两个命令：
+// show-modal / close。不引入完整 polyfill。
+if(window.HTMLButtonElement && !('commandForElement' in HTMLButtonElement.prototype)) {
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest && e.target.closest('button[commandfor][command]');
+    if(!btn || btn.disabled) return;
+    var target = document.getElementById(btn.getAttribute('commandfor'));
+    if(!(target instanceof HTMLDialogElement)) return;
+    var cmd = btn.getAttribute('command');
+    if(cmd === 'show-modal' && !target.open) target.showModal();
+    else if(cmd === 'close' && target.open) target.close();
+  });
+}
+
 // ── Toasts ────────────────────────────────────────────────────────
 // 所有 toast 都走 makeToast：
 // - #toast-container 是有名字的 region；朗读交给页面加载时就在的 #toast-live
@@ -516,7 +531,7 @@ document.addEventListener('click', function (e) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner mr-1"></span>' +
                   (lang === 'zh' ? '发送中' : 'Sending');
-  if (box) { box.hidden = true; box.innerHTML = ''; }
+  if (box) { box.hidden = true; box.replaceChildren(); }
 
   fetch(btn.getAttribute('data-onb-test'), {
     method: 'POST',

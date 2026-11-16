@@ -7,13 +7,10 @@
   const zh=document.documentElement.lang==='zh';
   const label=(cn,en) => zh?cn:en;
   async function request(url,options={}) {
-    const controller=new AbortController();
-    const timer=setTimeout(() => controller.abort(),15000);
-    try {
-      const response=await fetch(url,{...options,credentials:'same-origin',cache:'no-store',signal:controller.signal});
-      if(!response.ok || response.redirected) throw new Error('Geocoding request failed');
-      return await response.json();
-    } finally {clearTimeout(timer);}
+    // 15 秒超时：AbortSignal.timeout 超时后以 TimeoutError 拒绝，调用方的 catch 统一处理
+    const response=await fetch(url,{...options,credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    if(!response.ok || response.redirected) throw new Error('Geocoding request failed');
+    return await response.json();
   }
   function display(data) {
     status.textContent=label('地址定位：','Address lookup: ')+data.done+'/'+data.total+
