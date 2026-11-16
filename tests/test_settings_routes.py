@@ -13,10 +13,8 @@ v1.16.0 起这些值住在 SQLite 的 app_settings，不再写 .env——.env �
 """
 from __future__ import annotations
 
-import re
 
 
-import pytest
 
 
 def _saved(client_or_dir=None):

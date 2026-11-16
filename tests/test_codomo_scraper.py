@@ -8,7 +8,6 @@ fixture 是 2026-11-16 的线上原文（gzip）：
 from __future__ import annotations
 
 import gzip
-from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
