@@ -46,7 +46,7 @@
   <div class="mail-empty"><h2>{{ '目前没有符合条件的房源' if lang == 'zh' else 'No matching listings' }}</h2><p>{{ '可以调整筛选、清除搜索或切换平台。' if lang == 'zh' else 'Adjust your filters, clear search, or choose another platform.' }}</p>{{ filter_action() }}{% if search %}<a href="{{ inbox_url(q=None,page=None) }}">{{ '清除搜索' if lang == 'zh' else 'Clear search' }}</a>{% endif %}</div>
 {% endfor %}
 </div>
-{% if pages>1 %}<footer class="mail-results"><nav aria-label="{{ '分页' if lang == 'zh' else 'Pagination' }}">{% if page>1 %}<a href="{{ inbox_url(page=page-1,selected=None) }}">←</a>{% endif %}<span>{{ page }} / {{ pages }}</span>{% if page<pages %}<a href="{{ inbox_url(page=page+1,selected=None) }}">→</a>{% endif %}</nav></footer>{% endif %}
+{% if pages>1 %}<footer class="mail-results"><nav aria-label="{{ '分页' if lang == 'zh' else 'Pagination' }}">{% if page>1 %}<a href="{{ inbox_url(page=page-1,selected=None) }}" rel="prev" aria-label="{{ '上一页' if lang == 'zh' else 'Previous page' }}"><span aria-hidden="true">←</span></a>{% endif %}<span>{{ page }} / {{ pages }}</span>{% if page<pages %}<a href="{{ inbox_url(page=page+1,selected=None) }}" rel="next" aria-label="{{ '下一页' if lang == 'zh' else 'Next page' }}"><span aria-hidden="true">→</span></a>{% endif %}</nav></footer>{% endif %}
 </section>
 <aside class="mail-detail{% if selected and request.args.get('selected') == selected.id %} is-open{% endif %}" aria-label="{{ '房源详情' if lang == 'zh' else 'Listing details' }}" id="mail-detail">
 {% if selected %}{% with item=selected %}{% include '_inbox_detail.html' %}{% endwith %}{% else %}<p class="mail-detail-empty">{{ '选择一条房源查看详情。' if lang == 'zh' else 'Select a listing to view its details.' }}</p>{% endif %}

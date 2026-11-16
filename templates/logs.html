@@ -20,17 +20,18 @@
 </header>
 
 <div class="mail-tools">
-  <nav class="admin-tabs" id="log-tabs">
-    <button type="button" class="log-tab active" data-file="monitor">{{ _('logs_monitor') }}</button>
-    <button type="button" class="log-tab" data-file="errors">{{ _('logs_errors') }}</button>
-  </nav>
+  {# 单选切换组，不是导航：当前文件用 aria-pressed 标出（不只靠 .active 的颜色） #}
+  <div class="admin-tabs" id="log-tabs" role="group" aria-label="{{ '日志文件' if lang == 'zh' else 'Log file' }}">
+    <button type="button" class="log-tab active" data-file="monitor" aria-pressed="true">{{ _('logs_monitor') }}</button>
+    <button type="button" class="log-tab" data-file="errors" aria-pressed="false">{{ _('logs_errors') }}</button>
+  </div>
   <span id="search-count" style="display:none;"></span>
 </div>
 
 <!-- 服务端过滤。以前这里是纯前端过滤，只能在已拉取的 500 行里找，
      所以"凌晨三点发生了什么"这类问题仍然只能 ssh 上去 grep。 -->
-<div class="log-filters">
-  <label class="mail-search" role="search">
+<div class="log-filters" role="search" aria-label="{{ '筛选日志' if lang == 'zh' else 'Filter logs' }}">
+  <label class="mail-search">
     <span class="sr-only">{{ _('logs_search') }}</span>
     <i class="bi bi-search" aria-hidden="true"></i>
     <input type="text" id="log-search" placeholder="{{ _('logs_search') }}" autocomplete="off">
@@ -88,7 +89,9 @@ function buildTabs(files) {
   tabs.innerHTML = '';
   files.forEach(f => {
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'log-tab' + (f.key === currentFile ? ' active' : '');
+    btn.setAttribute('aria-pressed', String(f.key === currentFile));
     btn.dataset.file = f.key;
     const kb = (f.size / 1024).toFixed(1);
     btn.textContent = logLabel(f.key) + ' (' + kb + ' KB)';
@@ -100,7 +103,10 @@ function buildTabs(files) {
 function switchFile(key) {
   currentFile = key;
   lastSize = 0;
-  document.querySelectorAll('.log-tab').forEach(t => t.classList.toggle('active', t.dataset.file === key));
+  document.querySelectorAll('.log-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.file === key);
+    t.setAttribute('aria-pressed', String(t.dataset.file === key));
+  });
   document.getElementById('log-search').value = '';
   document.getElementById('log-level').value  = '';
   document.getElementById('log-since').value  = '';

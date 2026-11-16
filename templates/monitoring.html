@@ -22,7 +22,7 @@
 
   <section class="admin-section">
     <div class="admin-section-head"><h2>{{ _('monitoring_sources') }}</h2><span id="mon-window">—</span></div>
-    <div class="admin-scroll">
+    <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
       <table class="admin-table" id="mon-cards">
         <tbody><tr><td class="muted">{{ _('loading') }}…</td></tr></tbody>
       </table>
@@ -34,7 +34,7 @@
       <h2>{{ _('monitoring_recent_rounds') }}</h2>
       <span>{{ _('monitoring_cell_hint') }} · {{ _('monitoring_times_in') }} {{ tz }}</span>
     </div>
-    <div class="admin-scroll">
+    <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
       <table class="admin-table" id="mon-rounds">
         <tbody><tr><td class="muted">{{ _('loading') }}…</td></tr></tbody>
       </table>

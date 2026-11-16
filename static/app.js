@@ -13,6 +13,12 @@ function toggleSidebar() {
   if(sb.classList.contains('open')) { closeSidebar(); return; }
   sb.classList.add('open');
   if(ov) ov.classList.add('show');
+  // 窄屏下侧栏是盖住页面的模态抽屉（下面 main 已设 inert）：告诉读屏这是对话框
+  if(sidebarIsMobile()) {
+    sb.setAttribute('role', 'dialog');
+    sb.setAttribute('aria-modal', 'true');
+    sb.setAttribute('aria-label', getLang() === 'zh' ? '菜单' : 'Menu');
+  }
   var toggle = document.querySelector('.nav-toggle');
   if(toggle) toggle.setAttribute('aria-expanded', 'true');
   var main = document.getElementById('main-content');
@@ -45,7 +51,10 @@ function closeSidebar(restoreFocus) {
   var sb = document.querySelector('.sidebar');
   var ov = document.querySelector('.sidebar-overlay');
   var wasOpen = sb && sb.classList.contains('open');
-  if(sb) sb.classList.remove('open');
+  if(sb) {
+    sb.classList.remove('open');
+    sb.removeAttribute('role'); sb.removeAttribute('aria-modal'); sb.removeAttribute('aria-label');
+  }
   if(ov) ov.classList.remove('show');
   var main = document.getElementById('main-content');
   if(main) main.inert = false;
@@ -81,22 +90,128 @@ function externalUrl(u) {
   } catch (e) { return ''; }
 }
 
-function resultToast(ok, msg) {
+// ── List / detail panes ───────────────────────────────────────────
+// 窄屏下 .mail-detail.is-open 是盖住列表的浮层（inbox.css 里 position:absolute）。
+// 浮层打开时：列表设 inert（Tab 不再走到看不见的行），焦点移到详情标题；
+// 关闭时撤掉 inert，焦点回到选中的行。宽屏是并排显示，什么都不用做。
+// 按计算后的 position 判断是否浮层，不在 JS 里重复写断点。
+function detailIsOverlay(detail) {
+  return detail.classList.contains('is-open') && /absolute|fixed/.test(getComputedStyle(detail).position);
+}
+function syncDetailOverlay(detail, opts) {
+  if(!detail) return;
+  opts = opts || {};
+  var list = detail.parentElement && detail.parentElement.querySelector('.mail-list');
+  var overlay = detailIsOverlay(detail);
+  if(list) list.inert = overlay;
+  if(overlay && opts.focusIn) {
+    var heading = Array.prototype.find.call(detail.querySelectorAll('h2'), function(h){ return h.offsetParent !== null; });
+    if(heading) { heading.setAttribute('tabindex', '-1'); heading.focus({preventScroll: true}); }
+  }
+  if(!detail.classList.contains('is-open') && opts.focusRow && list) {
+    var row = list.querySelector('[aria-current="true"]');
+    if(row) row.focus({preventScroll: true});
+  }
+}
+// 旋转屏幕 / 拉宽窗口时浮层可能变成并排，inert 要跟着撤掉
+window.addEventListener('resize', function(){
+  document.querySelectorAll('.mail-detail').forEach(function(d){ syncDetailOverlay(d); });
+});
+
+// 可横向滚动的表格容器（tabindex=0 让键盘能滚动）：有所在区块的标题就用它命名
+document.querySelectorAll('.admin-scroll[role="region"]').forEach(function(box, i) {
+  var section = box.closest('section');
+  var heading = section && section.querySelector('h2');
+  if(!heading) return;
+  if(!heading.id) heading.id = 'table-heading-' + i;
+  box.removeAttribute('aria-label');
+  box.setAttribute('aria-labelledby', heading.id);
+});
+
+// ── Toasts ────────────────────────────────────────────────────────
+// 所有 toast 都走 makeToast：
+// - #toast-container 是有名字的 region；朗读交给页面加载时就在的 #toast-live
+//   （role="status"）。live region 必须先存在、再改内容，读屏才会播报。
+// - 每条都有真正的关闭按钮；鼠标悬停或键盘焦点在里面时暂停自动消失。
+// - 带链接的（房源通知）用真正的 <a>，键盘可达。
+function announce(text) {
+  var live = document.getElementById('toast-live');
+  if(!live || !text) return;
+  live.textContent = '';
+  // 清空后下一帧再写，连续两条相同文字也会被重新播报
+  requestAnimationFrame(function(){ live.textContent = text; });
+}
+
+function makeToast(opts) {
   var wrap = document.getElementById('toast-container');
-  if(!wrap) return;
-  var div = document.createElement('div');
-  div.className = 'toast';
-  div.style.borderColor = ok ? 'var(--success)' : 'var(--danger)';
-  div.innerHTML =
-    '<div class="toast-title" style="color:' + (ok ? 'var(--success)' : 'var(--danger)') + '">' +
-    escapeHtml(ok ? (getLang() === 'zh' ? '成功' : 'Success') : (getLang() === 'zh' ? '失败' : 'Failed')) +
-    '</div><div class="toast-body">' + escapeHtml(msg || '') + '</div>';
-  wrap.appendChild(div);
-  setTimeout(function(){
-    div.style.transition = 'opacity .2s';
-    div.style.opacity = '0';
-    setTimeout(function(){ div.remove(); }, 220);
-  }, 3500);
+  if(!wrap) return null;
+  var zh = getLang() === 'zh';
+  var toast = document.createElement('div');
+  toast.className = 'toast' + (opts.ok === true ? ' toast-success' : opts.ok === false ? ' toast-error' : '');
+  var title = document.createElement('div');
+  title.className = 'toast-title';
+  var url = externalUrl(opts.url);
+  if(url) {
+    var link = document.createElement('a');
+    link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.textContent = opts.title;
+    title.appendChild(link);
+  } else {
+    title.textContent = opts.title;
+  }
+  toast.appendChild(title);
+  if(opts.body) {
+    var body = document.createElement('div');
+    body.className = 'toast-body';
+    body.textContent = opts.body;
+    toast.appendChild(body);
+  }
+  var close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'toast-close';
+  close.setAttribute('aria-label', zh ? '关闭通知' : 'Dismiss notification');
+  close.innerHTML = '<span aria-hidden="true">&times;</span>';
+  toast.appendChild(close);
+  wrap.appendChild(toast);
+  announce(opts.title + (opts.body ? '. ' + opts.body : ''));
+
+  var timer = null, held = false;
+  function remove(fromUser) {
+    clearTimeout(timer);
+    // 用户关掉的是当前有焦点的那条：焦点交给下一条的关闭按钮，没有就回到主内容
+    if(fromUser && toast.contains(document.activeElement)) {
+      var next = toast.nextElementSibling || toast.previousElementSibling;
+      var target = next ? next.querySelector('.toast-close') : document.getElementById('main-content');
+      if(target) { if(!next) target.setAttribute('tabindex', '-1'); target.focus({preventScroll: true}); }
+    }
+    toast.remove();
+  }
+  function schedule() {
+    clearTimeout(timer);
+    if(held) return;
+    timer = setTimeout(function(){
+      // 到点时再确认一次：焦点或鼠标还在里面就再等一轮（不只依赖 focusin/mouseenter 事件）
+      if(toast.contains(document.activeElement) || toast.matches(':hover')) { schedule(); return; }
+      toast.classList.add('toast-leaving');
+      setTimeout(function(){
+        if(held || toast.contains(document.activeElement) || toast.matches(':hover')) { toast.classList.remove('toast-leaving'); schedule(); }
+        else remove(false);
+      }, 250);
+    }, opts.duration || 5000);
+  }
+  function hold(on) { held = on; if(on) { clearTimeout(timer); toast.classList.remove('toast-leaving'); } else schedule(); }
+  toast.addEventListener('mouseenter', function(){ hold(true); });
+  toast.addEventListener('mouseleave', function(){ hold(toast.contains(document.activeElement)); });
+  toast.addEventListener('focusin', function(){ hold(true); });
+  toast.addEventListener('focusout', function(e){ if(!toast.contains(e.relatedTarget)) hold(toast.matches(':hover')); });
+  close.addEventListener('click', function(){ remove(true); });
+  schedule();
+  return toast;
+}
+
+function resultToast(ok, msg) {
+  var zh = getLang() === 'zh';
+  makeToast({ok: ok, title: ok ? (zh ? '成功' : 'Success') : (zh ? '失败' : 'Failed'), body: msg || '', duration: ok ? 4000 : 6000});
 }
 
 // ── Flash Dismiss ─────────────────────────────────────────────────
@@ -104,7 +219,15 @@ document.addEventListener('click', function(e) {
   var btn = e.target.closest('.alert-dismiss');
   if(btn) {
     var alert = btn.closest('.alert');
-    if(alert) { alert.style.opacity = '0'; alert.style.transition = 'opacity .15s'; setTimeout(function(){ alert.remove(); }, 150); }
+    if(!alert) return;
+    // 按钮正有焦点，元素一删焦点就掉回 <body>：先交给下一条提示，没有就给主内容
+    var next = alert.nextElementSibling && alert.nextElementSibling.matches('.alert')
+      ? alert.nextElementSibling.querySelector('.alert-dismiss') : null;
+    var main = document.getElementById('main-content');
+    if(next) next.focus();
+    else if(main) { main.setAttribute('tabindex', '-1'); main.focus({preventScroll: true}); }
+    alert.style.opacity = '0'; alert.style.transition = 'opacity .15s';
+    setTimeout(function(){ alert.remove(); }, 150);
   }
 });
 
@@ -229,22 +352,8 @@ startMonitorPoll();
 var _notifLastId = 0;
 
 function showToast(n) {
-  var wrap = document.getElementById('toast-container');
-  if(!wrap) return;
-  var d = document.createElement('div');
-  d.className = 'toast';
-  var bodyHtml = n.body ? '<div class="toast-body">' + escapeHtml(n.body) + '</div>' : '';
-  d.innerHTML = '<div class="toast-title">' + escapeHtml(n.title) + '</div>' + bodyHtml;
-  // n.url 是抓取到的第三方房源 URL：只放行 http/https（挡 javascript: 等），
-  // 并用 noopener 打开，不让对方页面拿到 window.opener。
-  var safeUrl = externalUrl(n.url);
-  if(safeUrl) { d.style.cursor = 'pointer'; d.onclick = function(){ window.open(safeUrl, '_blank', 'noopener,noreferrer'); }; }
-  wrap.appendChild(d);
-  setTimeout(function() {
-    d.style.transition = 'opacity .3s';
-    d.style.opacity = '0';
-    setTimeout(function(){ d.remove(); }, 300);
-  }, 5000);
+  // n.url 是抓取到的第三方房源 URL：makeToast 只对 http/https 生成链接（externalUrl）
+  makeToast({title: n.title, body: n.body, url: n.url, duration: 8000});
 }
 
 // SSE 从最新一条之后开始推，先取一次最新 id，免得把旧通知当新的弹出来

@@ -93,7 +93,7 @@
     </div>
   </section>
 
-  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if lang == 'zh' else 'Setting details' }}" aria-live="polite">
+  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if lang == 'zh' else 'Setting details' }}">
   {% for s in sections %}{% for row in s.rows %}
   {% call ui.panel(s, row) %}
 
@@ -193,7 +193,7 @@
     <label class="account-field"><span>{{ _('user_form_language') }}</span>
       <select name="LANGUAGE">
         <option value="en"{% if (u.language or 'en') != 'zh' %} selected{% endif %}>English</option>
-        <option value="zh"{% if (u.language or 'en') == 'zh' %} selected{% endif %}>中文</option>
+        <option value="zh"{% if (u.language or 'en') == 'zh' %} selected{% endif %} lang="zh">中文</option>
       </select>
     </label>
     <p class="account-help">{{ '保存后界面语言随之切换，房源通知和验证邮件也使用这个语言。' if lang == 'zh' else 'After saving, the interface switches language; alerts and verification email use it too.' }}</p>

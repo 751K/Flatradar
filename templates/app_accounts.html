@@ -32,7 +32,7 @@
   {% if not tokens %}
   <p class="admin-empty">{{ _('app_accounts_empty') }}</p>
   {% else %}
-  <div class="admin-scroll">
+  <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
     <table class="admin-table">
       <thead>
         <tr>
@@ -82,7 +82,7 @@
   {% if not devices %}
   <p class="admin-empty">{{ _('devices_empty') }}</p>
   {% else %}
-  <div class="admin-scroll">
+  <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
     <table class="admin-table">
       <thead>
         <tr>

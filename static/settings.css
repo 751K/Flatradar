@@ -24,7 +24,7 @@
 .xior-city-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .xior-tally{font-size:12px;color:var(--mail-muted);font-variant-numeric:tabular-nums}
 .xior-chev{font-size:11px;color:var(--mail-muted);transition:transform .18s}
-.xior-group[open] .xior-chev{transform:rotate(180deg)}
+.xior-details[open] .xior-chev{transform:rotate(180deg)}
 .xior-bldgs{display:flex;flex-direction:column;padding:2px 0 8px 26px}
 .xior-bldg{display:flex;align-items:center;gap:8px;min-height:30px;font-size:13px;color:var(--mail-muted);cursor:pointer}
 .xior-bldg input{margin:0}
@@ -44,4 +44,7 @@
 .settings-range>span:first-child:not([aria-hidden]){width:4em;flex:none;color:var(--mail-muted)}
 .account-field .settings-range input:not([type=checkbox]){width:6.5em;flex:none;text-align:center;font-variant-numeric:tabular-nums}
 .settings-range span[aria-hidden]{color:var(--mail-muted)}
-
+/* 城市复选框在 <summary> 外面，叠到行首；summary 里留同宽的占位 */
+.xior-group{position:relative}
+.xior-group>.xior-city{position:absolute;left:0;top:11px;width:14px;height:14px;margin:0;z-index:1}
+.xior-city-spacer{flex:none;width:14px}

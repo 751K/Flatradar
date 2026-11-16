@@ -78,7 +78,7 @@ a{color:var(--accent)}
 .login-error{margin:-12px 0 20px;font-size:14px;line-height:1.5;color:var(--accent)}
 .login-field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px;font-size:13px;color:var(--muted)}
 .login-field input{width:100%;height:42px;padding:0 12px;border:1px solid transparent;border-radius:7px;background:var(--field);color:var(--text);font:inherit;font-size:15px}
-.login-field input:focus{outline:none;border-color:var(--accent)}
+.login-field input:focus{border-color:var(--accent);outline:2px solid transparent}.login-field input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .login-pw{position:relative;display:block}
 .login-pw input{padding-right:64px}
 .login-pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:4px 8px;border:0;border-radius:5px;background:none;color:var(--muted);font:inherit;font-size:13px;cursor:pointer}
@@ -152,3 +152,4 @@ a{color:var(--accent)}
 .guide td:first-child{white-space:nowrap}
 .guide-note{padding:14px 16px;border-radius:8px;background:var(--field);color:var(--text)}
 @media(max-width:600px){.guide h2{font-size:18px}.guide th,.guide td{padding-right:10px}.guide td:first-child{white-space:normal;word-break:keep-all}}
+@media (forced-colors: active){.login-field input:focus{outline:2px solid Highlight}}

@@ -23,8 +23,8 @@
     <header class="public-top">
       <a class="public-brand" href="/">FlatRadar{% if self_hosted_label %}<small class="brand-selfhost">{{ self_hosted_label }}</small>{% endif %}</a>
       <nav class="public-lang" aria-label="Language">
-        <a href="{{ url_for('set_lang', lang='zh', next=request.full_path) }}"{% if zh %} aria-current="true"{% endif %}>中文</a>
-        <a href="{{ url_for('set_lang', lang='en', next=request.full_path) }}"{% if not zh %} aria-current="true"{% endif %}>EN</a>
+        <a href="{{ url_for('set_lang', lang='zh', next=request.full_path) }}"{% if zh %} aria-current="true"{% endif %} lang="zh" hreflang="zh">中文</a>
+        <a href="{{ url_for('set_lang', lang='en', next=request.full_path) }}"{% if not zh %} aria-current="true"{% endif %} lang="en" hreflang="en" aria-label="English">EN</a>
       </nav>
     </header>
 

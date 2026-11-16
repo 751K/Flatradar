@@ -94,7 +94,7 @@
     <div class="mail-groups">{{ ui.row_lists(sections) }}</div>
   </section>
 
-  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if lang == 'zh' else 'Setting details' }}" aria-live="polite">
+  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if lang == 'zh' else 'Setting details' }}">
   {% set save_label = ('创建用户' if lang == 'zh' else 'Create user') if is_new else none %}
   {% set subheads = {'rent': '租金与面积', 'location': '城市与位置', 'sources': '平台', 'home': '房型与入住人数', 'terms': '合同与租客', 'extras': '标签、装修与能耗'} if lang == 'zh' else {'rent': 'Rent and size', 'location': 'Cities and location', 'sources': 'Platforms', 'home': 'Home type and occupancy', 'terms': 'Contract and tenant', 'extras': 'Labels, finishing and energy'} %}
   {% for s in sections %}{% for row in s.rows %}
@@ -122,7 +122,7 @@
     <label class="account-field"><span>{{ _('user_form_language') }}</span>
       <select name="LANGUAGE">
         <option value="en"{% if (u.language or 'en') != 'zh' %} selected{% endif %}>English</option>
-        <option value="zh"{% if (u.language or 'en') == 'zh' %} selected{% endif %}>中文</option>
+        <option value="zh"{% if (u.language or 'en') == 'zh' %} selected{% endif %} lang="zh">中文</option>
       </select>
     </label>
     <p class="account-help">{{ '房源通知和验证邮件使用这个语言。' if lang == 'zh' else 'Listing alerts and verification email use this language.' }}</p>
@@ -401,6 +401,9 @@ function addXiorRow() {
   var label = row.querySelector('.xior-bldg');
   label.textContent = opt.dataset.display || opt.textContent;
   label.title = sel.value;
+  // 和服务端渲染的行一致：输入框名字带上楼栋，否则只剩 placeholder
+  row.querySelector('input[type="email"]').setAttribute('aria-label', label.textContent + ' ' + {{ _('user_form_ab_email') | tojson }});
+  row.querySelector('input[type="password"]').setAttribute('aria-label', label.textContent + ' ' + {{ _('user_form_ab_pass') | tojson }});
   document.getElementById('xior-accts').appendChild(row);
   row.querySelector('input[type="email"]').focus();
   opt.remove();

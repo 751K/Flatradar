@@ -17,21 +17,23 @@
 <div class="admin-body">
   <section class="admin-section">
     <div class="admin-section-head"><h2>{{ _('announce_title') }}</h2></div>
-    <div class="admin-form">
-      <input type="text" id="ann-title" class="admin-input" placeholder="{{ _('announce_title_ph') }}" maxlength="120" autocomplete="off">
-      <textarea id="ann-body" class="admin-input" rows="4" placeholder="{{ _('announce_body_ph') }}" maxlength="1000"></textarea>
+    <form class="admin-form" id="ann-form" novalidate>
+      <label class="admin-label" for="ann-title">{{ _('announce_title_ph') }}</label>
+      <input type="text" id="ann-title" class="admin-input" maxlength="120" autocomplete="off">
+      <label class="admin-label" for="ann-body">{{ _('announce_body_ph') }}</label>
+      <textarea id="ann-body" class="admin-input" rows="4" maxlength="1000"></textarea>
       <div class="admin-row-actions">
         <button type="button" class="admin-button" data-announce="preview">{{ _('announce_preview') }}</button>
         <button type="button" class="admin-button is-primary" data-announce="send">{{ _('announce_send') }}</button>
-        <span id="ann-status" class="admin-muted"></span>
+        <span id="ann-status" class="admin-muted" role="status"></span>
       </div>
-    </div>
+    </form>
   </section>
 
   <section class="admin-section">
-    <div class="admin-section-head"><h2>{{ _('announce_history') }}</h2><span id="ann-retry-status"></span></div>
+    <div class="admin-section-head"><h2>{{ _('announce_history') }}</h2><span id="ann-retry-status" role="status"></span></div>
     {% if announcements %}
-    <div class="admin-scroll">
+    <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
       <table class="admin-table">
         <thead>
           <tr>
@@ -68,6 +70,11 @@
 
 <script nonce="{{ csp_nonce() }}">
 // 事件绑定（CSP 不允许内联 onclick）
+// 表单里按回车 = 预览（不会误发）；真正发送只能点「发送」
+document.getElementById('ann-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  sendAnnouncement(true);
+});
 document.querySelectorAll('[data-announce]').forEach(function (btn) {
   btn.addEventListener('click', function () { sendAnnouncement(btn.dataset.announce === 'preview'); });
 });

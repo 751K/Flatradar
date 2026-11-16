@@ -30,7 +30,7 @@
 {% else %}
   <section class="admin-section">
     <div class="admin-section-head"><h2>{{ _('crashes_list') }}</h2></div>
-    <div class="admin-scroll">
+    <div class="admin-scroll" tabindex="0" role="region" aria-label="{{ '表格（可横向滚动）' if lang == 'zh' else 'Table (scrolls horizontally)' }}">
       <table class="admin-table">
         <thead>
           <tr>

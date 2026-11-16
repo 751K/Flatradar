@@ -269,6 +269,15 @@ h4{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
   font-size:15px;
 }
 .toast-title{font-weight:600;margin-bottom:3px}
+.toast{position:relative;padding-right:44px}
+.toast-success{box-shadow:inset 3px 0 0 var(--success),var(--shadow-lg)}
+.toast-error{box-shadow:inset 3px 0 0 var(--danger),var(--shadow-lg)}
+.toast-success .toast-title{color:var(--success)}
+.toast-error .toast-title{color:var(--danger)}
+.toast-title a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.toast-close{position:absolute;top:8px;right:8px;width:28px;height:28px;border:0;border-radius:6px;background:none;color:var(--text2);font-size:18px;line-height:1;cursor:pointer}
+.toast-close:hover{background:var(--surface-hover)}
+.toast-leaving{opacity:0;transition:opacity .25s}
 .toast-body{font-size:14px;color:var(--text2)}
 @keyframes toastIn{from{opacity:0;transform:translateX(20px) scale(.96)}}
 
@@ -396,3 +405,14 @@ html.theme-transitioning *::after{
 .onb-test-result[hidden]{display:none}
 .onb-test-ok{color:var(--success)}
 .onb-test-fail{color:var(--danger)}
+
+/* ── Windows 高对比度（forced-colors） ─────────────────────────────
+   这种模式下背景色和 box-shadow 会被系统颜色替换或去掉，只靠它们表达的
+   「选中」「当前」状态就看不出来了。补一圈系统高亮色的轮廓。 */
+@media (forced-colors: active){
+  .mail-listing.selected,
+  .mail-listing[aria-current="true"],
+  .mail-page .sidebar-nav .mail-scope a[aria-current],
+  .account-segment label:has(input:checked){outline:2px solid Highlight;outline-offset:-2px}
+  .toast{border:1px solid CanvasText}
+}

@@ -60,6 +60,8 @@
     document.dispatchEvent(new CustomEvent('inbox:listing-selected'));
     const detail = document.getElementById('mail-detail');
     detail.classList.add('is-open'); detail.scrollTop = 0;
+    // 日历 / 地图视图会在 inbox:listing-selected 里自己移动焦点；焦点还停在被点的行上才由这里处理
+    window.syncDetailOverlay?.(detail,{focusIn: document.activeElement === link || !document.activeElement || document.activeElement === document.body});
     markRead(link,item);
   });
   // New calendar fragments carry fresh, server-scoped items. Delegated
@@ -77,7 +79,9 @@
   document.addEventListener('click',event => {
     if (!event.target.closest('[data-close-detail]')) return;
     event.preventDefault();
-    document.getElementById('mail-detail')?.classList.remove('is-open');
+    const detail = document.getElementById('mail-detail');
+    detail?.classList.remove('is-open');
+    window.syncDetailOverlay?.(detail,{focusRow: true});
     const url = new URL(location.href); url.searchParams.delete('selected');
     history.replaceState(null,'',url);
     document.dispatchEvent(new CustomEvent('inbox:detail-closed'));

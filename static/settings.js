@@ -8,15 +8,8 @@
   const label = (cn, en) => zh ? cn : en;
   const csrf = form.querySelector('input[name="csrf_token"]').value;
 
-  function toast(ok, message) {
-    const wrap = document.getElementById('toast-container');
-    if (!wrap) return;
-    const node = document.createElement('div');
-    node.className = `toast ${ok ? 'toast-success' : 'toast-error'}`;
-    node.textContent = message;
-    wrap.appendChild(node);
-    setTimeout(() => node.remove(), 4000);
-  }
+  // 共用 app.js 的 toast（可关闭、会被读屏播报）
+  const toast = (ok, message) => resultToast(ok, message);
 
   // A form change event so account.js marks the row as unsaved
   const changed = box => box.dispatchEvent(new Event('change', {bubbles: true}));
@@ -61,8 +54,6 @@
       count.textContent = label(`已选 ${on} / ${total} 栋`, `${on} of ${total} selected`);
       toggle.textContent = on === total ? label('清空', 'Clear all') : label('全选', 'Select all');
     };
-    // Ticking the city box must not fold/unfold the group
-    xior.addEventListener('click', event => { if (event.target.classList.contains('xior-city')) event.stopPropagation(); }, true);
     xior.addEventListener('change', event => {
       if (event.target.classList.contains('xior-city')) {
         const want = event.target.checked;

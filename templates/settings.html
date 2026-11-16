@@ -39,7 +39,7 @@
   {% if label %}<span>{{ label }}</span>{% endif %}
   {% for key, default in [(start, start_default), (end, end_default)] %}
   {% if not loop.first %}<span aria-hidden="true">–</span>{% endif %}
-  <input type="text" name="{{ key }}" value="{{ env.get(key, default) }}" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5" placeholder="{{ default }}" aria-label="{{ key }}">
+  <input type="text" name="{{ key }}" value="{{ env.get(key, default) }}" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" maxlength="5" placeholder="{{ default }}" aria-label="{{ (label ~ ' ' if label else '') ~ ((('开始' if loop.first else '结束') if lang == 'zh' else ('start' if loop.first else 'end'))) }}">
   {% endfor %}
 </div>
 {% endmacro %}
@@ -80,7 +80,7 @@
     </div>
   </section>
 
-  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if zh else 'Setting details' }}" aria-live="polite">
+  <section class="mail-detail account-detail{% if request.args.get('item') %} is-open{% endif %}" aria-label="{{ '设置详情' if zh else 'Setting details' }}">
   {% for s in sections %}{% for row in s.rows %}
   {% call ui.panel(s, row) %}
 
@@ -158,9 +158,13 @@
     {# 三十来栋按城市折叠：勾城市 = 整城全选，点名字展开；计数让折叠时也看得出选了几栋 #}
     <div class="xior-list" data-xior>
       {% for city, buildings in xior_by_city | dictsort %}
-      <details class="xior-group">
+      {# 城市复选框不能放进 <summary>：summary 会被读屏当成按钮，里面的复选框
+         （和半选状态）随之丢失。放在外面、用定位叠到行首，看起来不变。 #}
+      <div class="xior-group">
+      <input type="checkbox" class="xior-city" aria-label="{{ city }} · {{ '整城全选' if zh else 'all buildings' }}">
+      <details class="xior-details">
         <summary class="xior-city-row">
-          <input type="checkbox" class="xior-city" aria-label="{{ city }}">
+          <span class="xior-city-spacer" aria-hidden="true"></span>
           <span class="xior-city-name">{{ city }}</span>
           <span class="xior-tally"></span>
           <i class="bi bi-chevron-down xior-chev" aria-hidden="true"></i>
@@ -171,6 +175,7 @@
           {% endfor %}
         </div>
       </details>
+      </div>
       {% endfor %}
     </div>
     <div class="settings-list-tools"><span data-xior-count></span><button type="button" class="account-text-button" data-xior-toggle>{{ '全选' if zh else 'Select all' }}</button></div>

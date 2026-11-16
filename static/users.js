@@ -29,6 +29,7 @@
     if (!row || event.metaKey || event.ctrlKey || event.shiftKey) return;
     event.preventDefault();
     select(row.dataset.userId);
+    window.syncDetailOverlay?.(detail, {focusIn: true});
   });
   detail.addEventListener('click', event => {
     if (!event.target.closest('[data-close-detail]')) return;
@@ -37,6 +38,7 @@
     const url = new URL(location.href);
     url.searchParams.delete('selected');
     history.replaceState(null, '', url);
+    window.syncDetailOverlay?.(detail);
     grid.querySelector('[data-user-row][aria-current="true"]')?.focus({preventScroll:true});
   });
 

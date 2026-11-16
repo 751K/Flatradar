@@ -67,7 +67,7 @@
 /* Inputs */
 .admin-input{width:100%;height:36px;padding:0 10px;border:1px solid transparent;border-radius:6px;background:var(--mail-field);color:var(--mail-text);font:inherit;font-size:13px}
 textarea.admin-input{height:auto;padding:8px 10px;resize:vertical;line-height:1.6}
-.admin-input:focus{outline:none;border-color:var(--mail-accent)}
+.admin-input:focus{border-color:var(--mail-accent);outline:2px solid transparent}.admin-input:focus-visible{outline:2px solid var(--mail-accent);outline-offset:1px}
 .admin-input::placeholder{color:var(--mail-muted)}
 select.admin-input{width:auto;padding-right:28px}
 
@@ -121,6 +121,7 @@ select.admin-input{width:auto;padding-right:28px}
 .admin-page .admin-kv .badge{display:inline-block;padding:2px 6px;border:0;border-radius:4px;background:var(--mail-field);color:var(--mail-text);font-size:12px;font-weight:500;line-height:1.5}
 .admin-page .admin-kv .badge-danger{color:var(--mail-accent);font-weight:600}
 .admin-form{display:flex;flex-direction:column;gap:8px}
+.admin-label{font-size:13px;color:var(--mail-muted)}
 .admin-form .admin-row-actions{margin-top:4px}
 .admin-page .hidden{display:none!important}
 .admin-form{max-width:640px}

@@ -73,7 +73,7 @@
       {% for cat, msg in messages %}
       <div class="alert alert-{{ 'success' if cat=='success' else ('warning' if cat=='warning' else 'danger') }}">
         {{ msg }}
-        <button class="alert-dismiss">&times;</button>
+        <button type="button" class="alert-dismiss" aria-label="{{ '关闭提示' if lang == 'zh' else 'Dismiss message' }}"><span aria-hidden="true">&times;</span></button>
       </div>
       {% endfor %}
     {% endwith %}
@@ -82,8 +82,9 @@
 
 </div>
 
-<!-- Toast container -->
-<div class="toast-container" id="toast-container"></div>
+<!-- Toasts：可见的列表 + 页面加载时就在的 live region（读屏只播报已存在区域里的变化） -->
+<div class="toast-container" id="toast-container" role="region" aria-label="{{ '通知' if lang == 'zh' else 'Notifications' }}"></div>
+<div class="sr-only" id="toast-live" role="status"></div>
 
 <script nonce="{{ csp_nonce() }}">
 window._isAdmin = {{ 'true' if is_admin else 'false' }};

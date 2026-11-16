@@ -24,7 +24,8 @@
     </p>
   </div>
   <div class="users-tools">
-    <label class="mail-search" role="search">
+    {# 只是列表内筛选，不是站内搜索：不设 search landmark（role 也不能加在 label 上） #}
+    <label class="mail-search">
       <span class="sr-only">{{ '搜索用户' if lang == 'zh' else 'Search users' }}</span>
       <i class="bi bi-search" aria-hidden="true"></i>
       <input type="search" data-user-search placeholder="{{ '搜索名称、ID 或渠道' if lang == 'zh' else 'Search name, ID or channel' }}">
@@ -64,7 +65,7 @@
     </div>
   </section>
 
-  <section class="mail-detail account-detail{% if request.args.get('selected') %} is-open{% endif %}" aria-label="{{ '用户详情' if lang == 'zh' else 'User details' }}" aria-live="polite">
+  <section class="mail-detail account-detail{% if request.args.get('selected') %} is-open{% endif %}" aria-label="{{ '用户详情' if lang == 'zh' else 'User details' }}">
   {% for user in users %}
   {% set uc = (clients or {}).get(user.id) or [] %}
   {% set lf = user.listing_filter %}

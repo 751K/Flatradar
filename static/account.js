@@ -73,7 +73,12 @@
       event.preventDefault();
       const [section, item] = row.dataset.accountItem.split(':');
       selectItem(section, item);
-      detail.querySelector('h2')?.focus?.();
+      // 宽屏：焦点移到当前面板的标题；窄屏浮层：同时让列表 inert
+      if (window.syncDetailOverlay && detailIsOverlay(detail)) syncDetailOverlay(detail, {focusIn: true});
+      else {
+        const heading = [...detail.querySelectorAll('h2')].find(h => h.offsetParent !== null);
+        if (heading) { heading.tabIndex = -1; heading.focus({preventScroll: true}); }
+      }
       return;
     }
     const nav = event.target.closest('[data-account-section]');
@@ -82,6 +87,7 @@
       event.preventDefault();
       detail.classList.remove('is-open');
       history.replaceState(null, '', pageUrl(form.querySelector('[data-selected-section]').value, null));
+      window.syncDetailOverlay?.(detail, {focusRow: true});
       return;
     }
     // Links back to this page (onboarding steps) switch in place, keeping unsaved edits
