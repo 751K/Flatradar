@@ -140,17 +140,27 @@
     document.querySelectorAll('[data-columns]').forEach(canvas => columns(canvas, canvas.dataset.columns, data[canvas.dataset.columns] || []));
   }
 
+  // 快速连点 7 / 30 / 90 天会有多个请求同时在途，返回顺序不定。新请求发出时
+  // 取消上一个，并且只认最后一次请求的结果，否则图表数据会和按下的按钮对不上。
+  let pending = null;
   function load(range) {
     days = range;
-    document.querySelector('.stats-body').setAttribute('aria-busy', 'true');
+    pending?.abort();
+    const controller = pending = new AbortController();
+    const body = document.querySelector('.stats-body');
+    body.setAttribute('aria-busy', 'true');
     // Same scope as the sidebar: scope / temporary filters come from this page's URL
     const params = new URLSearchParams(location.search);
     params.set('days', range);
-    fetch(`/stats/data?${params}`, {cache: 'no-store'})
-      .then(r => r.json())
-      .then(render)
-      .catch(error => console.error('Statistics failed to load:', error))
-      .finally(() => document.querySelector('.stats-body').removeAttribute('aria-busy'));
+    fetch(`/stats/data?${params}`, {cache: 'no-store', signal: controller.signal})
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+      .then(data => { if (controller === pending) render(data); })
+      .catch(error => {
+        if (controller !== pending || error.name === 'AbortError') return;
+        console.error('Statistics failed to load:', error);
+        resultToast(false, label('统计数据加载失败', 'Statistics failed to load'));
+      })
+      .finally(() => { if (controller === pending) { body.removeAttribute('aria-busy'); pending = null; } });
   }
 
   document.querySelector('.stats-range').addEventListener('click', event => {

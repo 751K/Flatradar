@@ -132,8 +132,9 @@
     hideMarker();
     if (before === undefined) return;
     const row = dragged;
+    const previous = rowsNow();
     slide(() => grid.insertBefore(row, before || marker));
-    save();
+    save(previous);
   });
   grid.addEventListener('dragend', () => {
     hideMarker();
@@ -141,20 +142,24 @@
     dragged = null;
   });
 
-  function save() {
+  // 列表在保存前就已按新顺序显示。保存失败（网络错误、服务端拒绝）时要把顺序
+  // 换回去并提示，否则管理员看到的抢房优先级和服务端存的不一致。
+  // 连续拖动时只处理最后一次保存的结果，避免旧请求的失败把新顺序回滚掉。
+  let saveSeq = 0;
+  function save(previous) {
+    const seq = ++saveSeq;
     fetch('/api/users/reorder', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf},
       body: JSON.stringify({order: rowsNow().map(row => row.dataset.userId)}),
-    }).then(r => r.json()).then(d => {
-      if (!d.ok) return;
-      const wrap = document.getElementById('toast-container');
-      if (!wrap) return;
-      const toast = document.createElement('div');
-      toast.className = 'toast toast-success';
-      toast.textContent = label('优先级已更新', 'Priority updated');
-      wrap.appendChild(toast);
-      setTimeout(() => toast.remove(), 2300);
+    }).then(r => r.json().catch(() => ({ok: false}))).then(d => {
+      if (seq !== saveSeq) return;
+      if (d.ok) { resultToast(true, label('优先级已更新', 'Priority updated')); return; }
+      throw new Error(d.error || 'reorder rejected');
+    }).catch(() => {
+      if (seq !== saveSeq) return;
+      slide(() => previous.forEach(row => grid.insertBefore(row, marker)));
+      resultToast(false, label('优先级没有保存，已恢复原来的顺序', 'Priority was not saved; the previous order is restored'));
     });
   }
 

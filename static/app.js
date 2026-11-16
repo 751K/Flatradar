@@ -57,22 +57,9 @@ function closeSidebar(restoreFocus) {
 }
 
 // ── Page Transitions ──────────────────────────────────────────────
-document.addEventListener('click', function(e) {
-  var a = e.target.closest('a[href]');
-  if(!a) return;
-  var href = a.getAttribute('href');
-  if(!href || href.startsWith('#') || href.startsWith('http') || href.startsWith('mailto') ||
-     a.target === '_blank' || a.hasAttribute('data-no-transition') ||
-     e.ctrlKey || e.metaKey || e.shiftKey) return;
-  e.preventDefault();
-  var content = document.getElementById('main-content');
-  if(content) {
-    content.classList.add('content-exit');
-    setTimeout(function(){ window.location.href = href; }, 150);
-  } else {
-    window.location.href = href;
-  }
-});
+// 页面间的淡入淡出由 design.css 的 @view-transition 负责（浏览器原生，不支持的
+// 直接跳转）。以前这里拦截所有链接点击、把主内容设成透明再延迟 150ms 跳转：
+// 从 bfcache 返回时透明状态被原样恢复，整页空白；每次导航还白等 150ms。
 
 // ── Utility Functions ─────────────────────────────────────────────
 function getLang() {
@@ -186,13 +173,13 @@ function controlMonitor(btn, action) {
   };
   if(action === 'stop') {
     var stopMsg = lang === 'zh'
-      ? '确定要暂停监控吗？\\n\\n暂停后所有用户都不会收到新房源/状态变更，自动预订也会停止。'
-      : 'Pause monitoring?\\n\\nAll users will stop receiving new listing/status updates and auto-booking will stop.';
+      ? '确定要暂停监控吗？\n\n暂停后所有用户都不会收到新房源/状态变更，自动预订也会停止。'
+      : 'Pause monitoring?\n\nAll users will stop receiving new listing/status updates and auto-booking will stop.';
     if(!confirm(stopMsg)) return;
   } else if(action === 'restart') {
     var restartMsg = lang === 'zh'
-      ? '确定要重启监控进程吗？\\n\\n这会中断本轮抓取并重新加载代码。'
-      : 'Restart the monitor process?\\n\\nThis interrupts the current scrape and reloads code.';
+      ? '确定要重启监控进程吗？\n\n这会中断本轮抓取并重新加载代码。'
+      : 'Restart the monitor process?\n\nThis interrupts the current scrape and reloads code.';
     if(!confirm(restartMsg)) return;
   }
   var csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';

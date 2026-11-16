@@ -49,7 +49,10 @@
 
         <label class="login-field">
           <span>{{ _('login_username') }}</span>
-          <input id="username" type="text" name="username" autocomplete="username" required autofocus>
+          {# 用户名区分大小写：手机键盘的首字母自动大写会把 alice 变成 Alice，
+             被当成新用户走注册流程。关掉自动大写 / 自动更正 / 拼写检查。#}
+          <input id="username" type="text" name="username" autocomplete="username"
+                 autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus>
         </label>
 
         <div class="login-field">

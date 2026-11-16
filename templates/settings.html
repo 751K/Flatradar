@@ -197,6 +197,8 @@
 <dialog id="reset-dialog" aria-labelledby="reset-title">
   <h2 id="reset-title">{{ _('settings_reset_confirm') }}</h2>
   <p>{{ _('settings_reset_warn') }}</p>
+  {# 失败信息显示在弹窗里：toast 在遮罩下面，被盖住且读屏不播报 #}
+  <p class="settings-dialog-error" role="alert" data-reset-error hidden></p>
   <div class="mail-dialog-actions">
     <button type="button" data-close-dialog>{{ _('settings_cancel') }}</button>
     <button type="button" class="settings-danger-solid" data-confirm-reset>{{ _('settings_reset_btn') }}</button>

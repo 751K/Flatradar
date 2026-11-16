@@ -33,6 +33,9 @@
 .account-panel-actions .settings-danger{color:#b3261e}
 .account-panel-actions .settings-danger:hover:not(:disabled){color:#b3261e;background:#b3261e0f}
 .mail-dialog-actions .settings-danger-solid{background:#b3261e;color:#fff}
+/* 要压过 inbox.css 的 .mail-page dialog p；颜色与危险按钮同色系，深色下调亮保证对比度 */
+.mail-page dialog .settings-dialog-error{margin:-8px 0 16px;color:#b3261e;font-weight:600}
+[data-theme=dark] .mail-page dialog .settings-dialog-error{color:#f2b8b5}
 [data-theme=dark] .account-panel-actions .settings-danger{color:#f2928a}
 
 /* A time window on one line: [label] start – end */

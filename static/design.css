@@ -285,7 +285,6 @@ h4{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
 .skip-link:focus{top:8px}
 
 /* ── Animations ────────────────────────────────────────────────── */
-@keyframes fadeIn{from{opacity:0}}
 
 /* Reduced motion */
 @media(prefers-reduced-motion:reduce){
@@ -311,9 +310,11 @@ html.theme-transitioning *::after{
     !important;
 }
 
-/* Content transition */
-.content-enter{animation:fadeIn .2s ease}
-.content-exit{opacity:0;transition:opacity .15s}
+/* 页面切换：浏览器原生的跨文档 view transition（同源导航自动淡入淡出）。
+   不支持的浏览器直接跳转；用户要求减少动态效果时不开启。 */
+@media(prefers-reduced-motion:no-preference){
+  @view-transition{navigation:auto}
+}
 
 /* ── Spinner ───────────────────────────────────────────────────── */
 .spinner{

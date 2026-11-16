@@ -99,7 +99,13 @@
 
   // Reset database, behind a confirmation dialog
   const dialog = document.getElementById('reset-dialog');
-  form.querySelector('[data-open-reset]')?.addEventListener('click', () => dialog.showModal());
+  const resetError = dialog?.querySelector('[data-reset-error]');
+  function showResetError(message) {
+    if (!resetError) return;
+    resetError.textContent = message;
+    resetError.hidden = !message;
+  }
+  form.querySelector('[data-open-reset]')?.addEventListener('click', () => { showResetError(''); dialog.showModal(); });
   dialog?.addEventListener('click', event => {
     if (event.target.closest('[data-close-dialog]') || event.target === dialog) { dialog.close(); return; }
     const button = event.target.closest('[data-confirm-reset]');
@@ -109,8 +115,11 @@
     button.textContent = label('清空中…', 'Resetting…');
     fetch('/api/reset-db', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}, body: JSON.stringify({confirm: true})})
       .then(r => r.json())
-      .then(d => { dialog.close(); toast(d.ok, d.ok ? d.message : (d.error || label('未知错误', 'Unknown error'))); })
-      .catch(() => toast(false, label('请求失败', 'Request failed')))
+      .then(d => {
+        if (d.ok) { dialog.close(); toast(true, d.message); }
+        else showResetError(d.error || label('未知错误', 'Unknown error'));
+      })
+      .catch(() => showResetError(label('请求失败，数据库没有清空', 'Request failed; the database was not reset')))
       .finally(() => { button.disabled = false; button.textContent = original; });
   });
 })();
