@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import math
+from urllib.parse import urlsplit
 import time
 from contextlib import contextmanager
 from typing import Optional
@@ -59,6 +60,7 @@ from .codomo_parse import CodomoCard, parse_listing_page
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://codomo.eu"
+_HOST = "codomo.eu"
 LIST_PATH = "/homes/nl/en"
 
 #: 站点每页固定 25 条。只用来估算页数上限，真正的页数以分页控件与总数为准。
@@ -195,6 +197,13 @@ class CodomoScraper(AbstractScraper):
                     f"Codomo 列表第 {page} 页请求失败: {type(e).__name__}: {e}") from e
             status = resp.status_code
             body = resp.text or ""
+            # 维护时站点把所有页面 302 到另一个域名的占位页（2026-11-16 实测：
+            # codomo-maintenance.pages.dev，标题 "Something new is on its way"），
+            # 跟随重定向后拿到的是 200。正文措辞会换，按「被带离了 codomo.eu」判。
+            final_host = urlsplit(str(getattr(resp, "url", "") or url)).hostname or ""
+            if final_host and final_host != _HOST:
+                raise UpstreamMaintenanceError(
+                    f"Codomo 站点维护中（被重定向到 {final_host}）")
             if status == 200:
                 if is_maintenance_body(body):
                     raise UpstreamMaintenanceError("Codomo 站点维护中")

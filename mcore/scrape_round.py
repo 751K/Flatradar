@@ -209,9 +209,13 @@ def report_source_proxy_failure(source: str, exc: BaseException) -> None:
     带崩——那正是这层隔离存在的理由。
     """
     from config import (
+        is_direct_source,
         is_proxy_in_cooldown,
         report_proxy_failure,
     )
+
+    if is_direct_source(source):
+        return  # 这个平台没走代理，它的失败不能算到代理头上
 
     try:
         before = get_proxy_url()

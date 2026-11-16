@@ -199,6 +199,7 @@ from mcore.proxy import (  # noqa: F401  （兼容旧调用点）
     _with_source_session,
     get_impersonate,
     get_proxy_url,
+    is_direct_source,
     is_personal_proxy_active,
     is_proxy_in_cooldown,
     is_proxy_native_fallback_active,

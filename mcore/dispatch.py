@@ -61,7 +61,7 @@ def apply_proxyless_gate(tasks: list) -> list:
     是「没有这一轮」，而不是「这一轮失败了」。把等代理算成抓取失败，会让
     fail_streak 报出一个和成因无关的结论——判据和被判的东西不是一回事。
     """
-    from config import is_proxy_native_fallback_active
+    from config import is_direct_source, is_proxy_native_fallback_active
 
     try:
         if not is_proxy_native_fallback_active():
@@ -74,7 +74,10 @@ def apply_proxyless_gate(tasks: list) -> list:
 
     kept, dropped = [], []
     for t in tasks:
-        (kept if (t.source or "") in PROXYLESS_CAPABLE_SOURCES else dropped).append(t)
+        src = t.source or ""
+        # SCRAPE_DIRECT_SOURCES 里的平台本来就不走代理，代理全挂与它无关
+        ok = src in PROXYLESS_CAPABLE_SOURCES or is_direct_source(src)
+        (kept if ok else dropped).append(t)
 
     if dropped:
         by_source: dict[str, int] = {}

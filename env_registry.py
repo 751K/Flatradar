@@ -120,6 +120,8 @@ TUNING_KEYS: frozenset[str] = frozenset({
     "PERSONAL_PROXY_MIN_INTERVAL",
     # 账户级代理故障（402 欠费 / 407 认证失败）的冷却时长
     "PROXY_ACCOUNT_COOLDOWN_SEC",
+    # 永远直连、不走代理池的平台（见 config.is_direct_source）
+    "SCRAPE_DIRECT_SOURCES",
     # 状态收敛与预订
     "STALE_RESERVED_HOURS", "STALE_OCCUPIED_HOURS",
     "BOOKING_STATUS_HOLD_MINUTES", "BOOKING_RESULT_TIMEOUT_SEC",

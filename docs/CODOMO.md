@@ -74,7 +74,7 @@ The Hague 的 slug 是 `den-haag`。如果站点上了注册表里没有的城�
 |---|---|
 | 403 | `BlockedError`，交给平台熔断 |
 | 429 | 按 `RATE_LIMIT_BACKOFF` 重试，仍然 429 就抛 `RateLimitError` |
-| 维护页 | `UpstreamMaintenanceError` |
+| 维护页，或被重定向离开 `codomo.eu`（全站维护时跳到占位域名） | `UpstreamMaintenanceError` |
 | 其他非 200、传输异常 | `ScrapeNetworkError`（保留异常链，代理故障才能被识别） |
 | 卡片数与自报总数对不上 | 不抛异常，本轮标记为不完整 |
 

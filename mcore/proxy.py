@@ -180,6 +180,26 @@ def _personal_proxies() -> list[str]:
     return [p.strip() for p in re.split(r"[,\n]", raw) if p.strip()]
 
 
+def _direct_sources() -> frozenset[str]:
+    """``SCRAPE_DIRECT_SOURCES``：永远直连、不走代理池的平台。
+
+    代理池是全局的，所有平台挤同一条链路。但不同平台对出口 IP 的要求差很多：
+    2026-11-16 从生产服务器（机房 IP）实测，Magis 和 Student Experience 直连
+    200，Plaza 被 Cloudflare 403。商业代理失效、只剩自家隧道时，让本来就能直连
+    的平台也绕家里走，是平白消耗家里的 IP。
+
+    列在这里的平台 ``get_proxy_url(source)`` 一律返回空串；代理全冷却时也不会被
+    dispatch 摘掉（它们本来就不用代理）。
+    """
+    raw = env_get("SCRAPE_DIRECT_SOURCES", "")
+    return frozenset(s.strip().lower() for s in re.split(r"[,\n]", raw) if s.strip())
+
+
+def is_direct_source(source: str) -> bool:
+    """该平台是否配置为永远直连（见 ``_direct_sources``）。"""
+    return bool(source) and source.strip().lower() in _direct_sources()
+
+
 def is_personal_proxy_active() -> bool:
     """当前生效的代理是不是「自己的线路」。
 
@@ -230,6 +250,8 @@ def get_proxy_url(source: str = "", *, rotating: bool = False) -> str:
         全部失败。各自独立 session 后两者兼得：IP 稳定，额度不互相挤占。
 
         不传则返回基础 URL（monitor / doctor 只判断有没有配代理，用这个即可）。
+
+        source 列在 ``SCRAPE_DIRECT_SOURCES`` 里时直接返回空串（直连）。
     rotating
         每次调用换一个新 session（即换出口 IP）。给**不依赖 clearance、反而
         依赖换 IP 来解 403** 的 source 用。
@@ -238,6 +260,8 @@ def get_proxy_url(source: str = "", *, rotating: bool = False) -> str:
         但那套机制此前是搭了「每请求换 IP」的便车——2026-08-02 把它固定到专属
         sticky IP 后，同一个 IP 被 CF 盯上时四个指纹轮完全部 403，无法自愈。
     """
+    if source and is_direct_source(source):
+        return ""  # SCRAPE_DIRECT_SOURCES：该平台永远直连
     pool = _proxy_pool()
     if not pool:
         return ""

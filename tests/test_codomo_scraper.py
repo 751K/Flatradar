@@ -113,9 +113,10 @@ class TestListing:
 # ── 抓取器 ──────────────────────────────────────────────────────────────
 
 class _Resp:
-    def __init__(self, status: int, text: str):
+    def __init__(self, status: int, text: str, url: str = "https://codomo.eu/homes/nl/en"):
         self.status_code = status
         self.text = text
+        self.url = url
 
 
 class _Session:
@@ -197,6 +198,15 @@ class TestScraper:
     def test_403_is_blocked(self):
         s = _scraper_with(_Session({1: _Resp(403, "<html>Just a moment...</html>")}))
         with s.batch_session(), pytest.raises(BlockedError):
+            s.scrape(_task())
+
+    def test_redirect_off_site_is_maintenance(self):
+        """维护时整站 302 到 codomo-maintenance.pages.dev，跟随后是 200。"""
+        from scrapers.base import UpstreamMaintenanceError
+        page = _Resp(200, "<html><title>Codomo | Something new is on its way</title></html>",
+                     url="https://codomo-maintenance.pages.dev/")
+        s = _scraper_with(_Session({1: page}))
+        with s.batch_session(), pytest.raises(UpstreamMaintenanceError):
             s.scrape(_task())
 
     def test_404_is_network_error(self):
