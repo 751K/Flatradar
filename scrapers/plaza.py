@@ -13,6 +13,8 @@ Plaza（plaza.newnewnew.space，运营方 Plaza Resident Services）是跑在 **
     POST /portal/object/frontend/getallobjects/format/json
 
 空 body 即可（GET 也返回同样内容）。2026-09-02 实测 167 KB / 55 条。
+2026-11-16 实测 260 KB / 88 条，顶层只剩 ``result``——原先同在顶层的
+``sAngularServiceData``（门户配置，曾是唯一的结构探针）已不再返回，见 ``_rows_probe``。
 ``robots.txt`` 只禁 ``/portal/uploads/*/floorplans/*`` 与 ``/portal/uploads/*.pdf``，
 本端点不在禁用范围内——**因此 floorplans 里的文件不抓**，只用 pictures。
 
@@ -411,6 +413,47 @@ def _parse_object(obj: dict) -> Optional[Listing]:
     )
 
 
+#: 每条真房源都带、且是本模块依赖的键。用来认「这是一份 getallobjects 的记录」。
+_ROW_SIGNATURE = ("id", "dwellingType", "land", "city", "totalRent", "urlKey")
+
+
+def _config_probe(payload: object) -> bool:
+    """旧结构探针：``sAngularServiceData`` 里的门户配置。
+
+    2026-09 的响应顶层是 ``{sAngularServiceData, result}``，前者无论有没有房源都
+    带着 ``getportalconfiguration``，空 ``result`` 因此可以放心当成「当前没房源」。
+
+    **2026-11 起站点不再返回这个键**（至迟 11-12；11-16 实测 POST 与 GET 顶层都只剩
+    ``result``）。只认它的话每一轮都判不完整，Plaza 就再没完整扫描过。保留它是因为
+    站点可能再改回来，而它是唯一能给「空 result」作证的信号。
+    """
+    if not isinstance(payload, dict):
+        return False
+    try:
+        inner = json.loads(payload.get("sAngularServiceData") or "[]")
+        return any(
+            "getportalconfiguration" in (e.get("url") or "")
+            for e in inner if isinstance(e, dict))
+    except Exception:
+        return False
+
+
+def _rows_probe(rows: object) -> bool:
+    """新结构探针：``result`` 里的记录本身长得像 Plaza 房源。
+
+    非空且**过半**记录是带齐 :data:`_ROW_SIGNATURE` 的对象才算通过。门户的其他
+    端点（发错 Content-Type、登录墙、网关）不会凭空吐出一串带 ``dwellingType`` /
+    ``land`` / ``urlKey`` 的对象，所以这足以说明拿到的是真接口。
+
+    **空列表不通过**：它与「接口变了、返回了个空壳」长得一样，判不了。
+    """
+    if not isinstance(rows, list) or not rows:
+        return False
+    good = sum(1 for r in rows
+               if isinstance(r, dict) and all(k in r for k in _ROW_SIGNATURE))
+    return good * 2 > len(rows)
+
+
 class PlazaScraper(AbstractScraper):
     """单元级 scraper（一个 POST 拿全站，纯 HTTP，无反爬）。"""
 
@@ -494,25 +537,19 @@ class PlazaScraper(AbstractScraper):
 
     def _parse_all(self, payload: dict) -> tuple[list[Listing], bool]:
         """整份响应 → (listings, 是否完整)。"""
-        # ``sAngularServiceData`` 里带着门户配置，无论有没有房源都返回。拿它当结构
-        # 探针：读得到就说明这是一份真的接口响应，此时 ``result`` 为空可以放心当成
-        # 「当前没有在架房源」；读不到则说明拿到的是别的东西（改版、网关、登录墙），
-        # 不能把空结果当成「没房源」——那会让存量被整体收敛成 Occupied 并发一批假
-        # 的下架通知。
-        probe_ok = False
-        try:
-            inner = json.loads(payload.get("sAngularServiceData") or "[]")
-            probe_ok = any(
-                "getportalconfiguration" in (e.get("url") or "")
-                for e in inner if isinstance(e, dict))
-        except Exception:
-            probe_ok = False
-
-        rows = payload.get("result")
-        if not isinstance(rows, list) or not probe_ok:
+        rows = payload.get("result") if isinstance(payload, dict) else None
+        config_ok = _config_probe(payload)
+        rows_ok = _rows_probe(rows)
+        # 两个探针任一通过即可信，见 _config_probe / _rows_probe。都不过时**不能**
+        # 把空结果当成「没房源」——那会让存量被整体收敛成 Occupied 并发一批假的
+        # 下架通知。代价是：站点真的一条不剩、又不再带门户配置时，本轮判不完整、
+        # 存量原样保留——宁可晚报下架，不报假下架。
+        if not isinstance(rows, list) or not (config_ok or rows_ok):
             logger.warning(
-                "Plaza 响应不是预期结构（result=%s，配置探针=%s），本轮标记不完整",
-                type(rows).__name__, probe_ok)
+                "Plaza 响应不是预期结构（result=%s，%s 条，配置探针=%s，"
+                "记录形状探针=%s），本轮标记不完整",
+                type(rows).__name__, len(rows) if isinstance(rows, list) else "-",
+                config_ok, rows_ok)
             return [], False
 
         listings: list[Listing] = []

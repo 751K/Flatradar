@@ -303,16 +303,28 @@ class TestCompleteness:
             PlazaScraper()._fetch()
         assert is_proxy_error(ei.value)
 
-    def test_missing_config_probe_marks_incomplete(self, payload):
-        """``sAngularServiceData`` 里的门户配置有房没房都返回，是结构探针。
+    def test_missing_config_probe_with_empty_result_marks_incomplete(self, payload):
+        """没有门户配置、result 又为空 → 两个探针都不过，判不了。
 
-        读不到就说明拿到的不是一份真的接口响应（改版、网关、登录墙）。此时若把
-        空 result 当成「没房源」，存量会被整体收敛成 Occupied 并发一批假下架通知。
+        此时若把空 result 当成「没房源」，存量会被整体收敛成 Occupied 并发一批假
+        下架通知。
         """
-        broken = dict(payload)
-        broken["sAngularServiceData"] = "[]"
+        broken = {"result": []}
         items, complete = PlazaScraper()._parse_all(broken)
         assert items == [] and complete is False
+        broken = dict(payload, sAngularServiceData="[]", result=[])
+        assert PlazaScraper()._parse_all(broken) == ([], False)
+
+    def test_missing_config_probe_with_real_rows_is_complete(self, payload):
+        """门户配置没了但记录本身是真房源 → 可信。2026-11 站点就是这样改的。"""
+        trimmed = {"result": payload["result"]}
+        items, complete = PlazaScraper()._parse_all(trimmed)
+        assert complete is True and len(items) == 49
+
+    def test_rows_that_are_not_listings_mark_incomplete(self):
+        """result 是一串对象但不像房源（别的端点、错误信封）→ 不可信。"""
+        junk = {"result": [{"id": 1, "message": "x"}, {"id": 2, "message": "y"}]}
+        assert PlazaScraper()._parse_all(junk) == ([], False)
 
     def test_empty_result_with_a_healthy_probe_is_complete(self, payload):
         """探针在、result 为空 → 站点确实没在架房源，不该判不完整。
@@ -536,3 +548,43 @@ class TestExtraAanbod:
         status = _parse_object(row).status
         assert status_rank(status) == 3, f"{status!r} 没被 status_rank 归到终态"
         assert status_rank("Available to book") == 0
+
+
+class TestEnvelopeWithoutPortalConfig:
+    """2026-11 回归：站点不再在 getallobjects 里带 ``sAngularServiceData``。
+
+    fixture ``plaza_getallobjects_2026-11-16.json`` 是当天 ``getallobjects`` 的原始
+    响应，顶层只有 ``result``（88 条：84 条荷兰住宅、2 条停车位、2 条德国）。修复前
+    探针只认门户配置，于是生产上每轮都报「result=list，配置探针=False」、判不完整，
+    Plaza 至少从 2026-11-12 起就没有完整扫描过。
+    """
+
+    @pytest.fixture(scope="class")
+    def payload_nov(self) -> dict:
+        return json.loads((FIXTURES / "plaza_getallobjects_2026-11-16.json")
+                          .read_text(encoding="utf-8"))
+
+    def test_fixture_really_lacks_the_config_probe(self, payload_nov):
+        assert set(payload_nov) == {"result"}, "fixture 变了，这条回归测试会空过"
+
+    def test_real_response_is_complete(self, payload_nov):
+        items, complete = PlazaScraper()._parse_all(payload_nov)
+        assert complete is True
+        assert len(items) == 84
+        assert all(x.city in CITIES for x in items), "出现未登记城市"
+
+    def test_rows_still_parse_like_before(self, payload_nov):
+        items, _ = PlazaScraper()._parse_all(payload_nov)
+        statuses = collections.Counter(x.status for x in items)
+        assert statuses == {"Available to book": 55, "Not available": 29}
+        assert all(x.price_raw.startswith("€") for x in items)
+        assert all(any(f.startswith("Allocation: ") for f in x.features)
+                   for x in items)
+
+    def test_scrape_dispatches_by_city(self, payload_nov, monkeypatch):
+        s = PlazaScraper()
+        monkeypatch.setattr(s, "_fetch", lambda: payload_nov)
+        task = ScrapeTask(source="plaza", city_key="Delft", city_display="Delft")
+        with s.batch_session():
+            res = s.scrape(task)
+        assert res.complete is True and len(res.listings) == 9
