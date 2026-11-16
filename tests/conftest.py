@@ -239,33 +239,6 @@ def _isolate_monitor_control_files(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_real_warm_browser(monkeypatch):
-    """测试里绝不真开下单常驻浏览器。
-
-    2026-09-08 差点在自己脚上开了一枪：心跳原本直接跑在事件循环线程上，Playwright
-    的同步 API 在那里会立刻拒绝，于是**测试从来没有真的建过浏览器**——一次巧合的
-    保护。把心跳改成扔进 executor（生产必须这么做）之后，那层巧合没了，
-    ``run_once`` 的用例开始真的拉起 Chromium 并连外网：整个文件挂住，不报错。
-
-    所以这里显式钉死：``_build`` 变成 no-op。需要验证建立逻辑的用例自己在
-    tests/test_warm_browser.py 里换掉它。
-
-    每个用例后顺手 close()，免得某个用例塞进去的假 fetcher 漏给下一个。
-    """
-    try:
-        from mcore.warm_browser import warm_lane
-    except ImportError:
-        yield
-        return
-    monkeypatch.setattr(warm_lane, "_build", lambda: None)
-    yield
-    try:
-        warm_lane.close(reason="测试收尾")
-    except Exception:
-        pass
-
-
-@pytest.fixture(autouse=True)
 def _reset_scraper_instances():
     """清掉跨轮复用的 scraper 实例缓存，避免用例间共享 scraper 状态。"""
     try:
@@ -281,8 +254,8 @@ def _reset_scraper_instances():
         pass
 
 
-def _clear_h2s_guards() -> None:
-    """把 H2S 熔断/登录抑制/长封告警节流复位。
+def _clear_source_guards() -> None:
+    """把平台熔断、自适应节奏与告警节流复位。
 
     ⚠️ 这里只能用 ``reset()``，**不要直接给 monitor 赋属性**。之前写的是
     ``monitor._h2s_circuit_open_until = 0.0`` 这种——在那几个全局被
@@ -305,22 +278,20 @@ def _clear_h2s_guards() -> None:
         for src in circuits.known_sources():
             pacing.reset(src)
 
-    obj = getattr(monitor, "_h2s_login_block", None)
-    if obj is not None:
-        obj.reset()
-    for t in ("_h2s_long_block", "_notify_block", "_notify_internal",
-              "_notify_maintenance", "_notify_proxy", "_notify_operation_rejected"):
-        obj = getattr(monitor, f"_throttle{t}", None)
-        if obj is not None:
-            obj.reset()
+    try:
+        from mcore.state import runtime
+    except ImportError:
+        return
+    for throttle in runtime.throttles.values():
+        throttle.reset()
 
 
 @pytest.fixture(autouse=True)
-def _reset_monitor_h2s_guards():
-    """隔离 monitor 的 H2S 熔断/登录抑制状态。"""
-    _clear_h2s_guards()
+def _reset_monitor_source_guards():
+    """隔离 monitor 的平台熔断与告警节流状态。"""
+    _clear_source_guards()
     yield
-    _clear_h2s_guards()
+    _clear_source_guards()
 
 
 @pytest.fixture
@@ -380,50 +351,3 @@ def test_credentials():
     return {"username": _TEST_USERNAME, "password": _TEST_PASSWORD}
 
 
-@pytest.fixture(autouse=True)
-def _inprocess_booking_worker_for_legacy_monitor_tests(request, monkeypatch):
-    """Keep existing monitor behavior tests offline after moving browsers to children.
-
-    Real spawn, session reuse and process termination are covered separately by
-    test_booking_worker; these tests exercise their existing in-process fakes.
-    """
-    if request.module.__name__.split('.')[-1] not in {'test_booker_blocked', 'test_prewarm_cache'}:
-        yield
-        return
-    from types import SimpleNamespace
-    from mcore import prewarm_round, booking_round
-    from mcore.booking import book_with_fallback
-    from mcore.booking_guard import attempt_context
-    from mcore.state import runtime
-    from mcore.warm_browser import warm_lane
-
-    workers = {}
-    class Worker:
-        process = object()
-        generation = 1
-        session = None
-        def run(self, action, payload, *, timeout, guard=None, job=None):
-            if action == 'heartbeat':
-                return warm_lane.heartbeat(**payload)
-            if action == 'prewarm':
-                user = SimpleNamespace(id=payload['user_id'], name=payload['name'],
-                    auto_book=SimpleNamespace(email=payload['email'], password=payload['password']))
-                self.session = runtime.prewarm_cache.create(user, may_borrow_lane=payload['may_borrow'])
-                if self.session is None:
-                    raise RuntimeError('no prewarm session')
-                return self.session.email, self.session.created_at, self.session.token_expiry
-            session = runtime.prewarm_cache.get(payload['user'].id)
-            if guard:
-                with attempt_context(*guard):
-                    return book_with_fallback(payload['candidates'], payload['user'],
-                                              payload['deadline'], prewarmed=session)
-            return book_with_fallback(payload['candidates'], payload['user'],
-                                      payload['deadline'], prewarmed=session)
-
-    def worker_for(uid):
-        return workers.setdefault(uid, Worker())
-    monkeypatch.setattr(prewarm_round, 'get_booking_worker', worker_for)
-    monkeypatch.setattr(prewarm_round, 'existing_booking_worker', worker_for)
-    monkeypatch.setattr(prewarm_round, 'RemoteSession', lambda worker, *args: worker.session)
-    monkeypatch.setattr(booking_round, 'get_booking_worker', worker_for)
-    yield

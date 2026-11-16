@@ -125,11 +125,14 @@ class TestBlockedAutoBookGoesToTheRightPlace:
 class TestAdminStillGetsThem:
     """静音的是用户那一侧，运维信息本身不能丢。"""
 
-    def test_admin_helper_covers_the_three_failures(self):
+    def test_admin_helper_covers_the_scrape_failures(self):
+        # 原先还有一条 h2s_circuit（H2S 403 熔断告警），随 H2S 改名 Codomo、
+        # 专属熔断下线一起删除；平台被屏蔽 / 限流仍走 admin 告警。
         from mcore import round_failures
 
         src = inspect.getsource(round_failures)
-        for kind in ("h2s_circuit", "scrape_blocked", "scrape_rate_limited"):
+        assert 'kind="h2s_circuit"' not in src
+        for kind in ("scrape_blocked", "scrape_rate_limited"):
             assert f'kind="{kind}"' in src, f"{kind} 没有走 admin 告警"
 
     def test_heartbeat_still_reaches_the_panel(self):

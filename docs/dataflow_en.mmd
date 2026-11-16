@@ -2,14 +2,14 @@ flowchart TD
     A["Start monitor"] --> B["Resolve environment, .env and SQLite settings<br/>Create runtime snapshot and notifiers"]
     B --> C["Start round: heartbeat and scrape plan"]
     C --> D["Unified per-source scheduling<br/>circuit breaking, pacing, proxy and failure isolation"]
-    D --> E["Holland2Stay / Xior<br/>separate browser worker processes"]
-    D --> F["OurDomain / OurCampus / Magis<br/>Student Experience / Plaza"]
+    D --> E["Xior<br/>separate browser worker process"]
+    D --> F["Codomo / OurDomain / OurCampus / Magis<br/>Student Experience / Plaza (plain HTTP)"]
     E --> G["Merge listings and completeness"]
     F --> G
     G --> H["Diff and persist new listings and status changes"]
     H --> I["Replay pending events, then filter shadow sources"]
     I --> J["Match users and collect booking candidates"]
-    J --> K["Holland2Stay pre-login and booking<br/>Plaza applications require user opt-in"]
+    J --> K["Plaza applications<br/>require user opt-in"]
     K --> L["Submit booking tasks in parallel with listing notifications"]
     L --> M["Deliver listing, status and booking results<br/>Web, external channels and mobile push"]
     M --> N["Mark events processed and save retry state"]
@@ -17,8 +17,7 @@ flowchart TD
     O --> P["Round cleanup and maintenance; wait for next round"]
     P --> C
     K --> Q{"Is the result certain?"}
-    Q -->|No| R["Persist a guard and ask the user to verify<br/>H2S by account; Plaza by account and listing"]
-    Q -->|H2S success| S["Return payment URL; user pays"]
+    Q -->|No| R["Persist a guard and ask the user to verify<br/>Plaza by account and listing"]
     Q -->|Plaza success| T["Application submitted; housing is not guaranteed"]
     W["Web / API"] <--> DB[("SQLite")]
     H <--> DB

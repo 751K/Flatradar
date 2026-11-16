@@ -17,7 +17,6 @@ STATUS_AVAILABLE = "available to book"
 # 自动操作成功后，平台会进入真实占房/订单占用窗口的 source。
 # Plaza 故意不在这里：Plaza 的成功只代表申请已提交，最终分配由平台审核决定。
 BOOKING_HOLD_SOURCES = frozenset({
-    "holland2stay",
     "xior",
     "ourcampus",
     "ourdomain",
@@ -32,7 +31,7 @@ def is_application_only(listing) -> bool:
     booker 回传的 ``pay_url`` 只是房源页地址。文本通知、站内通知、App 推送都按
     它分支，按订房模板发会变成「预订成功！立即付款」加一个不是付款页的链接。
     """
-    return (getattr(listing, "source", "") or "holland2stay").strip().lower() \
+    return (getattr(listing, "source", "") or "").strip().lower() \
         not in BOOKING_HOLD_SOURCES
 
 #: available_from 的哨兵年份。H2S 的 next_contract_startdate 在「没有下一个合同
@@ -209,7 +208,7 @@ FEATURE_SYNONYMS: dict[str, str] = {
     "studenten en werkenden": "student and employed",
     "studenten of werkenden": "student and employed",
     # 英文侧的同一个取值。H2S 的 tenant_profile option 6215 原文是「as a student
-    # or a working professional」，scrapers/holland2stay.py 照抄成
+    # or a working professional」，旧 H2S 抓取器照抄成
     # ``student or employed``——语义与上一行的荷兰语版完全相同，只是 and/or
     # 之差。漏登记的后果不是少一个选项，而是**两个都在**：筛选下拉从库里取
     # distinct 值（mstorage._listings.get_feature_values），归一不掉就会并排
@@ -239,31 +238,21 @@ class Listing:
 
     字段说明
     --------
-    id              URL slug，全局唯一，同时用作数据库主键和 GraphQL url_key。
-                    e.g. "kastanjelaan-1-108"
-    name            展示名，e.g. "Kastanjelaan 1-108, Eindhoven"
-    status          可用性状态，直接来自 GraphQL `available_to_book` 属性的 label。
-                    常见值："Available to book" | "Available in lottery" | "Not available"
-    price_raw       原始价格字符串，e.g. "€707"（由 scraper 从 basic_rent 属性格式化）
-    available_from  入住日期，ISO 格式 "YYYY-MM-DD"，来自 available_startdate 属性
-    features        特征列表，格式 ["Type: Studio", "Area: 26.0 m²", "Floor: 3", ...]
-                    由 scraper 从多个 custom_attributesV2 属性拼装而来
+    id              平台内唯一的房源标识，同时是数据库主键。Codomo 是 URL 末段
+                    slug（"kastanjelaan-1-108"），其余平台带前缀（"od_…"、"xr_…"）
+    name            展示名，通常是地址或户型名
+    status          可用性状态，全平台共用一套词："Available to book" |
+                    "Available in lottery" | "Reserved" | "Not available" …
+    price_raw       价格字符串，e.g. "€1774"（各平台尽量取含服务费的到手价）
+    available_from  入住日期，ISO 格式 "YYYY-MM-DD"；不知道时为 None
+    features        特征列表，格式 ["Type: Studio", "Area: 26.0 m²", "Floor: 3", ...]，
+                    key 见 ``LISTING_KEY_MAP``
     url             房源详情页完整 URL
-    city            来源城市名，用于多城市监控时区分，e.g. "Eindhoven"
-    sku             Magento 内部 SKU，预订时用于 addNewBooking mutation；
-                    由 scraper 从 GraphQL 响应直接提取，省去 try_book 中的独立查询
-    contract_id     合同类型 ID（来自 type_of_contract 属性）；
-                    预订时必须传入，否则 addNewBooking 可能 Internal server error
-    contract_start_date  预订用的合同开始日期（来自 next_contract_startdate 属性）；
-                    与 available_from 不同：available_from 用于展示/日历，
-                    contract_start_date 用于预订 API 调用；可能为 None
-    source          房源所在的第三方平台标识，与 ``scrapers.SCRAPER_REGISTRY`` 的
-                    key 一致。P0 阶段默认 ``"holland2stay"``，单源行为不变；
-                    P1 起新平台（OurDomain / DUWO 等）会用 ``"ourdomain"`` / ``"duwo"``。
-                    UI / 通知模板可据此显示 source badge 区分平台来源。
-                    **id 字段在 P0 仍是 H2S 的 url_key 原样**，未做前缀化；
-                    跨平台 id 唯一性的迁移留到 P1 接 OurDomain 时一起做，
-                    避免提前重写 status_changes / web_notifications / iOS deep link。
+    city            城市或楼盘名（各平台口径不同，筛选走 canonical_city 归一）
+    sku             平台内部编号，预订时用；没有就是空串
+    contract_id     合同类型 ID，预订时用；可能为 None
+    contract_start_date  预订用的合同开始日期；与 available_from 不同，可能为 None
+    source          平台标识，与 ``mcore.sources.SPECS`` 的 key 一致。scraper 负责赋值。
     """
 
     id: str
@@ -277,7 +266,7 @@ class Listing:
     sku: str = ""
     contract_id: Optional[int] = None
     contract_start_date: Optional[str] = None
-    source: str = "holland2stay"
+    source: str = ""
 
     #: 这一轮的 ``status`` 没能通过平台的权威校验（**不是**「状态未知」，而是
     #: 「只有上游 feed 说了算，而那个 feed 已知会滞后」）。
@@ -319,7 +308,7 @@ class Listing:
     def rent_basis_note(self) -> str:
         """价格口径的补充说明；不需要标注时返回空串。
 
-        H2S 与 Xior 的 ``price_raw`` 已经是到手价，不带这条。OurDomain 与
+        Codomo 与 Xior 的 ``price_raw`` 已经是到手价，不带这条。OurDomain 与
         OurCampus 报的是基础租金——服务费按户型变，而 RentCafe 的 feed 给不出
         单元的户型（每个单元都关联到该楼全部户型 ID），所以并不进价格，只在
         展示时说明量级，把加法留给用户。

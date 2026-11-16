@@ -384,7 +384,7 @@ class TestBookingPriorityBySortOrder:
             features=[],
             url="https://example.test/L-1",
             city="E",
-            source="holland2stay",
+            source="codomo",
             sku="SKU-L-1",
             contract_id=42,
             contract_start_date="2030-01-01",
@@ -437,14 +437,14 @@ class TestBookingPriorityBySortOrder:
             id="L-1", name="Huis 1", status="Available to book",
             price_raw="€700", available_from="2030-01-01",
             features=[], url="https://example.test/L-1", city="E",
-            source="holland2stay", sku="SKU-L-1",
+            source="codomo", sku="SKU-L-1",
             contract_id=42, contract_start_date="2030-01-01",
         )
         l2 = Listing(
             id="L-2", name="Huis 2", status="Available to book",
             price_raw="€800", available_from="2030-01-01",
             features=[], url="https://example.test/L-2", city="E",
-            source="holland2stay", sku="SKU-L-2",
+            source="codomo", sku="SKU-L-2",
             contract_id=42, contract_start_date="2030-01-01",
         )
 
@@ -499,7 +499,7 @@ class TestBookingPriorityBySortOrder:
             id="L-1", name="Test Huis", status="Available to book",
             price_raw="€700", available_from="2030-01-01",
             features=[], url="https://example.test/L-1", city="E",
-            source="holland2stay", sku="SKU-L-1",
+            source="codomo", sku="SKU-L-1",
             contract_id=42, contract_start_date="2030-01-01",
         )
 

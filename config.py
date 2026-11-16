@@ -47,7 +47,7 @@ from mcore.sources import (  # noqa: F401  （从 config 拆出，保留 re-expo
     sources_supporting_dim,
 )
 from target_config import (
-    parse_availability, parse_cities, parse_source_map, parse_sources, parse_targets,
+    parse_source_map, parse_sources, parse_targets,
 )
 from filters import (  # noqa: F401  （从 config 拆出，保留 re-export）
     ENERGY_LABELS,
@@ -62,7 +62,7 @@ from mcore.registry import (  # noqa: F401  （从 config 拆出，保留 re-exp
     FIN_FURNISHED as _FIN_FURNISHED,
     FIN_SEMI as _FIN_SEMI,
     FIN_UNFURNISHED as _FIN_UNFURNISHED,
-    KNOWN_CITIES,
+    KNOWN_CODOMO_CITIES,
     KNOWN_MAGIS_CITIES,
     KNOWN_OURCAMPUS_CITIES,
     KNOWN_OURDOMAIN_CITIES,
@@ -169,9 +169,7 @@ TIMEZONE = os.environ.get("TIMEZONE", DEFAULT_TIMEZONE)
 # 结果设了 DATA_DIR 只有 web.log 跟着走）。相对路径同样按项目根解释。
 DATA_DIR = resolve_project_path(os.environ.get("DATA_DIR") or (BASE_DIR / "data"))
 
-BASE_URL = "https://www.holland2stay.com/residences"
-
-# CloakBrowser 设置（用于 H2S CF Turnstile 绕过）
+# CloakBrowser 设置（Xior 的 Cloudflare 挑战）
 CLOAKBROWSER_HEADLESS = env_bool("CLOAKBROWSER_HEADLESS", True)
 """True=无头模式（Docker/生产），False=可视化（本地调试）"""
 
@@ -212,41 +210,8 @@ from mcore.proxy import (  # noqa: F401  （兼容旧调用点）
 
 
 @dataclass
-class CityFilter:
-    """GraphQL city filter 的单个城市条目。"""
-    name: str   # 显示名，e.g. "Eindhoven"
-    id: int     # GraphQL filter 数值 ID，e.g. 29
-
-
-#: H2S ``available_to_book`` 属性的全部取值（2026-08-05 从 aggregations 接口取得，
-#: 括号内是当时全荷兰的套数）。标签荷英混用是上游本来的样子。
-#:
-#:   179   Direct te boeken         直接可订        (34)
-#:   6204  To be in lottery         即将进入抽签     (7)
-#:   336   Beschikbaar in loterij   抽签中          (46)
-#:   6203  Reserved                 已预留，下单未付款 (229)
-#:   180   Niet beschikbaar         不可用          (12140)
-#:   6253  Coming soon              即将上线        (0)
-#:
-#: 180 是整个存量池——租出去的、没上架的、下架的全归这一档，它不区分原因。
-#: 抓它没有意义：仅监控的两个城市就有 2489 条，是当前抓取量的 80 倍。
-AVAILABILITY_RESERVED_ID = 6203
-
-
-@dataclass
-class AvailabilityFilter:
-    """
-    GraphQL available_to_book filter 的单个可用性条目。
-
-    已知 ID 见上方 ``AVAILABILITY_RESERVED_ID`` 处的完整清单。
-    """
-    label: str  # 可读标签，e.g. "Available to book"
-    id: int     # GraphQL filter 数值 ID，e.g. 179
-
-
-@dataclass
 class TargetFilter:
-    """H2S 之外各平台的单个订阅目标（楼盘或城市）。
+    """各平台的单个订阅目标（楼盘或城市）。
 
     ``key`` 是平台自己的标识，含义见 ``mcore.registry`` 里对应的注册表。
     """
@@ -255,6 +220,7 @@ class TargetFilter:
 
 
 # 各平台曾各有一个字段完全相同的 dataclass，保留旧名作别名。
+CodomoCityFilter = TargetFilter
 OurDomainCityFilter = TargetFilter
 OurCampusCityFilter = TargetFilter
 MagisCityFilter = TargetFilter
@@ -271,9 +237,8 @@ class Config:
     字段说明
     --------
     check_interval      : 常规轮询间隔（秒），对应 .env CHECK_INTERVAL
-    cities              : 要监控的城市列表，对应 .env CITIES（格式 "城市名,ID|..."）
-    availability_filters: GraphQL available_to_book filter 列表，
-                          对应 .env AVAILABILITY_FILTERS（格式 "标签,ID|..."）
+    <平台>_cities       : 各平台的订阅目标，对应 .env 的 ``{PLATFORM}_CITIES``
+                          （格式 "显示名,key|..."），约定见 mcore.registry.TARGET_SPECS
     db_path             : SQLite 数据库文件路径，对应 .env DB_PATH
     log_level           : 日志级别字符串，对应 .env LOG_LEVEL
 
@@ -298,8 +263,6 @@ class Config:
                                  默认 60 分钟；设为 0 禁用心跳
     """
     check_interval: int
-    cities: list[CityFilter]
-    availability_filters: list[AvailabilityFilter]
     db_path: Path
     log_level: str
     peak_interval: int = 60
@@ -312,7 +275,7 @@ class Config:
     jitter_ratio: float = 0.20
     timezone: str = DEFAULT_TIMEZONE
     heartbeat_interval_minutes: int = 60
-    sources: list[str] = field(default_factory=lambda: ["holland2stay"])
+    sources: list[str] = field(default_factory=lambda: ["codomo"])
     # 影子 source：照常抓取入库，但**不发任何通知**（用户渠道 + 面板 feed + 推送）。
     # 用于新平台上线前的静默验证——先确认它抓得对、数据长什么样，再决定是否
     # 对用户开放。必须是 sources 的子集才有意义（不在 sources 里就压根不会抓）。
@@ -322,7 +285,7 @@ class Config:
     #
     # 为什么需要：Xior 的请求间隔是 5s（限流按速率算，见 XIOR.md §2.2），实测
     # **每栋楼 13.9 秒**。30 栋 ≈ 417 秒/轮，而 CHECK_INTERVAL 才 300 秒；更糟的是
-    # H2S 排在其它 source 之后执行，等于每轮把真正出房源的那个 source 推迟 7 分钟。
+    # 排在它后面的 source 每轮都被推迟 7 分钟。
     #
     # 正确解法是分轮抓，不是把请求间隔调小——间隔调小会直接撞回 429。
     shard_sizes: dict[str, int] = field(default_factory=dict)
@@ -332,6 +295,7 @@ class Config:
     #: 高峰期专用的最小间隔；缺项的 source 回落到 ``source_min_intervals``。
     #: 见 _DEFAULT_SOURCE_PEAK_MIN_INTERVALS——这道闸门只在高峰期真正起作用。
     source_peak_min_intervals: dict[str, int] = field(default_factory=dict)
+    codomo_cities: list[CodomoCityFilter] = field(default_factory=list)
     ourdomain_cities: list[OurDomainCityFilter] = field(default_factory=list)
     ourcampus_cities: list[OurCampusCityFilter] = field(default_factory=list)
     xior_cities: list[XiorCityFilter] = field(default_factory=list)
@@ -343,24 +307,14 @@ class Config:
     def sources_with_full_lifecycle(self) -> frozenset[str]:
         """feed 覆盖了「已预留」状态的 source。
 
-        为什么这决定了状态收敛的判据：**「从 feed 里消失」的含义取决于 feed 覆盖
-        了什么**。
+        「从 feed 里消失」的含义取决于 feed 覆盖了什么：只列可订/抽签时，消失有
+        歧义（可能刚被下单，先推 Reserved 留出付款窗口）；也列 Reserved 时，消失
+        就只能是下架。
 
-        - feed 只含可订/抽签时，消失是**有歧义**的——可能被人下单了（Reserved），
-          也可能彻底没了。所以先推 Reserved、再推 Occupied，留出付款窗口。
-        - feed 也含 Reserved 时，消失就**没有歧义**了：它已经掉出我们跟踪的全部
-          状态，只能是 H2S 的 ``Niet beschikbaar``。此时再推一次 Reserved 是凭空
-          造一个平台从没说过的状态。
-
-        判据从实际配置推出，不写死平台名——``AVAILABILITY_FILTERS`` 是可改的，
-        写死会在别人改配置时静默失准。
-
-        其余三个平台的 feed 只列可订单元，没有等价的「已预留」状态可抓，
-        因此不在其中（见 ARCHITECTURE 的房源状态与完整性）。
+        目前没有平台的 feed 覆盖 Reserved——Codomo 的前身 Holland2Stay 曾经可以
+        按状态查 Reserved，改版后列表只给可订与登记意向两类。保留这个钩子，是因为
+        stale 收敛（mcore/stale.py）按它分两条路径，哪天有平台能给就在这里登记。
         """
-        ids = {af.id for af in self.availability_filters}
-        if AVAILABILITY_RESERVED_ID in ids and "holland2stay" in self.sources:
-            return frozenset({"holland2stay"})
         return frozenset()
 
     def monitored_city_names(self) -> list[str]:
@@ -390,7 +344,7 @@ class Config:
         ----------------------------
         并集在三四个平台时还读得动，七个平台之后是一行十七个城市名，读的人既不知道
         哪个城市由谁覆盖，也无从判断自己那个城市的房源大概是什么类型——Plaza 的
-        Groot-Ammers 和 Holland2Stay 的 Eindhoven 在同一行里长得一模一样，实际
+        Groot-Ammers 和 Codomo 的 Eindhoven 在同一行里长得一模一样，实际
         一个是一条房源、另一个是几十条。
 
         楼盘归属按 key 查官方注册表，不对显示名做前缀猜测：``canonical_city`` 走的是
@@ -408,10 +362,6 @@ class Config:
         覆盖说明里找不到那个城市，那是另一种自相矛盾。
         """
         out: dict[str, list[str]] = {}
-        if "holland2stay" in self.sources:
-            names = {canonical_city(c.name) for c in self.cities}
-            if names:
-                out["holland2stay"] = sorted(n for n in names if n)
         for source, spec in TARGET_SPECS.items():
             if source not in self.sources:
                 continue
@@ -424,43 +374,18 @@ class Config:
         return out
 
     def targets_for(self, source: str) -> list[TargetFilter]:
-        """H2S 之外某个平台的订阅目标；未登记的平台返回空表。"""
+        """某个平台的订阅目标；未登记的平台返回空表。"""
         spec = TARGET_SPECS.get(source)
         return getattr(self, spec.config_field) if spec else []
 
     def scrape_tasks_v2(self) -> list["ScrapeTask"]:
-        """
-        P0 新接口：展开为 source-aware 的 ``ScrapeTask`` 列表。
-
-        按 ``SOURCES`` env 变量 + 各 source 自己的 ``{NAME}_CITIES`` 配置
-        展开成多 source 的混合列表。
-
-        每个 H2S task 把 ``availability_ids`` 塞进 ``extra``，让
-        ``HollandStayScraper.scrape()`` 能拿到 H2S 专有的可用性过滤参数；
-        其他 source 不需要这个字段就忽略。
-
-        Returns
-        -------
-        list[ScrapeTask]
-        """
+        """展开为 source-aware 的 ``ScrapeTask`` 列表：每个启用平台的每个订阅目标一条。"""
         # 延迟 import 避免 config 加载链路提前触发 scrapers 包初始化
         from scrapers.base import ScrapeTask  # noqa: WPS433
 
         tasks: list[ScrapeTask] = []
-        availability_ids = [str(af.id) for af in self.availability_filters]
 
-        if "holland2stay" in self.sources:
-            tasks.extend(
-                ScrapeTask(
-                    source="holland2stay",
-                    city_key=str(c.id),
-                    city_display=c.name,
-                    extra={"availability_ids": list(availability_ids)},
-                )
-                for c in self.cities
-            )
-
-        # Magis / Student Experience / Plaza 的每个 task 只是「从同一份结果里取这个
+        # Codomo / Magis / Student Experience / Plaza 的每个 task 只是「从同一份结果里取这个
         # 城市」，不各自发请求；整批共用一次抓取，见各自 scraper 的 batch_session。
         for source in TARGET_SPECS:
             if source not in self.sources:
@@ -613,7 +538,13 @@ def _load_targets(spec, environ) -> list[TargetFilter]:
 
     留空且 ``all_when_empty`` 时取注册表全部；键不存在时用 ``default_raw``。
     """
-    raw = environ.get(spec.env_key, spec.default_raw)
+    raw = environ.get(spec.env_key)
+    if raw is None and spec.legacy_env_key:
+        # 改名前的键（Codomo 的 CITIES）。库里的设置由迁移改名，.env 里的旧键
+        # 只能在这里认，否则升级后会悄悄回落到默认城市。
+        raw = environ.get(spec.legacy_env_key)
+    if raw is None:
+        raw = spec.default_raw
     if not raw and spec.all_when_empty:
         return [TargetFilter(name=target_name(c), key=c["key"])
                 for c in spec.registry]
@@ -627,13 +558,13 @@ def load_config(*, environ=None) -> Config:
     读取的 .env 键
     --------------
     CHECK_INTERVAL          int，默认 300
-    SOURCES                 逗号或 | 分隔，默认 "holland2stay"
-    CITIES                  格式 "城市名,ID|城市名,ID"，默认 "Eindhoven,29"
+    SOURCES                 逗号或 | 分隔，默认 "codomo"
+    CODOMO_CITIES           格式 "城市名,key|城市名,key"，默认 "Eindhoven,29"
+                            （旧键 CITIES 仍认）
     OURDOMAIN_CITIES        格式 "显示名,key|显示名,key"，启用 ourdomain 时默认 Amsterdam Diemen
     OURCAMPUS_CITIES        同上格式，启用 ourcampus 时默认 OurCampus Amsterdam Diemen
     SHADOW_SOURCES          逗号分隔。列出的 source 照常抓取入库但**不发通知**，
                             用于新平台的静默验证。必须是 SOURCES 的子集
-    AVAILABILITY_FILTERS    格式 "标签,ID|标签,ID"，默认包含 179 和 336
     DB_PATH                 str，默认 "data/listings.db"
     LOG_LEVEL               str，默认 "INFO"
     PEAK_INTERVAL           int，默认 60
@@ -649,7 +580,7 @@ def load_config(*, environ=None) -> Config:
 
     Raises
     ------
-    ValueError  若 CITIES 或 AVAILABILITY_FILTERS 中的 ID 不是合法整数
+    ValueError  若订阅串格式有误
     ValueError  若 TIMEZONE 不是合法的 IANA 时区标识符
     """
     if environ is None:
@@ -657,25 +588,10 @@ def load_config(*, environ=None) -> Config:
         environ = runtime_environment()
 
     interval = env_int("CHECK_INTERVAL", 300, strict=True, environ=environ)
-    _raw_sources = environ.get("SOURCES", "holland2stay")
+    _raw_sources = environ.get("SOURCES", "codomo")
     sources = _target_parse("SOURCES", parse_sources, _raw_sources)
     if not sources and not _raw_sources.strip():
-        sources = ["holland2stay"]
-
-    cities: list[CityFilter] = [
-        CityFilter(name=name, id=city_id)
-        for name, city_id in _target_parse(
-            "CITIES", parse_cities, environ.get("CITIES", "Eindhoven,29"))
-    ]
-
-    availability_filters: list[AvailabilityFilter] = [
-        AvailabilityFilter(label=label, id=fid)
-        for label, fid in _target_parse(
-            "AVAILABILITY_FILTERS", parse_availability,
-            environ.get(
-                "AVAILABILITY_FILTERS",
-                "Available to book,179|Available in lottery,336"))
-    ]
+        sources = ["codomo"]
 
     targets = {
         source: _load_targets(spec, environ) if source in sources else []
@@ -721,8 +637,6 @@ def load_config(*, environ=None) -> Config:
 
     return Config(
         check_interval=interval,
-        cities=cities,
-        availability_filters=availability_filters,
         db_path=db_path,
         log_level=log_level,
         peak_interval=env_int("PEAK_INTERVAL", 60, strict=True, environ=environ),

@@ -488,7 +488,7 @@ class TestSettingsPanel:
         """
         r = admin_client.post("/settings", data={
             "csrf_token": "test_csrf",
-            "source_selected": ["holland2stay", "magis"],
+            "source_selected": ["codomo", "magis"],
             "magis_city_selected": ["Eindhoven,eindhoven", "Tilburg,tilburg"],
         }, follow_redirects=False)
         assert r.status_code in (302, 303), r.status_code
@@ -506,7 +506,7 @@ class TestSettingsPanel:
         """存进去的要再读得出来，否则用户每次打开设置都看到全选。"""
         admin_client.post("/settings", data={
             "csrf_token": "test_csrf",
-            "source_selected": ["holland2stay", "magis"],
+            "source_selected": ["codomo", "magis"],
             "magis_city_selected": ["Eindhoven,eindhoven"],
         })
         import re

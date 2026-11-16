@@ -14,10 +14,9 @@ from unittest.mock import patch
 
 
 from config import (
-    AvailabilityFilter,
-    CityFilter,
     Config,
     OurDomainCityFilter,
+    TargetFilter,
     XiorCityFilter,
 )
 from models import Listing
@@ -37,11 +36,10 @@ def _listing(lid, *, source, city):
 def _cfg(tmp_path) -> Config:
     return Config(
         check_interval=300,
-        cities=[CityFilter(name="Eindhoven", id=29)],
-        availability_filters=[AvailabilityFilter(label="A", id=179)],
+        codomo_cities=[TargetFilter(name="Eindhoven", key="29")],
         db_path=Path(tmp_path) / "test.db",
         log_level="WARNING",
-        sources=["holland2stay", "ourdomain", "xior"],
+        sources=["codomo", "ourdomain", "xior"],
         ourdomain_cities=[OurDomainCityFilter(name="Amsterdam Diemen", key="diemen")],
         xior_cities=[XiorCityFilter(name="Amsterdam Naritaweg", key="p0196102")],
     )
@@ -65,8 +63,7 @@ def _run(tmp_path, side_effect, *, dry_run=False):
         return side_effect(tasks[0].source, tasks, multi_source)
 
     async def go():
-        with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+        with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch):
             try:
                 await run_once(_cfg(tmp_path), storage, [], dry_run=dry_run)
             except BaseException as e:  # noqa: BLE001
@@ -90,7 +87,7 @@ class TestTelemetryWiring:
         try:
             assert exc is None
             rows = st.recent_round_stats()
-            assert {r["source"] for r in rows} == {"holland2stay", "ourdomain", "xior"}
+            assert {r["source"] for r in rows} == {"codomo", "ourdomain", "xior"}
             assert all(r["error_type"] == "" for r in rows)
         finally:
             st.close()
@@ -107,10 +104,10 @@ class TestTelemetryWiring:
     def test_listings_and_completeness_recorded(self, tmp_path):
         st, _ = _run(tmp_path, lambda s, t, m: _ok(s, t, m))
         try:
-            h2s = st.recent_round_stats(source="holland2stay")[0]
-            assert h2s["listings"] == 1
-            assert h2s["targets"] == 1
-            assert h2s["complete"] == 1
+            cd = st.recent_round_stats(source="codomo")[0]
+            assert cd["listings"] == 1
+            assert cd["targets"] == 1
+            assert cd["complete"] == 1
         finally:
             st.close()
 
@@ -143,21 +140,21 @@ class TestTelemetryWiring:
         try:
             assert exc is not None, "全部 source 失败仍应上抛（旧契约不变）"
             rows = st.recent_round_stats()
-            assert {r["source"] for r in rows} == {"holland2stay", "ourdomain", "xior"}
+            assert {r["source"] for r in rows} == {"codomo", "ourdomain", "xior"}
             assert all(r["error_type"] == "RateLimitError" for r in rows)
         finally:
             st.close()
 
-    def test_h2s_blocked_is_recorded(self, tmp_path):
+    def test_blocked_is_recorded(self, tmp_path):
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
+            if source == "codomo":
                 raise BlockedError("Cloudflare 403")
             return _ok(source, tasks, multi_source)
 
         st, _ = _run(tmp_path, side_effect)
         try:
-            h2s = st.recent_round_stats(source="holland2stay")[0]
-            assert h2s["error_type"] == "BlockedError"
+            cd = st.recent_round_stats(source="codomo")[0]
+            assert cd["error_type"] == "BlockedError"
         finally:
             st.close()
 
@@ -188,7 +185,6 @@ class TestTelemetryWiring:
 
         async def go():
             with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-                 patch("mcore.prewarm.create_prewarmed_session", return_value=None), \
                  patch.object(type(storage), "record_round_stat", boom):
                 return await run_once(_cfg(tmp_path), storage, [], dry_run=False)
 

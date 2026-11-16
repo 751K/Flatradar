@@ -23,10 +23,13 @@ from config import ListingFilter
 from models import FEATURE_SYNONYMS, Listing, canonical_feature
 
 
-def _listing(**features) -> Listing:
+def _listing(source: str = "codomo", **features) -> Listing:
+    """默认 codomo：它登记了 occupancy / type / offer / finishing，这些维度在它
+    上面走严格匹配。tenant 要换成登记了该维度的平台（xior 等），否则该条件对
+    房源 fail-open 整体跳过，断言就测不到匹配逻辑。"""
     return Listing(
         id="t", name="t", status="Available to book", price_raw="1000",
-        available_from="", url="", city="Eindhoven", source="holland2stay",
+        available_from="", url="", city="Eindhoven", source=source,
         features=[f"{k}: {v}" for k, v in features.items()],
     )
 
@@ -90,11 +93,14 @@ class TestFilterMatchesAcrossLanguages:
 
     def test_tenant(self):
         f = ListingFilter(allowed_tenant=["student only"])
-        assert f.passes(_listing(Tenant="Alleen voor studenten"))
+        assert f.passes(_listing(source="xior", Tenant="Alleen voor studenten"))
 
     def test_contract(self):
-        f = ListingFilter(allowed_contract=["Indefinite"])
-        assert f.passes(_listing(Contract="Onbepaalde tijd"))
+        # 眼下没有平台登记 contract 维度（ListingFilter 对它整体 fail-open），
+        # 所以直接钉匹配函数本身：荷兰语那版仍要命中英文白名单值。
+        from config import whitelist_matches
+        assert whitelist_matches("Indefinite", "Onbepaalde tijd", "contract")
+        assert not whitelist_matches("Indefinite", "Fixed", "contract")
 
     def test_user_side_dutch_also_works(self):
         """老用户存下来的值可能是荷兰语原文，只归一房源侧仍然会漏。"""
@@ -190,9 +196,8 @@ class TestWordBoundaryMatching:
         assert not whitelist_matches(pattern, value, "type")
 
     def test_no_partial_word_match(self):
-        # source 必须选一个**仍登记 tenant 维度**的平台。holland2stay 自
-        # 2026-08-18 起不再登记（白名单查询里没有 tenant_profile_restrictions，
-        # 见 config._SOURCE_FILTER_DIMS），该维度对它 fail-open 整体跳过，
+        # source 必须选一个**登记了 tenant 维度**的平台。codomo 不登记（见
+        # mcore/sources._SOURCE_FILTER_DIMS），该维度对它 fail-open 整体跳过，
         # 这条断言会变成永远通过——测的就不再是词边界了。
         f = ListingFilter(allowed_tenant=["student only"])
         listing = _listing(Tenant="students onlyish")
@@ -243,7 +248,7 @@ class TestTenantAndOrIsTheSameThing:
 
     def test_勾了下拉里那个选项就能收到(self):
         f = ListingFilter(allowed_tenant=["student and employed"])
-        assert f.passes(_listing(Tenant="student or employed")), \
+        assert f.passes(_listing(source="xior", Tenant="student or employed")), \
             "库里 16 条 student or employed 收不到"
 
     def test_和荷兰语那版归一到一起(self):
@@ -253,7 +258,7 @@ class TestTenantAndOrIsTheSameThing:
     def test_不会误伤_student_only(self):
         """两个白名单值都带 student，别归一过头把它们合并了。"""
         f = ListingFilter(allowed_tenant=["student only"])
-        assert not f.passes(_listing(Tenant="student or employed"))
+        assert not f.passes(_listing(source="xior", Tenant="student or employed"))
         assert canonical_feature("student only") == "student only"
 
     def test_下拉里不再并排出现两个同义项(self, tmp_path):

@@ -201,7 +201,7 @@ Body：
 
 - `__admin__` 使用 Web 后台密码。
 - 普通 user 默认使用本地 app password。
-- 只认本地 App 密码；不支持用 Holland2Stay 网站的账号密码登录。
+- 只认本地 App 密码；不支持用 Codomo 网站的账号密码登录。
 - 登录失败计入 IP 限流。
 - 已撤销的会话从撤销时间起保留 30 天；已过期但未撤销的会话从过期时间起保留 30 天。监控进程定期清理到期记录及其关联设备。
 
@@ -451,8 +451,8 @@ Query：
 | 参数 | 类型 | 说明 |
 |---|---|---|
 | `status` | string | 精确匹配状态，例如 `Available to book` |
-| `source` | string | 单平台过滤，旧兼容参数，例如 `holland2stay` |
-| `sources` | string | 多平台逗号分隔，例如 `holland2stay,ourdomain` |
+| `source` | string | 单平台过滤，旧兼容参数，例如 `codomo` |
+| `sources` | string | 多平台逗号分隔，例如 `codomo,ourdomain` |
 | `city` | string | 单城市过滤，旧兼容参数 |
 | `cities` | string | 多城市逗号分隔，例如 `Eindhoven,Amsterdam` |
 | `q` | string | 名称搜索 |
@@ -553,7 +553,7 @@ Occupied / Rented / Not available  → 3
         "name": "Victoriapark 875",
         "status": "Reserved",
         "status_is_inferred": true,
-        "source": "holland2stay",
+        "source": "codomo",
         "price_raw": "€2,088",
         "price_value": 2088.0,
         "available_from": "2026-06-22",
@@ -580,7 +580,7 @@ Occupied / Rented / Not available  → 3
 
 各平台均不提供「房源已下架」的显式信号，只是停止返回该房源。因此系统依据「消失
 时长」推断状态：消失 30 分钟推定为 `Reserved`，消失 2 小时判定为 `Occupied`
-（2 小时对齐 Holland2Stay 官方的付款限时）。据此推断的行，其
+（2 小时沿用 Codomo〔原 Holland2Stay〕时期的付款限时；目前 Codomo 的 feed 不返回 Reserved/Occupied，没有平台覆盖 Reserved）。据此推断的行，其
 `status_is_inferred` 为 `true`。实际运行中绝大多数终态均为推断结果；Web 面板的
 处理方式是在状态徽标旁附加一枚「推测」标记，客户端可照此实现。
 
@@ -619,12 +619,12 @@ Occupied / Rented / Not available  → 3
         "id": "listing-id",
         "name": "Victoriapark 875",
         "status": "Reserved",
-        "source": "holland2stay",
+        "source": "codomo",
         "price_raw": "€2,088",
         "available_from": "2026-06-22",
         "city": "Eindhoven",
         "address": "Victoriapark 875, Eindhoven",
-        "url": "https://www.holland2stay.com/…",
+        "url": "https://codomo.eu/homes/nl/en/…",
         "neighborhood": "Victoriapark",
         "building": "",
         "area": "52.5 m²",
@@ -708,7 +708,7 @@ Occupied / Rented / Not available  → 3
         "id": "listing-id",
         "name": "Victoriapark 875",
         "status": "Reserved",
-        "source": "holland2stay",
+        "source": "codomo",
         "price_raw": "€2,088",
         "available_from": "2026-06-22",
         "url": "https://...",
@@ -920,7 +920,7 @@ Body 支持字段：
 | `allowed_cities` | string[] | 城市 |
 | `allowed_types` | string[] | 房型 |
 | `allowed_neighborhoods` | string[] | 区域 |
-| `allowed_sources` | string[] | 来源平台（`holland2stay` / `ourdomain` / …） |
+| `allowed_sources` | string[] | 来源平台（`codomo` / `ourdomain` / …） |
 | `allowed_contract` | string[] | 合同类型 |
 | `allowed_tenant` | string[] | 租客类型 |
 | `allowed_offer` | string[] | offer 类型 |
@@ -999,7 +999,7 @@ Body 支持字段：
   "ok": true,
   "data": {
     "cities": ["Eindhoven"],
-    "sources": ["holland2stay", "xior"],
+    "sources": ["codomo", "xior"],
     "occupancy": ["One", "Two (only couples)"],
     "types": ["Studio"],
     "neighborhoods": ["Vlootkwartier"],
@@ -1010,10 +1010,9 @@ Body 支持字段：
     "finishing": ["Furnished"],
     "energy": ["A+++", "A++", "A+", "A", "B", "C", "D", "E", "F"],
     "dim_sources": {
-      "source": ["holland2stay", "ourdomain", "ourcampus", "xior", "magis", "studentexperience", "plaza"],
-      "contract": ["holland2stay"],
-      "neighborhood": ["holland2stay"],
-      "offer": ["holland2stay"]
+      "source": ["codomo", "ourdomain", "ourcampus", "xior", "magis", "studentexperience", "plaza"],
+      "offer": ["codomo"],
+      "energy": ["magis"]
     }
   }
 }
@@ -1447,7 +1446,7 @@ Android 客户端可复用此端点，但建议字段改为：
 }
 ```
 
-`upstream_maintenance_since` 非空表示 Holland2Stay 正在维护（首次探测到的时间）。
+`upstream_maintenance_since` 非空表示 Codomo 正在维护（首次探测到的时间）。
 
 ### POST `/admin/monitor/start`
 

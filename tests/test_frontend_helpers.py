@@ -2,7 +2,6 @@
 前端辅助函数 + XSS 回归测试。
 
 覆盖：
-- _mask_email() 脱敏
 - templates 中 XSS 风险点验证（无 innerHTML 拼接用户输入）
 """
 from __future__ import annotations
@@ -11,27 +10,6 @@ import re
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-
-
-# ── _mask_email ────────────────────────────────────────────
-
-class TestMaskEmail:
-    def test_normal_email(self):
-        from bookers.h2s_checkout import _mask_email
-        assert _mask_email("test@example.com") == "tes***@example.com"
-
-    def test_short_local(self):
-        from bookers.h2s_checkout import _mask_email
-        assert _mask_email("ab@x.com") == "***@x.com"
-
-    def test_empty(self):
-        from bookers.h2s_checkout import _mask_email
-        assert _mask_email("") == "***"
-
-    def test_no_at_sign(self):
-        from bookers.h2s_checkout import _mask_email
-        result = _mask_email("noatsign")
-        assert "***" in result
 
 
 # ── Jinja2 自动转义验证 ────────────────────────────────────

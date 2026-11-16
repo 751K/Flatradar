@@ -46,7 +46,6 @@ class TestNoFallbackOnLoad:
     def test_missing_platform_creds_stay_empty(self):
         """旧数据（只有共用 email/password）不该长出另外两个平台的账号。"""
         ab = _ab_from_dict({"email": H2S_EMAIL, "password": encrypt(H2S_PW)})
-        assert ab.email == H2S_EMAIL and ab.password == H2S_PW
         assert ab.ourdomain_email == "" and ab.ourdomain_password == ""
         assert ab.xior_email == "" and ab.xior_password == ""
 
@@ -64,10 +63,15 @@ class TestNoFallbackOnLoad:
         assert ab.ourdomain_email == "me@od.example"
         assert ab.ourdomain_password == "od-secret"
 
-    def test_h2s_creds_still_load(self):
-        """只动另外两个平台，H2S 自己那对不受影响。"""
-        ab = _ab_from_dict({"email": H2S_EMAIL, "password": encrypt(H2S_PW)})
-        assert (ab.email, ab.password) == (H2S_EMAIL, H2S_PW)
+    def test_legacy_h2s_keys_are_ignored_and_dropped_on_save(self):
+        """H2S（现 Codomo）已不支持自动下单：旧键加载不报错，保存后从库里消失。"""
+        from users import UserConfig, _user_to_row
+
+        ab = _ab_from_dict({"email": H2S_EMAIL, "password": encrypt(H2S_PW),
+                            "payment_method": "idealcheckout_ideal"})
+        assert not hasattr(ab, "email") and not hasattr(ab, "payment_method")
+        saved = json.loads(_user_to_row(UserConfig(id="u", name="u", auto_book=ab))["auto_book_json"])
+        assert not {"email", "password", "payment_method"} & set(saved)
 # ── 存量数据：旧版一次性清理已删除，只剩启动检查 ──────────────────────
 #
 # 库里那份回填值由 v2.1 及以前的一次性清理洗掉。清理代码删了之后，没洗过的旧库

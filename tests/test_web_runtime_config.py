@@ -43,7 +43,7 @@ def test_real_map_requests_use_updated_saved_age(admin_client, monkeypatch):
             "INSERT INTO listings (id, name, status, price_raw, available_from, url, city, source, "
             "features, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, "
             "datetime('now', '-6 days'), datetime('now', '-5 days'))",
-            ("aged", "House", "Occupied", "€900", "", "https://example.com", "Eindhoven", "holland2stay", "[]"),
+            ("aged", "House", "Occupied", "€900", "", "https://example.com", "Eindhoven", "codomo", "[]"),
         )
         st.conn.commit()
         row = st.get_map_listing_by_id("aged")
@@ -60,10 +60,10 @@ def test_real_map_requests_use_updated_saved_age(admin_client, monkeypatch):
 def test_user_options_update_without_monitor_or_web_restart(admin_client, test_app):
     from app.routes.users import _city_options
 
-    _save({"SOURCES": "holland2stay", "CITIES": "Eindhoven,29"})
+    _save({"SOURCES": "codomo", "CODOMO_CITIES": "Eindhoven,29"})
     with test_app.test_request_context("/users/new"):
         before = _city_options()
-    _save({"SOURCES": "holland2stay,plaza", "PLAZA_CITIES": "Groot-Ammers,groot-ammers"})
+    _save({"SOURCES": "codomo,plaza", "PLAZA_CITIES": "Groot-Ammers,groot-ammers"})
     assert "Groot-Ammers" in admin_client.get("/users/new").get_data(as_text=True)
     with test_app.test_request_context("/users/new"):
         after = _city_options()
@@ -125,11 +125,11 @@ def test_override_deletion_and_failed_candidate_fallback(test_app, monkeypatch, 
 
     env_file = isolated_data_dir / ".env"
     env_file.write_text("MAP_MAX_AGE_DAYS=8\n", encoding="utf-8")
-    monkeypatch.setattr(settings_store, "_external_runtime", {"SOURCES": "holland2stay"})
+    monkeypatch.setattr(settings_store, "_external_runtime", {"SOURCES": "codomo"})
     _save({"MAP_MAX_AGE_DAYS": "3", "SOURCES": "plaza"})
     with test_app.test_request_context("/first"):
         snapshot = web_runtime_environment()
-        assert snapshot["MAP_MAX_AGE_DAYS"] == "8" and snapshot["SOURCES"] == "holland2stay"
+        assert snapshot["MAP_MAX_AGE_DAYS"] == "8" and snapshot["SOURCES"] == "codomo"
     env_file.write_text("", encoding="utf-8")
     with test_app.test_request_context("/second"):
         assert web_runtime_environment()["MAP_MAX_AGE_DAYS"] == "3"

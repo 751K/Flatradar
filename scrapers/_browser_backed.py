@@ -2,13 +2,12 @@
 scrapers/_browser_backed.py — 浏览器型 scraper 的共享生命周期
 ================================================================
 
-H2S 与 Xior 都得靠 ``BrowserFetcher`` 过 Cloudflare 挑战，两边的浏览器管理
-（懒创建 / 超龄重建 / 失效丢弃 / 批次作用域）此前是**两份 75% 重复的拷贝**，
-连注释都是同一段。差别只有三处：用哪个 ``SiteProfile``、活多久、创建成功后
-要不要额外重置点什么。
+靠 ``BrowserFetcher`` 过 Cloudflare 挑战的 scraper（目前是 Xior）共用这里的
+浏览器管理：懒创建 / 超龄重建 / 失效丢弃 / 批次作用域。子类只需要说明用哪个
+``SiteProfile``、活多久、创建成功后要不要额外重置点什么。
 
 放在独立模块而不是 ``scrapers/base.py``：``base`` 是 source-agnostic 的抽象层，
-OurDomain / OurCampus 走纯 HTTP，不该因为另外两家用浏览器就被拖进对
+Codomo / OurDomain / OurCampus 走纯 HTTP，不该因为别家用浏览器就被拖进对
 ``browser_fetcher`` 的依赖。
 
 线程模型
@@ -44,7 +43,7 @@ class BrowserBackedScraper(AbstractScraper):
     子类可覆盖的钩子（默认全是 no-op）
     ----------------------------------
     ``_on_browser_ready()``   浏览器建好且过完挑战之后。用于重置挂在浏览器
-                              生命周期上的派生状态（H2S 的 attr 标签表）。
+                              生命周期上的派生状态。
     ``_on_browser_closed()``  浏览器关掉之后。同上，反向。
     ``_begin_batch()``        批次开头（``batch_session`` 进入，浏览器已就绪）。
     ``_end_batch()``          批次结尾（正常退出时；``yield`` 抛异常则不调用，
@@ -154,7 +153,7 @@ class BrowserBackedScraper(AbstractScraper):
         """建一个 fetcher。**子类要覆盖，而且要引用自己模块里的 ``BrowserFetcher``。**
 
         看着像多余的一行，但它是**测试的接缝**：用例一直是
-        ``monkeypatch.setattr(scrapers.holland2stay, "BrowserFetcher", Fake)``
+        ``monkeypatch.setattr(scrapers.xior, "BrowserFetcher", Fake)``
         这么打桩的。若这里直接用本模块导入的名字，那些桩会全部失效——而失效的
         后果不是测试报错，是**测试真的去启动一个 Chromium**（迁移过程中实测到
         了，cloakbrowser 的升级提示直接打进了测试输出）。

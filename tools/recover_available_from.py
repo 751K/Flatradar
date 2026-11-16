@@ -7,7 +7,7 @@
 
 背景
 ----
-mstorage/_listings.py 的 diff() 原来无条件写 available_from。H2S 房源转成
+mstorage/_listings.py 的 diff() 原来无条件写 available_from。Codomo（原 H2S）房源转成
 Reserved 之后上游给的是 2050-01-01 哨兵，scraper 认出哨兵返回 None，于是库里
 那个真日期被 None 冲掉，界面上只剩「—」。
 
@@ -25,7 +25,7 @@ scraper 的。直接把「备份里的非空值」写回去，等于把我们费
 顺带清理库里残留的哨兵
 ----------------------
 同一批遗留还有另一半：2026-08-28 线上有 72 行 available_from 就是
-``2050-01-01``，全是 H2S 的 Occupied，last_seen 全部停在 2026-08-18——加过滤
+``2050-01-01``，全是 Codomo（原 H2S）的 Occupied，last_seen 全部停在 2026-08-18——加过滤
 那天之后就再没被抓到过。它们**正显示在房源列表页上**，一个看起来像数据的假
 日期，比「—」更糟；而且因为再也不会被抓到，粘性逻辑也永远碰不到它们。
 

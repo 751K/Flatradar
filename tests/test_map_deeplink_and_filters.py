@@ -66,7 +66,7 @@ def _seed(st, listing_id="l1", *, status="Available to book", days_ago=0,
             features, first_seen, last_seen)
            VALUES (?,?,?,?,?,?,?,?,?, datetime('now'), datetime('now', ?))""",
         (listing_id, name, status, "€1444", "2026-07-01", "https://example.test/x",
-         city, "holland2stay", features, "-%d days" % days_ago),
+         city, "codomo", features, "-%d days" % days_ago),
     )
     st.conn.commit()
 
@@ -328,7 +328,7 @@ class TestSentinelDateNeverShownAsADate:
         st = storage()
         st.diff([Listing(id="sent-1", name="Sentinel", status="Available to book",
                               price_raw="€900", available_from=f"{SENTINEL_AVAILABLE_FROM_YEAR}-01-01",
-                              url="https://x", city="Eindhoven", source="holland2stay", features=[])])
+                              url="https://x", city="Eindhoven", source="codomo", features=[])])
         st.close()
         html = client.get("/l/sent-1").get_data(as_text=True)
         assert "Sentinel" in html

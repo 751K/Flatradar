@@ -203,7 +203,6 @@ def _autobook_rows(ab, zh):
              else _t(zh, '正式预订：会真实提交订单', 'Live: submits real orders'),
              *((_t(zh, '已开启', 'On'), 'attention' if not ab.dry_run else 'ok') if ab.enabled else (_t(zh, '未开启', 'Off'), 'muted'))),
         _row('abfilter', _t(zh, '预订条件', 'Booking filters'), filter_summary(sources, zh)),
-        _row('h2s', 'Holland2Stay', ab.email or _t(zh, '邮箱登录', 'Email sign-in'), *_configured(ab.email, zh)),
         _row('xior', 'Xior', _t(zh, f'{xior} 栋楼', f'{xior} building(s)') if xior else _t(zh, '每栋楼一个账号', 'One account per building'),
              *_configured(xior, zh)),
         _row('ourdomain', 'OurDomain', ab.ourdomain_email or _t(zh, '邮箱登录', 'Email sign-in'), *_configured(ab.ourdomain_email, zh)),

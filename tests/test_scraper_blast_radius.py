@@ -1,14 +1,12 @@
 """一个 source 的解析 bug 只该影响那个 source。
 
-2026-09-02 一次性发现四条都违反这条：
+2026-09-02 一次性发现几条都违反这条：
 
   magis      城市认不出 → 同一条房源被每个城市 task 各收一次 → diff() 的
              UNIQUE 冲突 → **整个事务回滚 → 本轮所有平台都不入库、不通知**
   plaza      一行 netRent="n.v.t." → float() 抛出 → 整源每轮失败
   xior       floorplans.aspx 改版 → 返回空集而非 None → 全部真房源被判 Occupied
              且标记「已核实」，静默漏推
-  holland2stay  详情补齐的 except Exception 吞掉 BlockedError → 被挡之后继续打，
-             一个批次可以触发几十次浏览器重建 + 换 IP
 
 前三条的共同点是**「认不出」被当成了一个确定的答案**（哪个城市都算 / 一个都订不了），
 而不是「不知道」。
@@ -57,7 +55,7 @@ class TestDuplicateIdsDoNotLoseTheRound:
         from storage import Storage
 
         st = Storage(tmp_path / "t.db")
-        fresh = [_L("dup", "")] * 5 + [_L("ok", "Eindhoven", source="holland2stay")]
+        fresh = [_L("dup", "")] * 5 + [_L("ok", "Eindhoven", source="codomo")]
         new, _ = st.diff(fresh)
 
         got = {r[0] for r in st.conn.execute("SELECT id FROM listings")}
@@ -210,22 +208,6 @@ class TestXiorStructureProbe:
         sig = inspect.signature(xior.parse_bookable_floorplan_ids)
         assert "Optional" in str(sig.return_annotation) or "None" in str(
             sig.return_annotation)
-
-
-class TestH2SEnrichStopsWhenBlocked:
-    def test_blocked_error_has_its_own_branch(self):
-        """BlockedError 落进 except Exception 的话会被当成「这一条不巧失败了」，
-        于是每条都重试——一个 60 条的批次可以触发几十次浏览器重建 + 换 IP。"""
-        from scrapers import holland2stay
-
-        src = _code(holland2stay._enrich)
-        assert "except BlockedError" in src, "BlockedError 没有独立分支"
-        i = src.index("except BlockedError")
-        j = src.index("except Exception")
-        assert i < j, "BlockedError 必须排在 except Exception 前面，否则接不到"
-        # 收手而不是 continue
-        block = src[i:j]
-        assert "break" in block and "stopped = True" in block
 
 
 class TestHungRendererDoesNotStallTheLoop:

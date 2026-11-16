@@ -2,7 +2,7 @@
 
 背景
 ----
-两个浏览器型 scraper 的 ``batch_session()`` 里都写过：
+浏览器型 scraper 的 ``batch_session()`` 里曾经写过：
 
     try:
         self._ensure_browser()
@@ -12,14 +12,12 @@
         raise
 
 但 dispatcher 是**按 task 隔离**的，``scrape()`` 抛的异常全部在那圈 per-task
-``try`` 里被吃掉，根本到不了 ``yield``——这段 ``except`` 是死代码，
-``HollandStayScraper`` 文档里写的「仅在 BlockedError（CF 会话过期）或进程退出
-时关闭重建」实际从未发生过。
+``try`` 里被吃掉，根本到不了 ``yield``——这段 ``except`` 是死代码，「403 时关闭
+重建」实际从未发生过。
 
-后果：H2S 抓取 403 → source 熔断 30 分钟 → canary **复用同一个被烧的浏览器**
-（``_BROWSER_MAX_AGE`` 2 小时内不重建）→ 大概率再 403 → 熔断翻倍，最长 6 小时。
-Xior 更直接：它靠重建浏览器来换出口 IP（``rotating_proxy=True``），不重建就
-一直卡在同一个被限流的 IP 上。
+后果：抓取 403 → source 熔断 → canary **复用同一个被烧的浏览器** → 大概率再
+403 → 熔断翻倍。Xior 尤其如此：它靠重建浏览器来换出口 IP（``rotating_proxy=True``），
+不重建就一直卡在同一个被限流的 IP 上。
 
 现在改由 dispatcher 负责：批次里出现过 403，批次**结束后**调一次
 ``invalidate_session()``。
@@ -91,8 +89,8 @@ class TestBlockedInvalidatesSession:
     def test_403_drops_session_after_batch_not_mid_batch(self, probe):
         """时机很重要：批次中间丢会话，同 source 后续 task 会各自重建浏览器。
 
-        每次重建都是一轮完整 CF 挑战（H2S 上实测最长 90s+25s，失败还会连锁
-        重试 3 次），一栋楼的 403 能把整批拖成分钟级。
+        每次重建都是一轮完整 CF 挑战（实测最长 90s+25s，失败还会连锁重试 3 次），
+        一栋楼的 403 能把整批拖成分钟级。
         """
         _RecordingScraper.raises = BlockedError("Cloudflare 403")
         with pytest.raises(BlockedError):
@@ -143,14 +141,13 @@ class TestBlockedInvalidatesSession:
 
 
 class TestBatchSessionHasNoDeadHandler:
-    """两个 scraper 的 batch_session 不该再自己处理 BlockedError。
+    """浏览器型 scraper 的 batch_session 不该再自己处理 BlockedError。
 
     留着它有害：读代码的人会以为「403 → 关浏览器」这条路还在，实际 dispatcher
     的 per-task try 早就把异常吃掉了，那段 except 永远不会执行。
     """
 
     @pytest.mark.parametrize("module_name, cls_name", [
-        ("scrapers.holland2stay", "HollandStayScraper"),
         ("scrapers.xior", "XiorScraper"),
     ])
     def test_batch_session_leaves_session_handling_to_dispatcher(
@@ -198,7 +195,7 @@ class TestBatchSessionHasNoDeadHandler:
 #     16:25:39 [ERROR] xior:Eindhoven Zernikestraat ... 429   ← +91s
 #
 # 整齐的 91 秒 = 30s + 60s 退避，4 个城市 ≈ 6 分钟。而这 6 分钟**整轮阻塞**，同轮
-# 里 H2S / OurDomain 的房源一起延迟交付。这样的爆发从 08-10 起每天约 10 次。
+# 里其它 source 的房源一起延迟交付。这样的爆发从 08-10 起每天约 10 次。
 #
 # 现在：批次里出现过 429，同 source 的剩余 task 直接判失败、一个请求都不发。
 

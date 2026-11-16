@@ -46,7 +46,7 @@ OurDomain 使用 HTTP 客户端而非浏览器：SecureRC 前面是 Cloudflare�
 proxy = get_proxy_url(self.source, rotating=True)
 ```
 
-这与 Holland2Stay、Xior 相反：后两者需要出口 IP 稳定才能复用 Cloudflare clearance，
+这与 Xior 相反（Codomo 原 Holland2Stay 也曾如此，现已改纯 HTTP）：Xior 需要出口 IP 稳定才能复用 Cloudflare clearance，
 OurDomain 没有可复用的 clearance，换 IP 才是恢复手段。曾把出口固定到专属 sticky IP，
 结果该 IP 被标记后轮换全部指纹仍 403，无法自行恢复。
 
@@ -248,7 +248,7 @@ Listing(
 名称 "Diemen #6045" 是内部编号，无法地理编码。同栋楼的全部单元共享同一坐标，与物理
 事实相符。
 
-`Occupancy` 采用与 Holland2Stay 相同的词汇表（`One` / `Two (only couples)` /
+`Occupancy` 采用与 Codomo（原 Holland2Stay）相同的词汇表（`One` / `Two (only couples)` /
 `Family (parents with children)`），Web 端 Occupancy 多选过滤器可跨 source 合并。楼层
 由 `parse_ourdomain_floor()` 自 Detail 字段提取（`Ground Floor` 记为 0，`Floor 1-4`
 记为 1）。
@@ -285,7 +285,7 @@ Superior Plus Studio  33 – 49 m²   Free Market   Young Professionals only
 面积缺失时不写该字段。把「未知」记为「须有收入」会让符合条件的学生看不到房源，记为
 「学生可租」则让人白填一轮申请——两种误判都劣于字段缺失。
 
-取值沿用 Holland2Stay `tenant_profile_restrictions` 的词汇表（`student only` /
+取值沿用 Codomo 旧版（Holland2Stay）`tenant_profile_restrictions` 的词汇表（`student only` /
 `employed only` / `student and employed`），Web 端 Tenant 多选过滤器可跨 source 合并。
 规则以 `tenant_policy` 记于每条 `BUILDINGS` 记录，新增楼栋时必须一并声明（由测试守卫）。
 
@@ -293,7 +293,7 @@ Superior Plus Studio  33 – 49 m²   Free Market   Young Professionals only
 
 | 风险 | 现状 |
 |---|---|
-| SecureRC 启用托管挑战 | 尚未发生。一旦发生，需与 Holland2Stay、Xior 一样改走浏览器传输层 |
+| SecureRC 启用托管挑战 | 尚未发生。一旦发生，需与 Xior 一样改走浏览器传输层 |
 | 403 频率上升 | 在可缓解范围内（每次换 IP、指纹池轮换、同 session 重试）；实测每小时数次，轮换后即恢复 |
 | `data-selenium-id` 变更 | 该属性是 Yardi 的测试锚点，移除成本较高；且已有 `data-label` 备选 |
 | 出现新主题或新字段名 | 核心字段全部为空时记录 WARNING，据此补充 label 匹配 |

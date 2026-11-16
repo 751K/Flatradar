@@ -187,7 +187,7 @@ def source_label(source: str) -> str:
     """Source id → user-facing platform label."""
     from mcore.sources import SOURCE_DISPLAY_NAMES
 
-    return SOURCE_DISPLAY_NAMES.get((source or "").lower(), source or "Holland2Stay")
+    return SOURCE_DISPLAY_NAMES.get((source or "").lower(), source or "")
 
 
 def source_short(source: str) -> str:

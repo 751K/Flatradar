@@ -56,7 +56,13 @@ def test_every_field_the_self_parser_reads_is_in_the_form(account):
     update_users(change)
     html = client.get(f"/users/{user.id}").get_data(as_text=True)
     rendered = set(re.findall(r'<(?:input|select|textarea)\b[^>]*\bname="([A-Za-z_]+)"', html))
-    missing = sorted(_self_parser_fields() - rendered)
+    # 没有任何平台支持的维度，表单刻意不显示（见 web.py 的 dim_supported）：
+    # 条件对所有房源都整体跳过，保存时清空它不改变任何结果。
+    from mcore.sources import sources_supporting_dim
+    unsupported = {f"ALLOWED_{d.upper()}" for d in ("contract",)
+                   if not sources_supporting_dim(d)}
+    unsupported |= {"ALLOWED_NEIGHBORHOODS"} if not sources_supporting_dim("neighborhood") else set()
+    missing = sorted(_self_parser_fields() - rendered - unsupported)
     assert not missing, f"账号页缺这些字段，保存一次就会被清空: {missing}"
 
 
@@ -124,3 +130,13 @@ def test_saved_values_missing_from_options_survive(account, test_app):
     update_users(change)
     html = client.get(f"/users/{user.id}?section=filters&item=location").get_data(as_text=True)
     assert 'name="ALLOWED_CITIES" value="Atlantis" checked' in html
+
+
+def test_unsupported_dims_are_not_offered(account):
+    """没有平台按它过滤的维度不出现在表单里——勾了也不会有任何效果。"""
+    from mcore.sources import sources_supporting_dim
+
+    client, user = account
+    html = client.get(f"/users/{user.id}").get_data(as_text=True)
+    for dim, field in (("contract", "ALLOWED_CONTRACT"), ("neighborhood", "ALLOWED_NEIGHBORHOODS")):
+        assert (f'name="{field}"' in html) == bool(sources_supporting_dim(dim)), dim

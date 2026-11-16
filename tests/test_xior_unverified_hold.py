@@ -200,10 +200,10 @@ class TestStorageHoldsTheFlip:
 
     def test_其它平台不受影响(self, temp_db):
         """H2S / OurDomain 从不置位，行为必须和改动前一模一样。"""
-        h = _l(id_="h2s-1", status="Occupied", source="holland2stay")
+        h = _l(id_="h2s-1", status="Occupied", source="codomo")
         temp_db.diff([h])
         _, changes = temp_db.diff([_l(id_="h2s-1", status="Available to book",
-                                      source="holland2stay")])
+                                      source="codomo")])
         assert [(c[1], c[2]) for c in changes] == [("Occupied", "Available to book")]
 
 

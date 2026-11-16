@@ -4,7 +4,7 @@
   as-is, never evaluated as a template, so it may contain anything. Chinese version:
   guide_cn.html — keep the two in step.
 -->
-<p class="public-lead">FlatRadar watches seven Dutch housing platforms, sends you new listings that match your filters, and can book Holland2Stay homes and apply on Plaza for you.</p>
+<p class="public-lead">FlatRadar watches seven Dutch housing platforms, sends you new listings that match your filters, and can apply on Plaza for you.</p>
 
 <nav class="guide-nav" aria-label="On this page">
   <a href="#start">Getting started</a>
@@ -47,7 +47,7 @@ docker compose up -d</pre>
 <table>
   <thead><tr><th>Platform</th><th>Coverage</th><th>Detail</th><th>Booking</th></tr></thead>
   <tbody>
-  <tr><td><strong>Holland2Stay</strong></td><td>Configurable Dutch cities</td><td>Unit: room number, rent, area</td><td>Auto-booking; you pay yourself</td></tr>
+  <tr><td><strong>Codomo</strong> (formerly Holland2Stay)</td><td>Configurable Dutch cities</td><td>Unit: room number, rent, area</td><td>Notifications only</td></tr>
   <tr><td><strong>OurDomain</strong></td><td>Amsterdam (Diemen, South-East)</td><td>Unit: number, area, floor, view</td><td>Notifications only</td></tr>
   <tr><td><strong>OurCampus</strong></td><td>Amsterdam Diemen (one building)</td><td>Unit, as OurDomain</td><td>Notifications only</td></tr>
   <tr><td><strong>Xior</strong></td><td>30 buildings in 14 cities</td><td>Unit: number, area, rent, deposit</td><td>Notifications only</td></tr>
@@ -114,17 +114,16 @@ docker compose up -d</pre>
   <tbody>
   <tr><td>Max rent</td><td>€1200</td><td>All (see “What rent means” below)</td></tr>
   <tr><td>Min area</td><td>25 m²</td><td>All</td></tr>
-  <tr><td>Min floor</td><td>1</td><td>Holland2Stay, OurDomain, OurCampus, Magis, Plaza</td></tr>
+  <tr><td>Min floor</td><td>1</td><td>Codomo, OurDomain, OurCampus, Magis, Plaza</td></tr>
   <tr><td>Cities</td><td>Eindhoven, Amsterdam</td><td>All</td></tr>
-  <tr><td>Platforms</td><td>Holland2Stay, Xior</td><td>All</td></tr>
-  <tr><td>Tenant</td><td>Students only</td><td>All except Magis</td></tr>
+  <tr><td>Platforms</td><td>Codomo, Xior</td><td>All</td></tr>
+  <tr><td>Tenant</td><td>Students only</td><td>All except Magis and Codomo</td></tr>
   <tr><td>Type</td><td>Studio</td><td>All except Xior</td></tr>
-  <tr><td>Occupancy</td><td>Single</td><td>Holland2Stay, OurDomain, OurCampus</td></tr>
-  <tr><td>Furnishing</td><td>Furnished</td><td>Holland2Stay, OurDomain, Xior, Magis</td></tr>
-  <tr><td>Contract</td><td>Indefinite</td><td>Holland2Stay only</td></tr>
-  <tr><td>Min energy label</td><td>B</td><td>Holland2Stay, Magis</td></tr>
+  <tr><td>Occupancy</td><td>Single</td><td>Codomo, OurDomain, OurCampus</td></tr>
+  <tr><td>Furnishing</td><td>Furnished</td><td>Codomo, OurDomain, Xior, Magis</td></tr>
+  <tr><td>Min energy label</td><td>B</td><td>Magis only</td></tr>
   <tr><td>Neighbourhood, building</td><td>Centrum</td><td>Follow the cities you picked</td></tr>
-  <tr><td>Offer type</td><td>Rent</td><td>Holland2Stay only</td></tr>
+  <tr><td>Offer type</td><td>Rent</td><td>Codomo only</td></tr>
   </tbody>
 </table>
 </div>
@@ -135,7 +134,7 @@ docker compose up -d</pre>
 <table>
   <thead><tr><th>Platform</th><th>Price shown</th></tr></thead>
   <tbody>
-  <tr><td>Holland2Stay</td><td>All-in: service costs and utility prepayment included</td></tr>
+  <tr><td>Codomo</td><td>All-in: service costs and utility prepayment included</td></tr>
   <tr><td>Xior</td><td>All-in: base rent plus that building's monthly advance charges</td></tr>
   <tr><td>Magis</td><td>All-in: base rent plus the service costs on each listing</td></tr>
   <tr><td>OurDomain, OurCampus</td><td>Base rent; service costs are charged separately</td></tr>
@@ -147,10 +146,8 @@ docker compose up -d</pre>
 <p>OurDomain and OurCampus do not say which unit has which service costs, so an all-in price cannot be worked out. Their listings show the building's service-cost range under the price, and notifications carry the same note. Leave some headroom in Max rent for those two, or filter them separately by platform.</p>
 
 <h2 id="autobook">Auto-booking and applications</h2>
+<p>Only Plaza supports automatic applications. Codomo (formerly Holland2Stay) is notifications only: its new site requires a sign-in to book and auto-booking has not been built for it.</p>
 <p>Administrators set this up per user under <strong>Administration → Users → the user → Auto-booking</strong>. It needs notifications to be on with at least one working channel. Booking filters are separate from notification filters.</p>
-<h3>Holland2Stay</h3>
-<p>When a matching listing becomes <em>Available to book</em>, FlatRadar signs in to the user's Holland2Stay account, reserves the home, places the order and sends a payment link straight away. <strong>It never pays</strong>: payment is done by hand through that link.</p>
-<p>If the outcome is uncertain, auto-booking pauses for that account. Check the orders on Holland2Stay, pay or cancel as needed, then choose <strong>Checked; resume auto-booking</strong> in the user's settings.</p>
 <h3>Plaza</h3>
 <p>FlatRadar can submit applications for matching Plaza listings. Enter the Plaza username and password and turn on automatic applications, which are off by default. An application takes effect immediately. If its outcome is uncertain, only that account and listing pause until you check it on Plaza and choose <strong>Checked; resume applications for this listing</strong>.</p>
 <h3>Applicant profile</h3>

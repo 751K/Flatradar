@@ -10,7 +10,7 @@ import config
 def clean_env(monkeypatch):
     """清掉可能来自开发机 .env 的结构化配置，让每条用例只看自己设的值。"""
     for key in (
-        "SOURCES", "SHADOW_SOURCES", "CITIES", "OURDOMAIN_CITIES",
+        "SOURCES", "SHADOW_SOURCES", "CITIES", "CODOMO_CITIES", "OURDOMAIN_CITIES",
         "OURCAMPUS_CITIES", "XIOR_CITIES", "MAGIS_CITIES",
         "STUDENTEXPERIENCE_CITIES", "PLAZA_CITIES", "AVAILABILITY_FILTERS",
         "SHARD_SIZES", "SOURCE_MIN_INTERVALS", "SOURCE_PEAK_MIN_INTERVALS",
@@ -35,25 +35,26 @@ class TestGetImpersonate:
 
 
 class TestScrapeTasksV2:
-    def test_default_sources_is_holland2stay(self, monkeypatch):
-        monkeypatch.delenv("SOURCES", raising=False)
+    def test_default_sources_is_codomo(self, clean_env):
         cfg = config.load_config()
         tasks = cfg.scrape_tasks_v2()
-        assert cfg.sources == ["holland2stay"]
+        assert cfg.sources == ["codomo"]
         assert tasks
-        assert {t.source for t in tasks} == {"holland2stay"}
+        assert {t.source for t in tasks} == {"codomo"}
+        # 默认订阅 Eindhoven（沿用旧 H2S 的数字 city ID 作 key）
+        assert [(t.city_display, t.city_key) for t in tasks] == [("Eindhoven", "29")]
 
-    def test_ourdomain_source_adds_ourdomain_tasks(self, monkeypatch):
-        monkeypatch.setenv("SOURCES", "holland2stay,ourdomain")
-        monkeypatch.setenv("CITIES", "Eindhoven,29")
-        monkeypatch.setenv("OURDOMAIN_CITIES", "Amsterdam Diemen,diemen")
+    def test_ourdomain_source_adds_ourdomain_tasks(self, clean_env):
+        clean_env.setenv("SOURCES", "codomo,ourdomain")
+        clean_env.setenv("CODOMO_CITIES", "Eindhoven,29")
+        clean_env.setenv("OURDOMAIN_CITIES", "Amsterdam Diemen,diemen")
 
         cfg = config.load_config()
         tasks = cfg.scrape_tasks_v2()
 
-        assert [t.source for t in tasks] == ["holland2stay", "ourdomain"]
+        assert [t.source for t in tasks] == ["codomo", "ourdomain"]
         assert tasks[0].city_display == "Eindhoven"
-        assert tasks[0].extra["availability_ids"] == ["179", "336"]
+        assert tasks[0].city_key == "29"
         assert tasks[1].city_key == "diemen"
         assert tasks[1].city_display == "Amsterdam Diemen"
 
@@ -76,10 +77,10 @@ class TestScrapeTasksV2:
 
 class TestFatalStructuredConfig:
     @pytest.mark.parametrize("sources,key,raw,match", [
-        ("holland2stay", "CITIES", "Eindhoven,abc", "不是整数"),
-        ("holland2stay", "AVAILABILITY_FILTERS", "Book,abc", "不是整数"),
-        ("holland2stay", "SHARD_SIZES", "xior:abc", "不是整数"),
-        ("holland2stay", "SOURCE_MIN_INTERVALS", "xior:-1", "不能是负数"),
+        ("codomo", "CODOMO_CITIES", "Eindhoven", "缺少逗号或 key"),
+        ("codomo", "CODOMO_CITIES", ",29", "显示名或 key 为空"),
+        ("codomo", "SHARD_SIZES", "xior:abc", "不是整数"),
+        ("codomo", "SOURCE_MIN_INTERVALS", "xior:-1", "不能是负数"),
         ("magis", "MAGIS_CITIES", "Eindhoven", "缺少逗号或 key"),
         ("xior", "XIOR_CITIES", "Eindhoven", "缺少逗号或 key"),
     ])
@@ -104,9 +105,9 @@ class TestFatalStructuredConfig:
 
 class TestNonFatalConfig:
     def test_unknown_platform_warns_and_is_dropped(self, clean_env, caplog):
-        clean_env.setenv("SOURCES", "holland2stay,xiorr")
+        clean_env.setenv("SOURCES", "codomo,xiorr")
         cfg = config.load_config()
-        assert cfg.sources == ["holland2stay"]
+        assert cfg.sources == ["codomo"]
         assert "xiorr" in caplog.text
 
     def test_unknown_target_key_warns_but_is_kept(self, clean_env, caplog):
@@ -117,10 +118,22 @@ class TestNonFatalConfig:
         assert "nowhere" in caplog.text
 
     def test_unknown_city_id_warns_but_is_kept(self, clean_env, caplog):
-        clean_env.setenv("CITIES", "Eindhoven,29|Nowhere,999999")
+        clean_env.setenv("CODOMO_CITIES", "Eindhoven,29|Nowhere,999999")
         cfg = config.load_config()
-        assert {c.name for c in cfg.cities} == {"Eindhoven", "Nowhere"}
+        assert {c.name for c in cfg.codomo_cities} == {"Eindhoven", "Nowhere"}
         assert "999999" in caplog.text
+
+    def test_legacy_cities_key_is_still_read(self, clean_env):
+        """改名前 .env 里的 CITIES 仍要生效，否则升级后悄悄回落到默认城市。"""
+        clean_env.setenv("CITIES", "Amsterdam,24")
+        cfg = config.load_config()
+        assert [(c.name, c.key) for c in cfg.codomo_cities] == [("Amsterdam", "24")]
+
+    def test_new_key_wins_over_legacy_cities(self, clean_env):
+        clean_env.setenv("CITIES", "Amsterdam,24")
+        clean_env.setenv("CODOMO_CITIES", "Delft,26")
+        cfg = config.load_config()
+        assert [c.key for c in cfg.codomo_cities] == ["26"]
 
 
 class TestScalarClamping:

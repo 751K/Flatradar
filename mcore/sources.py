@@ -4,8 +4,7 @@
 抓取器注册表和前端显示名均由它派生。新平台仍须实现 scraper；如果使用新的
 城市配置或过滤维度，也要接入对应的配置解析和过滤规则。
 
-注意：``AUTO_BOOK_SOURCES`` 保持元组顺序，因为用户看到/日志里的顺序曾经
-就是 ("holland2stay", "plaza")。
+``AUTO_BOOK_SOURCES`` 按 SPECS 的登记顺序排列。
 """
 from __future__ import annotations
 
@@ -25,28 +24,22 @@ class SourceSpec:
     proxyless_capable: bool = False
     #: 自动预订流程已端到端验证通过。
     auto_bookable: bool = False
-    #: REST 触发器发现新房时，这个 source 值得单独叫醒一轮。
-    rest_wake: bool = False
 
 
 SPECS: dict[str, SourceSpec] = {
     # auto_bookable 的进组条件是「用真实账号端到端跑通过」：
-    #   holland2stay  2026-05-22 旧流程真实下单成功；当前 /api/booking 路径也已用真实账号验证（见 H2S_BOOKING_OPS.md）
     #   plaza         2026-09-10 真实应征成功（见 docs/PLAZA.md §6）
     #
     # Plaza 另有一道**用户侧开关** auto_book.plaza_enabled，默认关——进了这个
     # 元组不等于对谁都开。理由见 can_auto_book 里的注释。
     #
+    # **Codomo 不在其中**：它的前身 Holland2Stay 的预订流程（GraphQL 下单）随
+    # 2026-11 改名一并失效，新站的预订要登录后才看得到，尚未侦察。
+    #
     # **Xior 先不放进来**：bookers/rentcafe.py 里第 3 步之后的多步表单是没走过
     # 流程硬猜出来的草稿，放开等于拿用户的真实账号去提交半懂不懂的表单。等流程
     # 侦察完并验证过再加。凭据判定（can_auto_book）已经就位，到时只改这里。
-    "holland2stay": SourceSpec(
-        "holland2stay",
-        "Holland2Stay", "H2S", "scrapers.holland2stay:HollandStayScraper",
-        browser_transport=True,
-        auto_bookable=True,
-        rest_wake=True,
-    ),
+    "codomo": SourceSpec("codomo", "Codomo", "CD", "scrapers.codomo:CodomoScraper", proxyless_capable=True),
     "ourdomain": SourceSpec("ourdomain", "OurDomain", "OD", "scrapers.ourdomain:OurDomainScraper", proxyless_capable=True),
     "ourcampus": SourceSpec("ourcampus", "OurCampus", "OC", "scrapers.ourcampus:OurCampusScraper", proxyless_capable=True),
     "xior": SourceSpec("xior", "Xior", "XR", "scrapers.xior:XiorScraper", browser_transport=True),
@@ -62,9 +55,7 @@ def _names(field: str) -> frozenset[str]:
 
 BROWSER_SOURCES = _names("browser_transport")
 PROXYLESS_CAPABLE_SOURCES = _names("proxyless_capable")
-REST_WAKE_SOURCES = _names("rest_wake")
 
-#: 元组顺序保留历史顺序（H2S 在前）。
 AUTO_BOOK_SOURCES: tuple[str, ...] = tuple(
     name for name, spec in SPECS.items() if spec.auto_bookable
 )
@@ -85,10 +76,9 @@ SOURCE_SHORT_NAMES: dict[str, str] = {name: spec.short_name for name, spec in SP
 
 
 def source_short_name(source: Optional[str]) -> str:
-    """平台缩写，给通知和推送标题用。缺省按 H2S（旧数据没有 source 字段）；
-    未登记的平台大写原名返回。"""
-    value = (source or "holland2stay").strip().lower()
-    return SOURCE_SHORT_NAMES.get(value, value.upper() or "H2S")
+    """平台缩写，给通知和推送标题用。未登记的平台大写原名返回。"""
+    value = (source or "").strip().lower()
+    return SOURCE_SHORT_NAMES.get(value, value.upper())
 
 
 def source_display_name(source: str) -> str:
@@ -102,21 +92,16 @@ def source_display_name(source: str) -> str:
 _UNIVERSAL_FILTER_DIMS = frozenset({
     "max_rent", "min_area", "city", "source", "building"})
 _SOURCE_FILTER_DIMS: dict[str, frozenset] = {
-    # tenant 曾在 2026-08-18 被摘出此表：H2S 上线 operation 白名单后我们只能照抄
-    # 它那条 GetCategories，而租客属性不在该查询的字段集里，房源因此不带 Tenant
-    # 标签；而这个维度是 fail-closed 的，缺值即拒绝——留着注册会让勾「仅学生」
-    # 的用户一条 H2S 房源都收不到。
+    # Codomo 的列表卡片直接给出户型、面积、人数、楼层、装修与楼盘，169/169 张
+    # 实测都能解析出（2026-11-16），因此这几个维度登记。徽标（Parking included /
+    # Premium inventory 等）写成 Offer，同样登记。
     #
-    # 2026-08-19 恢复：站点另有一条同样在白名单里的 GetProductDetail，字段集里有
-    # tenant_profile，按需单取即可补齐（scrapers/holland2stay.py 的详情补齐）。
-    # 取值语义从站点详情页正文逐条实测确定，见 _TENANT_PROFILE_LABELS。
-    #
-    # ⚠️ 补齐是**按预算分摊**的（每轮上限 20 条），冷启动后要若干轮才铺满。
-    # 期间未补到的房源没有 Tenant 标签，会被 fail-closed 拒掉——这是有意的取舍：
-    # 宁可少推几条，不可把「不确定能不能租」的房源推给勾了资格限制的用户。
-    "holland2stay": _UNIVERSAL_FILTER_DIMS | {
-        "floor", "occupancy", "type", "neighborhood",
-        "contract", "offer", "finishing", "energy", "tenant",
+    # tenant 不登记：只有部分卡片打「Student only」徽标，「没有徽标」是「不限」
+    # 还是「未标注」没有证据；这个维度 fail-closed，登记了会把其余房源对勾了
+    # 租客条件的用户整体过滤掉——与 magis 同一取舍。徽标仍写进 features。
+    # contract / energy / neighborhood 列表页不给（详情页才有），不登记。
+    "codomo": _UNIVERSAL_FILTER_DIMS | {
+        "floor", "occupancy", "type", "offer", "finishing",
     },
     # finishing 不是抓来的，是 SOURCE_ASSUMED_FEATURES 声明的整栋楼事实。
     # 登记进来之后该维度不再走 fail-open：勾 Unfurnished 时这些房源会被正确排除，
@@ -182,7 +167,7 @@ _SOURCE_FILTER_DIMS: dict[str, frozenset] = {
 #: 「半装修」不算「有家具」，「全装修」也不该被「有家具」顺带收走。想要多档
 #: 就多勾几项，这是白名单本来的用法。
 #:
-#: 其余维度不能这么做：房型在 H2S 写 ``1``、在 OurDomain 写
+#: 其余维度不能这么做：房型在 Codomo 写 ``1``、在 OurDomain 写
 #: ``1-Bedroom Apartment``，要求整体相等会让跨平台的同一户型对不上。
 
 
@@ -199,7 +184,7 @@ def sources_supporting_dim(dim: str) -> list[str]:
 
 #: 平台整体成立、但 feed 里不上报的属性。
 #:
-#: Xior 与 OurDomain 的房源全部带家具（床、桌、椅、衣柜），也就是 H2S 口径下的
+#: Xior 与 OurDomain 的房源全部带家具（床、桌、椅、衣柜），也就是 Codomo 口径下的
 #: ``Furnished``；它们的 feed 只是没有这个字段。此前靠 fail-open 兜底——「平台不
 #: 提供该维度就整体放行」——那条规则不区分用户勾的是哪一档，于是勾
 #: ``Unfurnished`` 时这些房源也会出现，而它们恰恰不是无家具的。
@@ -264,12 +249,12 @@ def source_supports_dim(source: Optional[str], dim: str) -> bool:
 
 
 def filter_dim_sources() -> dict[str, list[str]]:
-    """每个过滤维度实际生效于哪些平台，形如 ``{"contract": ["holland2stay"]}``。
+    """每个过滤维度实际生效于哪些平台，形如 ``{"finishing": ["codomo", "magis"]}``。
 
     为什么要把这张表送到客户端
     --------------------------
     ``_SOURCE_FILTER_DIMS`` 决定的是**沉默的**行为：用户在筛选表单里勾了
-    "Contract: Indefinite"，对 Holland2Stay 生效，对其余六个平台整条跳过
+    "Energy ≥ A"，只对登记了 energy 的平台生效，对其余平台整条跳过
     （fail-open，见 ``_source_supports_dim``）。界面上没有任何地方说过这件事，
     用户会以为自己设了一条全局条件——他设的其实是一条单平台条件。
 
@@ -295,6 +280,6 @@ def _source_supports_dim(source: Optional[str], dim: str) -> bool:
     一律跳过——多平台场景下宁可放行也别误杀；新平台需要更严的过滤时在
     ``_SOURCE_FILTER_DIMS`` 里登记。
     """
-    caps = _SOURCE_FILTER_DIMS.get((source or "holland2stay").strip().lower(),
+    caps = _SOURCE_FILTER_DIMS.get((source or "").strip().lower(),
                                    _UNIVERSAL_FILTER_DIMS)
     return dim in caps

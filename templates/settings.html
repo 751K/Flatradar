@@ -118,19 +118,6 @@
     </div>
     {{ ui.switch('PEAK_WEEKDAYS_ONLY', _('settings_weekdays'), env.get('PEAK_WEEKDAYS_ONLY','true') != 'false', off_value='false') }}
     {{ ui.save_actions() }}
-  {% elif s.key == 'scrape' and row.key == 'h2s_rest' %}
-    {# 判据与 mcore.h2s_rest 一致：1/true/yes/on 算开；工作日默认开 #}
-    {{ ui.switch('H2S_REST_ENABLED', _('settings_h2s_rest_toggle'), (env.get('H2S_REST_ENABLED','') | lower) in ['1','true','yes','on'], off_value='false') }}
-    <div class="account-fields">
-      {{ field(_('settings_h2s_rest_interval'), 'H2S_REST_INTERVAL', '3', min=1, max=60, step=0.5) }}
-      {{ field(_('settings_h2s_rest_home_interval'), 'H2S_REST_HOME_INTERVAL', '0', min=0, max=600, step=1) }}
-    </div>
-    <fieldset class="account-field">
-      <legend>{{ '运行时段（荷兰时间）' if zh else 'Active hours (NL time)' }}</legend>
-      {{ window(none, 'H2S_REST_START', '08:30', 'H2S_REST_END', '17:45') }}
-    </fieldset>
-    {{ ui.switch('H2S_REST_WEEKDAYS_ONLY', _('settings_h2s_rest_weekdays'), (env.get('H2S_REST_WEEKDAYS_ONLY','true') | lower) not in ['0','false','no','off'], off_value='false') }}
-    {{ ui.save_actions() }}
 
   {# ── 平台与城市 ───────────────────────────────────── #}
   {# 平台清单来自 config.KNOWN_SOURCES；写死过三个平台，保存一次就把漏掉的那个删了 #}
@@ -139,8 +126,8 @@
       {% for key, label in source_options %}<label><input type="checkbox" name="source_selected" value="{{ key }}"{% if key in selected_sources %} checked{% endif %}> {{ label }}</label>{% endfor %}
     </div>
     {{ ui.save_actions() }}
-  {% elif s.key == 'platforms' and row.key == 'h2s' %}
-    {{ city_checks('city_selected', known_cities, 'id', selected_city_ids) }}
+  {% elif s.key == 'platforms' and row.key == 'codomo' %}
+    {{ city_checks('codomo_city_selected', known_codomo_cities, 'key', selected_codomo_keys) }}
     {{ ui.save_actions() }}
   {% elif s.key == 'platforms' and row.key == 'ourdomain' %}
     {{ city_checks('ourdomain_city_selected', known_ourdomain_cities, 'key', selected_ourdomain_keys) }}

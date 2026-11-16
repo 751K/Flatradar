@@ -82,21 +82,13 @@ RUNTIME_KEYS: frozenset[str] = frozenset({
     "PEAK_START", "PEAK_END", "PEAK_START_2", "PEAK_END_2",
     "PEAK_WEEKDAYS_ONLY", "JITTER_RATIO",
     "HEARTBEAT_INTERVAL_MINUTES",
-    # 下单常驻浏览器的总开关，默认关（见 mcore/warm_browser.py「为什么默认是关的」）。
-    # 放 RUNTIME 而不是 TUNING：只有 RUNTIME 会被 settings_store.hydrate 从库里注水，
-    # 也就是说只有它能在不重新部署的情况下关掉。一个用来救火的开关，如果关它本身
-    # 要走一次部署，那它在最需要的时候就是没用的。
-    "WARM_BROWSER_LANE",
-    # H2S REST 触发器总开关（默认关）与轮询间隔，见 mcore/h2s_rest.py。放 RUNTIME：
-    # /settings 面板可改、热重载生效；免检路径哪天被收回、或者对方开始限流，
-    # 要能不部署就关掉。HOME_INTERVAL 是自家线路上的间隔（0 = 那时不查）。
-    "H2S_REST_ENABLED", "H2S_REST_INTERVAL",
-    "H2S_REST_START", "H2S_REST_END", "H2S_REST_WEEKDAYS_ONLY", "H2S_REST_HOME_INTERVAL",
     # 监控范围（同样由面板写回）
     "SOURCES", "SHADOW_SOURCES",
-    "CITIES", "OURDOMAIN_CITIES", "OURCAMPUS_CITIES", "XIOR_CITIES",
+    "CODOMO_CITIES", "OURDOMAIN_CITIES", "OURCAMPUS_CITIES", "XIOR_CITIES",
     "MAGIS_CITIES", "STUDENTEXPERIENCE_CITIES", "PLAZA_CITIES",
-    "AVAILABILITY_FILTERS",
+    # CODOMO_CITIES 改名前的键。库里的值由迁移改名；.env 里还写着它时仍会被读
+    # （CODOMO_CITIES 不存在时），见 config._load_targets。
+    "CITIES",
     "SHARD_SIZES", "SOURCE_MIN_INTERVALS", "SOURCE_PEAK_MIN_INTERVALS",
     # 地图显示范围：只保留这么多天内还被抓到过的房源；0 = 不过滤
     "MAP_MAX_AGE_DAYS",
@@ -130,7 +122,7 @@ TUNING_KEYS: frozenset[str] = frozenset({
     "PROXY_ACCOUNT_COOLDOWN_SEC",
     # 状态收敛与预订
     "STALE_RESERVED_HOURS", "STALE_OCCUPIED_HOURS",
-    "BOOKING_STATUS_HOLD_MINUTES", "BOOKING_RESULT_TIMEOUT_SEC", "PREWARM_WORKER_TIMEOUT_SEC",
+    "BOOKING_STATUS_HOLD_MINUTES", "BOOKING_RESULT_TIMEOUT_SEC",
 })
 
 TIERS: dict[str, frozenset[str]] = {
@@ -152,6 +144,11 @@ _EXTERNAL_KEYS: frozenset[str] = frozenset({
 #: 已废弃的键：曾经有效，现在读了也没人用。单独列出来是为了给出**为什么**——
 #: 只说「未知的键」会让人以为是打错了，于是又把它加回去。
 RETIRED_KEYS: dict[str, str] = {
+    **{k: "Holland2Stay 改名 Codomo（2026-11）后旧接口全部失效，这个键随旧 H2S 抓取 / 预订链路一起删除。" for k in (
+        "AVAILABILITY_FILTERS", "WARM_BROWSER_LANE", "PREWARM_WORKER_TIMEOUT_SEC",
+        "H2S_REST_ENABLED", "H2S_REST_INTERVAL", "H2S_REST_START", "H2S_REST_END",
+        "H2S_REST_WEEKDAYS_ONLY", "H2S_REST_HOME_INTERVAL",
+    )},
     "NOTIFICATIONS_ENABLED": (
         "这是用户级开关，早已随通知设置一起迁到 SQLite user_configs；"
         ".env 里的同名键从未被读取。同名字符串在代码里只作为 HTML 表单字段名出现。"

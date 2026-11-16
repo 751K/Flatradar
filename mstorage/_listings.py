@@ -62,8 +62,9 @@ _CITY_EXPR_L = "COALESCE(NULLIF(l.city_normalized,''), l.city)"
 # ── 粘性 feature ────────────────────────────────────────────────────
 #
 # 有些 feature 不是列表抓取产出的，而是**另发一次详情请求**补齐的
-# （scrapers/holland2stay.py 的详情补齐：Building / Tenant / Neighborhood /
-# MinIncome，来自 GetProductDetail —— 白名单主查询的字段集里没有它们）。
+# （旧 H2S 抓取器的详情补齐：Building / Tenant / Neighborhood / MinIncome，
+# 来自 GetProductDetail；该抓取器已随 2026-11 改名 Codomo 删除，但库里那批值
+# 仍要靠这里保住）。
 #
 # 补齐是按预算 + 限速跨轮渐进的，还会因 429 中断，进程重启后缓存也清零。
 # 于是同一条房源在「补到了」和「还没补到」之间来回：而 diff() 每轮整体覆盖
@@ -119,7 +120,7 @@ def _sticky_available_from(fresh: "str | None", old: "str | None") -> "str | Non
     为什么需要
     ----------
     H2S 的房源在「可订」阶段有真实的 available_from，一旦转成 Reserved，上游
-    的 next_contract_startdate 就变成 2050-01-01 哨兵——scrapers/holland2stay.py
+    的 next_contract_startdate 就变成 2050-01-01 哨兵——旧 H2S 抓取器
     认出哨兵后返回 None，而这里原来是无条件写回库，于是那个真日期被 None 冲掉，
     界面上只剩一个「—」。
 
@@ -318,9 +319,7 @@ class ListingOps:
                 area_value, energy_rank_value = derived_from_features(features_json)
 
                 if old_status is None:
-                    # P0: 写入 source 字段。老的 INSERT 不传 source 时
-                    # 走 schema 默认值 'holland2stay'，但 Listing.source 已
-                    # 在 scrapers 层强制赋值，这里直接传，更显式。
+                    # source 由 scrapers 层强制赋值，这里显式写入。
                     cur.execute(
                         """INSERT INTO listings
                            (id, name, status, price_raw, available_from,
@@ -441,7 +440,7 @@ class ListingOps:
             return False
         # status_hold_until 只适用于真实占房/订单窗口。Plaza 的「成功」只是
         # 应征成功，平台还没有把房源分配给用户；旧的误标不能继续压住它。
-        source = (old_row.get("source") or "holland2stay").strip().lower()
+        source = (old_row.get("source") or "").strip().lower()
         if source not in BOOKING_HOLD_SOURCES:
             return False
         if old_row.get("status") != "Reserved":
@@ -466,7 +465,7 @@ class ListingOps:
                 "SELECT source FROM listings WHERE id=?",
                 (listing_id,),
             ).fetchone()
-            source = ((row["source"] if row else "") or "holland2stay").strip().lower()
+            source = ((row["source"] if row else "") or "").strip().lower()
             if source not in BOOKING_HOLD_SOURCES:
                 return False
             cur = self._conn.execute(

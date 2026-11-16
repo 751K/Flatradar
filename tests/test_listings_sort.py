@@ -21,7 +21,7 @@ from app.services.listing_service import (
 
 def _row(rid, *, price="€1000", first_seen="2026-01-01", last_seen="2026-01-01",
          available_from="2026-06-01", city="Eindhoven", status="Available to book",
-         source="holland2stay"):
+         source="codomo"):
     return {"id": rid, "price_raw": price, "first_seen": first_seen,
             "last_seen": last_seen, "available_from": available_from,
             "city": city, "status": status, "source": source}

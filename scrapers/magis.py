@@ -26,7 +26,7 @@ string，置 0 之后连 ``Not available`` 的单元一起返回（2026-09-01 �
 ------------------
 卡片同时给出基础租金和**服务费的确切金额**（"service costs, furniture,
 utilities, internet & TV amount to € 121,51 per month"，12 条实测全都有）。因此
-``price_raw`` 直接报两者之和，与 Holland2Stay / Xior 同一口径，而不是像
+``price_raw`` 直接报两者之和，与 Codomo / Xior 同一口径，而不是像
 OurDomain / OurCampus 那样只能标注——它们拿不到单元的户型，服务费按户型变，无法
 合成（见 models.rent_basis_note）。
 
@@ -46,7 +46,7 @@ OurDomain / OurCampus 那样只能标注——它们拿不到单元的户型，�
 占 9 栋（Aalsterweg×2 / Boschdijk / Driek / The General / Kloosterdreef /
 Montgomerylaan / Woenselse Markt / Zernikestraat），正好是本项目的主力城市。
 
-量级远小于 H2S，接入赌的是这 17 栋楼的换手率。评估见 ``docs/SCRAPING_RECON.md``。
+量级远小于 Codomo，接入赌的是这 17 栋楼的换手率。评估见 ``docs/SCRAPING_RECON.md``。
 
 不做自动预订
 ------------
@@ -188,7 +188,7 @@ def _parse_card(url: str, building: str, unit: str, segment: str) -> Optional[Li
     """一张卡片 → Listing；认不出关键字段时返回 None。
 
     「关键」只有状态和价格两项：没有状态就无法判断它是不是新上架，没有价格就会被
-    所有带租金上限的筛选整体漏掉（与 H2S 的处理一致）。其余字段缺了就不写，让
+    所有带租金上限的筛选整体漏掉（与 Codomo 的处理一致）。其余字段缺了就不写，让
     对应维度的筛选按各自的 fail-open/closed 规则处理。
     """
     lines = _card_lines(segment)

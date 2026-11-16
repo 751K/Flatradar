@@ -100,7 +100,7 @@
 
       <section class="mail-detail-section"><h3>{{ '自动预订' if lang == 'zh' else 'Auto-booking' }}</h3><dl>
         <div><dt>{{ '状态' if lang == 'zh' else 'Status' }}</dt><dd>{% if user.auto_book.enabled %}{{ _('badge_dry_run') if user.auto_book.dry_run else _('users_auto_on') }}{% else %}{{ _('users_auto_off') }}{% endif %}</dd></div>
-        {% if user.auto_book.email %}<div><dt>Holland2Stay</dt><dd>{{ user.auto_book.email }}</dd></div>{% endif %}
+        {% if user.auto_book.plaza_username %}<div><dt>Plaza</dt><dd>{{ user.auto_book.plaza_username }}</dd></div>{% endif %}
       </dl></section>
 
       <div class="account-panel-actions">

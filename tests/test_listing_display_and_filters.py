@@ -27,7 +27,7 @@ from models import Listing
 from mstorage import Storage
 
 
-def _row(lid: str, source: str = "holland2stay", **features) -> dict:
+def _row(lid: str, source: str = "codomo", **features) -> dict:
     return {
         "id": lid, "name": lid, "status": "Available to book",
         "price_raw": "€1000", "available_from": "", "url": "",
@@ -60,7 +60,7 @@ class TestFeatureContainsSharesTheJudgement:
                                 "Type", "Loft (open bedroom area)")
 
     def test_cross_platform_type_wording_still_matches(self):
-        """房型在 H2S 写 1、在 OurDomain 写 1-Bedroom Apartment，不能整体相等。"""
+        """房型在 Codomo 写 1、在 OurDomain 写 1-Bedroom Apartment，不能整体相等。"""
         assert feature_contains(_row("a", Type="1-Bedroom Apartment"), "Type", "1")
 
     def test_unknown_category_falls_back_to_word_boundary(self):
@@ -80,7 +80,7 @@ class TestFinishingIsMultiSelect:
         st.diff([
             Listing(id=f"L{i}", name=f"L{i}", status="Available to book",
                     price_raw="1000", available_from="", url="",
-                    city="Eindhoven", source="holland2stay",
+                    city="Eindhoven", source="codomo",
                     features=[f"Finishing: {v}"])
             for i, v in enumerate(
                 ["Unfurnished", "Semi furnished", "Furnished", "Fully furnished",
@@ -130,12 +130,12 @@ class TestBrowsePageAgreesWithNotifications:
 
         st = Storage(tmp_path / "listings.db")
         st.diff([
-            Listing(id="H_furn", name="h", status="Available to book",
+            Listing(id="C_furn", name="h", status="Available to book",
                     price_raw="1000", available_from="", url="", city="Eindhoven",
-                    source="holland2stay", features=["Finishing: Furnished"]),
-            Listing(id="H_unfurn", name="h", status="Available to book",
+                    source="codomo", features=["Finishing: Furnished"]),
+            Listing(id="C_unfurn", name="h", status="Available to book",
                     price_raw="1000", available_from="", url="", city="Eindhoven",
-                    source="holland2stay", features=["Finishing: Unfurnished"]),
+                    source="codomo", features=["Finishing: Unfurnished"]),
             # OurDomain 的装修档位由 SOURCE_ASSUMED_FEATURES 声明；Xior 的按楼
             # 登记（见 tests/test_xior_furnishing.py），这里照生产的路子构造，
             # 否则测的是生产中不存在的形态。合同 / 租客 / 能耗仍是它们真正没有
@@ -160,14 +160,14 @@ class TestBrowsePageAgreesWithNotifications:
         yield
 
     def test_unsupported_platforms_pass_through(self, db):
-        # 合同是 H2S 独有；装修不能再拿来举例——Xior / OurDomain 现在有声明值。
+        # 合同眼下没有平台登记；装修不能再拿来举例——Xior / OurDomain 现在有声明值。
         ids = {r["id"] for r in query_listing_rows(contract="Indefinite")}
         assert {"X1", "O1"} <= ids, \
             "Xior / OurDomain 因为 feed 里没这个字段被整个排除了"
 
     def test_supported_platform_is_still_filtered(self, db):
         ids = {r["id"] for r in query_listing_rows(finishing=["Furnished"])}
-        assert "H_unfurn" not in ids, "支持该维度的平台不该放宽"
+        assert "C_unfurn" not in ids, "支持该维度的平台不该放宽"
 
     def test_declared_platforms_land_in_the_right_tier(self, db):
         """有档位的平台各归各档；装修是精确匹配，档与档之间不互相命中。"""
@@ -205,7 +205,7 @@ class TestBrowsePageAgreesWithNotifications:
         ids = {r["id"] for r in query_listing_rows(types=["Studio"])}
         assert "O1" in ids, "OurDomain 有房型，Studio 应命中"
         assert "X1" in ids, "Xior 不提供房型，该条件对它应跳过"
-        assert "H_furn" not in ids, "H2S 提供房型但这条没有 Studio"
+        assert "C_furn" not in ids, "Codomo 提供房型但这条没有 Studio"
 
 
 class TestDisplayNormalization:
@@ -243,11 +243,11 @@ class TestDisplayNormalization:
         assert row["features"] == original, "归一只该作用在展示副本上"
 
     def test_malformed_features_survive(self):
-        row = {"id": "a", "features": "not json", "source": "holland2stay"}
+        row = {"id": "a", "features": "not json", "source": "codomo"}
         assert normalize_listing_row(row)["features"] in ("not json", "[]")
 
     def test_items_without_a_category_pass_through(self):
-        row = {"id": "a", "source": "holland2stay",
+        row = {"id": "a", "source": "codomo",
                "features": json.dumps(["裸字符串", "Occupancy: Twee personen"])}
         feats = json.loads(normalize_listing_row(row)["features"])
         assert feats[0] == "裸字符串"

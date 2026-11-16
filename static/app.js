@@ -1,5 +1,5 @@
 /* ===================================================================
-   Holland2Stay — Frontend JS
+   FlatRadar — Frontend JS
    =================================================================== */
 
 // Theme: applyTheme() / toggleTheme() live in templates/_theme_head.html,
@@ -512,7 +512,7 @@ document.addEventListener('DOMContentLoaded', function() {
 window.SOURCE_LABELS = window.SOURCE_LABELS || {};
 
 /** 平台全名。认不出的 key 首字母大写后返回，而不是硬套一个默认平台名——
- *  把未知 source 显示成 "Holland2Stay" 会让人以为数据是那边来的。 */
+ *  把未知 source 显示成某个已知平台名会让人以为数据是那边来的。 */
 window.sourceLabel = function (source) {
   var key = String(source || '').toLowerCase();
   if (window.SOURCE_LABELS[key]) return window.SOURCE_LABELS[key];

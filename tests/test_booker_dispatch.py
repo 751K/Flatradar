@@ -3,12 +3,12 @@ bookers/__init__.py 的 dispatcher 单元测试
 ==========================================
 
 覆盖三种路径：
-1. listing.source="holland2stay" → 路由到 HollandStayBooker（验证转发）
+1. listing.source="plaza" → 路由到 PlazaBooker（验证转发）
 2. listing.source="xior"/"ourdomain" → 路由到 RENTCafe booker
 3. listing.source="unknown_xxx" → 返回 phase="unsupported"
 
 以及 mcore.booking.book_with_fallback 过滤候选的回归保护：
-- 混合 source 列表：H2S + 未知 source 候选混着进，未知 source 应被过滤、
+- 混合 source 列表：Plaza + 未知 source 候选混着进，未知 source 应被过滤、
   不会触发任何 dispatch（重要：避免对不支持平台产生"预订失败"误报）
 """
 from __future__ import annotations
@@ -20,12 +20,12 @@ from bookers import (
     AbstractBooker,
     BOOKER_REGISTRY,
     BookingRequest,
-    HollandStayBooker,
+    PlazaBooker,
     dispatch_book,
     get_booker,
     supports_booking,
 )
-from bookers.h2s_checkout import BookingResult as RawBookingResult
+from bookers.base import BookingResult as RawBookingResult
 from mcore.booking import book_with_fallback
 from models import Listing
 from users import AutoBookConfig, UserConfig
@@ -36,7 +36,7 @@ from users import AutoBookConfig, UserConfig
 # ──────────────────────────────────────────────────────────────────
 
 
-def _make_listing(lid: str, source: str = "holland2stay") -> Listing:
+def _make_listing(lid: str, source: str = "plaza") -> Listing:
     return Listing(
         id=lid,
         name=f"unit {lid}",
@@ -54,7 +54,7 @@ def _make_user() -> UserConfig:
     return UserConfig(
         name="alice", id="a1a1a1a1",
         auto_book=AutoBookConfig(
-            enabled=True, email="alice@example.com", password="pw",
+            enabled=True, plaza_username="alice", plaza_password="pw",
         ),
     )
 
@@ -65,9 +65,14 @@ def _make_user() -> UserConfig:
 
 
 class TestRegistry:
-    def test_h2s_registered(self):
-        assert "holland2stay" in BOOKER_REGISTRY
-        assert BOOKER_REGISTRY["holland2stay"] is HollandStayBooker
+    def test_plaza_registered(self):
+        assert "plaza" in BOOKER_REGISTRY
+        assert BOOKER_REGISTRY["plaza"] is PlazaBooker
+
+    def test_codomo_has_no_booker(self):
+        """Codomo（原 Holland2Stay）改版后旧下单接口已失效，不应注册 booker。"""
+        assert "codomo" not in BOOKER_REGISTRY
+        assert "holland2stay" not in BOOKER_REGISTRY
 
     def test_xior_and_ourdomain_registered(self):
         assert "xior" in BOOKER_REGISTRY
@@ -76,9 +81,9 @@ class TestRegistry:
         assert BOOKER_REGISTRY["xior"] is XiorBooker
         assert BOOKER_REGISTRY["ourdomain"] is OurDomainBooker
 
-    def test_get_booker_h2s_returns_instance(self):
-        booker = get_booker("holland2stay")
-        assert isinstance(booker, HollandStayBooker)
+    def test_get_booker_plaza_returns_instance(self):
+        booker = get_booker("plaza")
+        assert isinstance(booker, PlazaBooker)
         assert isinstance(booker, AbstractBooker)
 
     def test_get_booker_unregistered_returns_none(self):
@@ -86,7 +91,8 @@ class TestRegistry:
         assert get_booker("") is None
 
     def test_supports_booking(self):
-        assert supports_booking("holland2stay") is True
+        assert supports_booking("plaza") is True
+        assert supports_booking("codomo") is False
         assert supports_booking("xior") is True
         assert supports_booking("ourdomain") is True
         assert supports_booking("") is False
@@ -99,21 +105,19 @@ class TestRegistry:
 
 
 class TestDispatchBook:
-    def test_h2s_listing_calls_holland2stay_booker(self):
-        listing = _make_listing("h2s-1", source="holland2stay")
+    def test_plaza_listing_calls_plaza_booker(self):
+        listing = _make_listing("pz-1", source="plaza")
         user = _make_user()
         expected = RawBookingResult(listing, success=True, message="ok",
                                     pay_url="http://pay", phase="success")
-        with patch("bookers.holland2stay.try_book", return_value=expected) as mock:
+        with patch("bookers.plaza.PlazaBooker.book", return_value=expected) as mock:
             result = dispatch_book(
                 BookingRequest(listing=listing, user=user, dry_run=False)
             )
-        # try_book 真的被叫了，且参数是 H2S 专属字段
         mock.assert_called_once()
-        args, kwargs = mock.call_args
-        assert args[0] is listing
-        assert kwargs["dry_run"] is False
-        assert "payment_method" in kwargs
+        (request,), _ = mock.call_args
+        assert request.listing is listing
+        assert request.dry_run is False
         # 返回值完整透传
         assert result is expected
         assert result.phase == "success"
@@ -167,99 +171,48 @@ class TestBookWithFallbackFiltering:
             _make_listing("xx-2", source="pararius"),
         ]
         user = _make_user()
-        with patch("bookers.holland2stay.try_book") as mock:
+        with patch("bookers.plaza.PlazaBooker.book") as mock:
             result = book_with_fallback(candidates, user, deadline=float("inf"))
         mock.assert_not_called()
         assert result is None
 
     def test_mixed_supported_and_unsupported(self):
-        """H2S + 未知 source 混合：未知 source 跳过，H2S 候选正常尝试。"""
-        h2s_1 = _make_listing("h2s-1", source="holland2stay")
+        """Plaza + 未知 source 混合：未知 source 跳过，Plaza 候选正常尝试。"""
+        pz_1 = _make_listing("pz-1", source="plaza")
         xx_1 = _make_listing("xx-1", source="pararius")
-        h2s_2 = _make_listing("h2s-2", source="holland2stay")
-        candidates = [h2s_1, xx_1, h2s_2]
+        pz_2 = _make_listing("pz-2", source="plaza")
+        candidates = [pz_1, xx_1, pz_2]
         user = _make_user()
 
         call_listings = []
-        def fake_try(listing, *a, **k):
-            call_listings.append(listing)
-            return RawBookingResult(listing, success=True, message="ok", phase="success")
+        def fake_book(request):
+            call_listings.append(request.listing)
+            return RawBookingResult(request.listing, success=True, message="ok", phase="success")
 
-        with patch("bookers.holland2stay.try_book", side_effect=fake_try):
+        with patch("bookers.plaza.PlazaBooker.book", side_effect=fake_book):
             result = book_with_fallback(candidates, user, deadline=float("inf"))
 
         assert len(call_listings) == 1
-        assert call_listings[0] is h2s_1
+        assert call_listings[0] is pz_1
         assert result.success is True
 
-    def test_mixed_h2s_race_lost_skips_unsupported(self):
-        """h2s_1 race_lost → 跳过未知 source → 试 h2s_2。"""
-        h2s_1 = _make_listing("h2s-1", source="holland2stay")
+    def test_mixed_race_lost_skips_unsupported(self):
+        """pz_1 race_lost → 跳过未知 source → 试 pz_2。"""
+        pz_1 = _make_listing("pz-1", source="plaza")
         xx_1 = _make_listing("xx-1", source="pararius")
-        h2s_2 = _make_listing("h2s-2", source="holland2stay")
-        candidates = [h2s_1, xx_1, h2s_2]
+        pz_2 = _make_listing("pz-2", source="plaza")
+        candidates = [pz_1, xx_1, pz_2]
         user = _make_user()
 
         call_count = [0]
-        def fake_try(listing, *a, **k):
+        def fake_book(request):
             call_count[0] += 1
             if call_count[0] == 1:
-                return RawBookingResult(listing, success=False, message="raced", phase="race_lost")
-            return RawBookingResult(listing, success=True, message="ok", phase="success")
+                return RawBookingResult(request.listing, success=False, message="raced", phase="race_lost")
+            return RawBookingResult(request.listing, success=True, message="ok", phase="success")
 
-        with patch("bookers.holland2stay.try_book", side_effect=fake_try):
+        with patch("bookers.plaza.PlazaBooker.book", side_effect=fake_book):
             result = book_with_fallback(candidates, user, deadline=float("inf"))
 
         assert call_count[0] == 2
         assert result.success is True
-
-
-# ──────────────────────────────────────────────────────────────────
-# HollandStayBooker 转发契约
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestHollandStayBookerForwarding:
-    def test_forwards_user_auto_book_fields(self):
-        listing = _make_listing("h2s-99")
-        user = UserConfig(
-            name="b", id="b1b1b1b1",
-            auto_book=AutoBookConfig(
-                enabled=True, email="b@b.com", password="bpw",
-                payment_method="custom_method",
-                dry_run=False,
-            ),
-        )
-        booker = HollandStayBooker()
-        with patch("bookers.holland2stay.try_book") as mock:
-            mock.return_value = RawBookingResult(listing, success=True, message="ok",
-                                                 phase="success")
-            booker.book(BookingRequest(listing=listing, user=user, dry_run=False))
-
-        args, kwargs = mock.call_args
-        assert args[0] is listing
-        assert args[1] == "b@b.com"
-        assert args[2] == "bpw"
-        assert kwargs["dry_run"] is False
-        assert kwargs["payment_method"] == "custom_method"
-
-    def test_request_dry_run_is_authoritative(self):
-        """BookingRequest.dry_run 是权威值——HollandStayBooker 不再叠加
-        user.auto_book.dry_run。调用方 (book_with_fallback) 已经把 user 设置
-        合并好了，避免"打开 dry_run 后无法关掉"。"""
-        listing = _make_listing("h2s-100")
-        user = UserConfig(
-            name="c", id="c1c1c1c1",
-            auto_book=AutoBookConfig(enabled=True, email="c@c.com", password="cpw",
-                                     dry_run=True),
-        )
-        # user.dry_run=True 但 request.dry_run=False → 最终走非 dry_run
-        # (实际生产中 book_with_fallback 会先合并 user 设置，但 booker 本身只看 request)
-        with patch("bookers.holland2stay.try_book") as mock:
-            mock.return_value = RawBookingResult(listing, success=True, message="ok",
-                                                 phase="success")
-            HollandStayBooker().book(
-                BookingRequest(listing=listing, user=user, dry_run=False)
-            )
-        _, kwargs = mock.call_args
-        assert kwargs["dry_run"] is False

@@ -16,7 +16,7 @@ import threading
 from multiprocessing.connection import Connection
 
 from scrapers.base import (
-    BlockedError, OperationNotAllowedError, ProxyError, RateLimitError,
+    BlockedError, ProxyError, RateLimitError,
     ScrapeNetworkError, UpstreamMaintenanceError,
 )
 
@@ -36,7 +36,7 @@ def _browser_launch_settings(env):
 
 
 _ERROR_TYPES = {cls.__name__: cls for cls in (
-    BlockedError, OperationNotAllowedError, ProxyError, RateLimitError,
+    BlockedError, ProxyError, RateLimitError,
     ScrapeNetworkError, UpstreamMaintenanceError,
 )}
 
@@ -90,7 +90,6 @@ def _serve(conn: Connection, source: str) -> None:
 
     import config
     import scrapers
-    import scrapers.holland2stay as h2s
     import scrapers.xior as xior
 
     def proxy_from_parent(source_name="", *, rotating=False):
@@ -114,20 +113,18 @@ def _serve(conn: Connection, source: str) -> None:
             break
         if request[0] == "stop":
             break
-        _, tasks, multi_source, env, detail_cache = request
+        _, tasks, multi_source, env = request
         os.environ.clear()
         os.environ.update(env)
         from settings_store import _round_snapshot, snapshot_from_environment
         snapshot = snapshot_from_environment(env)
         _round_snapshot.set(snapshot)
         logger.info("浏览器工作进程 %s 配置版本: %s", source, snapshot.version)
-        if source == "holland2stay":
-            h2s.prime_detail_cache(detail_cache)
         try:
             result = scrapers.dispatch_scrape_tasks(tasks, multi_source=multi_source)
-            response = ("result", result, h2s._DETAIL_CACHE if source == "holland2stay" else None)
+            response = ("result", result)
         except Exception as exc:
-            response = ("error", _exception_chain(exc), h2s._DETAIL_CACHE if source == "holland2stay" else None)
+            response = ("error", _exception_chain(exc))
         try:
             with send_lock:
                 conn.send(response)
@@ -292,7 +289,6 @@ class BrowserWorker:
 
     def _execute_locked(self, tasks, *, multi_source: bool, timeout: float):
         from config import get_proxy_url
-        import scrapers.holland2stay as h2s
 
         from settings_store import runtime_environment
         env = runtime_environment()
@@ -311,11 +307,8 @@ class BrowserWorker:
             if not self._ready:
                 self._receive(conn, deadline, get_proxy_url, expect="ready")
                 self._ready = True
-            conn.send(("scrape", tasks, multi_source, env,
-                       dict(h2s._DETAIL_CACHE) if self.source == "holland2stay" else {}))
-            kind, value, detail = self._receive(conn, deadline, get_proxy_url, expect="result")
-            if detail is not None:
-                h2s.prime_detail_cache(detail)
+            conn.send(("scrape", tasks, multi_source, env))
+            kind, value = self._receive(conn, deadline, get_proxy_url, expect="result")
             if kind == "error":
                 raise _restore_exception(value)
             return value

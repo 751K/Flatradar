@@ -33,7 +33,7 @@ def _feats(area=None, energy=None, extra=()):
 def _listing(lid, *, area=None, energy=None, status="Available to book"):
     return Listing(id=lid, name=f"L {lid}", status=status, price_raw="€1000",
                    available_from="2030-01-01", features=_feats(area, energy),
-                   url=f"http://x/{lid}", city="Eindhoven", source="holland2stay")
+                   url=f"http://x/{lid}", city="Eindhoven", source="codomo")
 
 
 class TestDeriving:

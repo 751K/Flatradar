@@ -242,25 +242,6 @@ class TestAlertActuallyComesOut:
         monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
         monkeypatch.setattr(monitor, "get_interval", lambda cfg: (300, False))
 
-        # main_loop 会在后台起 REST 触发器，它每个 tick 之后 asyncio.sleep。上面
-        # 把 sleep 换成了不让出控制权的空函数，触发器就会空转、把事件循环饿死。
-        class _IdleTrigger:
-            def __init__(self, wake):
-                pass
-
-            async def run(self, get_cfg):
-                await asyncio.Event().wait()
-
-            def begin_round(self):
-                return []
-
-            def end_round(self, *a, **kw):
-                pass
-
-            def has_due(self):
-                return False
-
-        monkeypatch.setattr(monitor, "RestTrigger", _IdleTrigger)
         # 成功那一轮会走到轮末的等待循环，它按真实时钟等 effective_interval。
         # 抖动函数归零 → deadline 立刻到期 → 直接进下一轮，测试不用真等 5 分钟。
         monkeypatch.setattr(monitor, "apply_jitter", lambda value, ratio: 0.0)
@@ -269,7 +250,7 @@ class TestAlertActuallyComesOut:
             check_interval=300, min_interval=60, peak_interval=120,
             peak_start="08:00", peak_end="10:00",
             peak_start_2="18:00", peak_end_2="20:00",
-            cities=[], jitter_ratio=0.0,
+            monitored_city_names=lambda: [], jitter_ratio=0.0,
             heartbeat_interval_minutes=0,  # 关掉心跳，它不是本文件要测的东西
         )
 
@@ -288,7 +269,7 @@ class TestAlertActuallyComesOut:
                     raise _Stop
                 if remaining.pop(0) == "fail":
                     raise ScrapeNetworkError(
-                        "Holland2Stay 主站加载失败（流量配额耗尽或账户欠费）: "
+                        "Xior 主站加载失败（流量配额耗尽或账户欠费）: "
                         "net::ERR_TUNNEL_CONNECTION_FAILED"
                     )
                 return {}

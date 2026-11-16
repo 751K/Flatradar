@@ -13,7 +13,7 @@ def _listing(lid, status="Available in lottery"):
     return Listing(
         id=lid, name=f"House {lid}", status=status, price_raw="€900",
         available_from="2030-01-01", features=[], url=f"https://example.com/{lid}",
-        city="Eindhoven", source="holland2stay",
+        city="Eindhoven", source="codomo",
     )
 
 

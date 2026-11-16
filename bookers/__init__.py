@@ -12,7 +12,7 @@ bookers — 多源自动下单层
 ===============  ===================  ==================  =========================
 source           scraper              booker              状态
 ===============  ===================  ==================  =========================
-holland2stay     HollandStayScraper   HollandStayBooker   完整自动 checkout，**已开**
+codomo           CodomoScraper        （无）              品牌迁移后旧下单接口已失效
 xior             XiorScraper          XiorBooker          半自动到「存草稿」，未开
 ourdomain        OurDomainScraper     OurDomainBooker     半自动到「存草稿」，未开
 plaza            PlazaScraper         PlazaBooker         已开，用户侧默认关
@@ -60,14 +60,12 @@ from __future__ import annotations
 from typing import Optional
 
 from .base import AbstractBooker, BookingRequest, BookingResult
-from .holland2stay import HollandStayBooker
 from .plaza import PlazaBooker
 from .rentcafe import XiorBooker, OurCampusBooker, OurDomainBooker
 
 
 BOOKER_REGISTRY: dict[str, type[AbstractBooker]] = {
     cls.source: cls for cls in [
-        HollandStayBooker,
         XiorBooker,
         OurDomainBooker,
         OurCampusBooker,
@@ -114,7 +112,6 @@ __all__ = [
     "BOOKER_REGISTRY",
     "BookingRequest",
     "BookingResult",
-    "HollandStayBooker",
     "PlazaBooker",
     "dispatch_book",
     "get_booker",

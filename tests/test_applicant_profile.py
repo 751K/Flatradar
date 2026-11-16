@@ -336,8 +336,7 @@ class TestNoFieldSilentlyDropped:
 
         probe = {
             "enabled": True, "dry_run": False,
-            "email": "h@x.com", "password": "pw-h",
-            "payment_method": "idealcheckout_visa",
+            "plaza_username": "pz", "plaza_password": "pw-p", "plaza_enabled": True,
             "xior_email": "x@x.com", "xior_password": "pw-x",
             "ourdomain_email": "o@x.com", "ourdomain_password": "pw-o",
             "screening_consent_at": "2026-08-03T19:00:00+00:00",

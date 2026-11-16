@@ -16,9 +16,12 @@ webshare 两个账号（``qrrsiysu-nl-222900`` / ``fdtlrlbo-nl-790346``）同时
    ``{"http":"","https":""}`` → 200，``{}`` → 402。同一个坑 ``net.py`` 的模块
    注释里已经写过一次（2026-08-24），当时只修了非抓取路径。
 
-第三件事是分级：H2S / Xior 在机房 IP 上被 Cloudflare 硬挡（实测挑战 90 秒
-未解开 ×3），它们的必然失败会让 ``dispatch_scrape_tasks`` 判定「全员失败」，
-把同一轮里本来能成的 OurDomain / OurCampus 一起掀掉。
+第三件事是分级：Xior（以及当时的 Holland2Stay）在机房 IP 上被 Cloudflare 硬挡
+（实测挑战 90 秒未解开 ×3），它们的必然失败会让 ``dispatch_scrape_tasks`` 判定
+「全员失败」，把同一轮里本来能成的 OurDomain / OurCampus 一起掀掉。
+
+2026-11-16 Holland2Stay 改名 Codomo，新站是纯 HTTP 列表页，在服务器原生 IP 上
+直连实测没遇到 WAF，因此进了直连名单。
 """
 from __future__ import annotations
 
@@ -50,32 +53,36 @@ def healthy(monkeypatch):
 class TestProxylessGate:
     def test_no_gate_while_proxy_is_healthy(self, healthy):
         """代理正常时这道闸门必须完全透明，一个任务都不能少。"""
-        tasks = [_T("holland2stay"), _T("xior"), _T("ourdomain")]
+        tasks = [_T("codomo"), _T("xior"), _T("ourdomain")]
         assert _apply_proxyless_gate(tasks) == tasks
 
     def test_drops_only_what_cannot_work_direct(self, degraded):
-        tasks = [_T("holland2stay"), _T("xior"), _T("ourdomain"), _T("ourcampus")]
+        tasks = [_T("codomo"), _T("xior"), _T("ourdomain"), _T("ourcampus")]
         kept = _apply_proxyless_gate(tasks)
-        assert {t.source for t in kept} == {"ourdomain", "ourcampus"}
+        assert {t.source for t in kept} == {"codomo", "ourdomain", "ourcampus"}
 
     def test_the_survivors_are_the_measured_ones(self):
-        """名单是 2026-08-26 在服务器上实测出来的，不是猜的。
+        """名单是在服务器上实测出来的，不是猜的。
 
-        改这张表意味着推翻那次测量——真要改，先重测一遍。
+        OurDomain / OurCampus 于 2026-08-26 实测；Codomo 于 2026-11-16 实测
+        （纯 HTTP，原生 IP 直连没遇到 WAF）。改这张表意味着推翻那次测量——
+        真要改，先重测一遍。
         """
-        assert _PROXYLESS_CAPABLE_SOURCES == frozenset({"ourdomain", "ourcampus"})
+        assert _PROXYLESS_CAPABLE_SOURCES == frozenset(
+            {"codomo", "ourdomain", "ourcampus"})
 
-    def test_h2s_and_xior_are_not_in_it(self):
-        """两家都被 CF 硬挡（挑战 90 秒未解开 ×3），放进来等于每轮制造必然失败。"""
-        assert "holland2stay" not in _PROXYLESS_CAPABLE_SOURCES
+    def test_xior_is_not_in_it_but_codomo_is(self):
+        """Xior 被 CF 硬挡（挑战 90 秒未解开 ×3），放进来等于每轮制造必然失败。
+        Codomo 在服务器原生 IP 上直连实测可用。"""
         assert "xior" not in _PROXYLESS_CAPABLE_SOURCES
+        assert "codomo" in _PROXYLESS_CAPABLE_SOURCES
 
     def test_all_dropped_yields_empty_not_original(self, degraded):
         """一个都不剩时要返回空，不能「保险起见」把原列表退回去。
 
         退回去就等于闸门不存在，正是 08-26 那五轮的行为。
         """
-        assert _apply_proxyless_gate([_T("holland2stay"), _T("xior")]) == []
+        assert _apply_proxyless_gate([_T("xior"), _T("magis")]) == []
 
     def test_unknown_source_is_dropped(self, degraded):
         """没登记过的 source 按打不通处理——没量过就不该假设它能直连。"""
@@ -87,15 +94,15 @@ class TestProxylessGate:
             raise RuntimeError("meta 读失败")
         monkeypatch.setattr(
             "config.is_proxy_native_fallback_active", _boom, raising=False)
-        tasks = [_T("holland2stay")]
+        tasks = [_T("codomo")]
         assert _apply_proxyless_gate(tasks) == tasks
 
     def test_logs_what_it_dropped(self, degraded, caplog):
         import logging
         with caplog.at_level(logging.WARNING, logger="monitor"):
-            _apply_proxyless_gate([_T("holland2stay"), _T("ourdomain")])
+            _apply_proxyless_gate([_T("xior"), _T("ourdomain")])
         msgs = " ".join(r.getMessage() for r in caplog.records)
-        assert "holland2stay" in msgs
+        assert "xior" in msgs
         assert "ourdomain" in msgs, "没说清楚还有谁在抓"
 
     def test_gate_runs_before_sharding(self):
@@ -110,7 +117,8 @@ class TestCurlDoesNotFallBackToEnv:
     """``proxies={}`` 会静默回落到环境变量——两处 scraper 都不许再这么写。"""
 
     @pytest.mark.parametrize("module", [
-        "scrapers/ourdomain.py", "scrapers/xior.py", "tools/doctor.py"])
+        "scrapers/ourdomain.py", "scrapers/xior.py", "scrapers/codomo.py",
+        "tools/doctor.py"])
     def test_empty_dict_is_gone(self, module):
         from pathlib import Path
         src = Path(module).read_text(encoding="utf-8")
@@ -119,7 +127,8 @@ class TestCurlDoesNotFallBackToEnv:
             "「降级直连」就再也不会真的直连")
 
     @pytest.mark.parametrize("module", [
-        "scrapers/ourdomain.py", "scrapers/xior.py", "tools/doctor.py"])
+        "scrapers/ourdomain.py", "scrapers/xior.py", "scrapers/codomo.py",
+        "tools/doctor.py"])
     def test_uses_the_shared_constant(self, module):
         from pathlib import Path
         src = Path(module).read_text(encoding="utf-8")
@@ -151,7 +160,7 @@ class TestBrowserDoesNotFallBackToEnv:
         for k, v in env.items():
             monkeypatch.setenv(k, v)
 
-        f = bf.BrowserFetcher(headless=True, profile=bf.H2S_PROFILE)
+        f = bf.BrowserFetcher(headless=True, profile=bf.XIOR_PROFILE)
         with pytest.raises(RuntimeError):
             f._launch()
         return captured.get("args", [])

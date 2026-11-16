@@ -17,8 +17,6 @@ scrapers — 多源抓取层
 1. 在 ``scrapers/{name}.py`` 里实现 ``AbstractScraper`` 子类
 2. 在 ``mcore.sources.SPECS`` 中登记名称、显示名、能力和 scraper 类路径
 3. 在 ``.env:SOURCES`` 里把它打开
-
-P0 阶段只有 holland2stay 一家——保持现网行为不变。
 """
 from __future__ import annotations
 
@@ -30,7 +28,6 @@ from .base import (
     RATE_LIMIT_BACKOFF,
     AbstractScraper,
     BlockedError,
-    OperationNotAllowedError,
     ProxyError,
     RateLimitError,
     ScrapeNetworkError,
@@ -39,7 +36,6 @@ from .base import (
     UpstreamMaintenanceError,
     is_cloudflare_body,
     is_maintenance_body,
-    is_operation_rejected_body,
     is_proxy_error,
     is_proxy_account_error,
     is_proxy_service_error,
@@ -72,7 +68,7 @@ _SCRAPER_INSTANCES: dict[str, tuple[type, AbstractScraper]] = {}
 
 
 def reset_scraper_instances() -> None:
-    """丢弃所有缓存实例（H2S 的浏览器随实例一起被丢弃）。
+    """丢弃所有缓存实例（浏览器型 source 的浏览器随实例一起被丢弃）。
 
     给测试用——保证用例之间不会共享 scraper 状态。
     """
@@ -82,9 +78,9 @@ def reset_scraper_instances() -> None:
 def get_scraper(source: str) -> Optional[AbstractScraper]:
     """根据 source 名取 scraper 实例；未注册返回 None。
 
-    实例按 source 缓存并**跨轮复用**。H2S 的浏览器挂在实例上，每轮新建实例
-    会让 ``HollandStayScraper`` 的跨轮复用逻辑永远命不中，退化成每轮重建浏览
-    器 + 完整重过一次 CF 挑战。
+    实例按 source 缓存并**跨轮复用**。浏览器型 source（Xior）的浏览器挂在实例
+    上，每轮新建实例会让跨轮复用逻辑永远命不中，退化成每轮重建浏览器 + 完整
+    重过一次 CF 挑战。
 
     线程安全：每个浏览器型 source 在专属工作进程的主线程里运行，dispatcher
     逐 source 串行调用，因此缓存实例不会导致 Playwright 对象被跨线程使用。
@@ -119,7 +115,7 @@ def dispatch_scrape_tasks(
 
     职责
     ----
-    - 单 source 内的多 city 串行调用同一实例（保留现有 H2S Session 模型）
+    - 单 source 内的多 target 串行调用同一实例
     - 跨 source 用 try/except 隔离：一个 source 挂了不影响其他 source；
       只有所有启用任务都失败时才上抛给 monitor 做冷却
     - ``RateLimitError`` / ``BlockedError`` 在单 source 或全 source 失败时
@@ -129,8 +125,8 @@ def dispatch_scrape_tasks(
       配额，重试只是重新证明已知的事，代价是整轮阻塞数分钟）
     - ``ScrapeNetworkError`` 累积，若全部 source 都网络失败则上抛
     - ``completeness`` 字典 key 是 ``city_display``——多 source 同名城市
-      （例如 H2S 的 Amsterdam + OurDomain 的 Amsterdam）会前缀化 source
-      避免覆盖：``"holland2stay:Amsterdam"`` / ``"ourdomain:Amsterdam"``
+      （例如 Codomo 的 Amsterdam + OurDomain 的 Amsterdam）会前缀化 source
+      避免覆盖：``"codomo:Amsterdam"`` / ``"ourdomain:Amsterdam"``
 
     Parameters
     ----------
@@ -182,9 +178,9 @@ def dispatch_scrape_tasks(
                 completeness[completeness_key(source, t.city_display, multi_source=multi)] = False
             continue
 
-        # batch_session() 让 scraper 把 Session/TLS 指纹提升到批次级——H2S
-        # 这样一批城市只握手一次、用同一个指纹（恢复 P0 之前 scrape_all 的
-        # 行为）。默认 no-op，OurDomain 等仍各 task 自管会话。
+        # batch_session() 让 scraper 把 Session/TLS 指纹提升到批次级——一批
+        # target 只握手一次、用同一个指纹；Codomo / Magis 这类「整批抓一次全国
+        # 列表」的平台也靠它共享结果。默认 no-op，OurDomain 等仍各 task 自管会话。
         #
         # 整个 with 再包一层 try：``batch_session()`` 的进入/退出发生在下面那圈
         # per-task try **之外**，它抛的异常（浏览器创建失败、CF 挑战没过、
@@ -210,7 +206,7 @@ def dispatch_scrape_tasks(
                     # 新证明一遍。
                     #
                     # 2026-08-20 生产实测：4 个城市 × 91 秒 ≈ 6 分钟，而且这 6
-                    # 分钟**整轮阻塞**——同轮里 H2S / OurDomain 的房源一起延迟
+                    # 分钟**整轮阻塞**——同轮里其它 source 的房源一起延迟
                     # 交付。这样的爆发每天约 10 次，累计近 1 小时空转。
                     #
                     # 直接判失败、一个请求都不发。
@@ -250,19 +246,6 @@ def dispatch_scrape_tasks(
                         elif isinstance(e, RateLimitError) and source_rate_limited is None:
                             source_rate_limited = e
                         logger.error("%s 抓取被限流/屏蔽，已隔离该任务: %s", ckey, e)
-                    except OperationNotAllowedError as e:
-                        # 403，但正文是上游应用说「这条 operation 没登记」。
-                        # 隔离照旧，但**刻意不 _safe_invalidate**：会话、指纹、
-                        # 出口 IP 全都是好的，丢掉只换来下轮一次完整 CF 挑战，
-                        # 然后在同一条查询上以同样方式失败。
-                        # 也不进 source_blocked——那个开关的语义是「被 CF 标记了」。
-                        hard_failures.append((ckey, e))
-                        completeness[ckey] = False
-                        logger.error(
-                            "%s 的 GraphQL operation 未被上游放行，已隔离该任务"
-                            "（换 IP / 重建会话均无效，需照抄站点原文）: %s",
-                            ckey, e,
-                        )
                     except (KeyboardInterrupt, SystemExit):
                         raise
                     except ScrapeNetworkError as e:
@@ -276,8 +259,8 @@ def dispatch_scrape_tasks(
                     except Exception as e:
                         # 未预期的异常同样要**按 task 隔离**。此前它会穿透整个
                         # dispatcher，把同轮里已经抓好的其它 source 结果一起带走
-                        # ——2026-08-02 实测：Xior 的 greenlet.error 导致 H2S 和
-                        # OurDomain 的结果全部丢失，整轮无完整扫描城市。
+                        # ——2026-08-02 实测：Xior 的 greenlet.error 导致同轮其它
+                        # source 的结果全部丢失，整轮无完整扫描城市。
                         #
                         # 这类异常通常意味着底层会话已不可用，留着会让后续每轮
                         # 重复失败，所以顺带丢弃该 source 的长生命周期资源。
@@ -310,7 +293,7 @@ def dispatch_scrape_tasks(
                     continue
                 completeness[ckey] = False
                 hard_failures.append((ckey, e))
-            # 浏览器 source（H2S / Xior）的代理故障走的是这条路，不是上面的
+            # 浏览器 source（Xior）的代理故障走的是这条路，不是上面的
             # per-task 分支——浏览器在 batch_session() 里创建，代理连不上时
             # 连第一个 task 都进不去。2026-08-05 漏判的正是这一半。
             if proxy_failure is None and is_proxy_error(e):
@@ -370,7 +353,7 @@ def _proxy_error_for(tasks: list, network_failures: list[str]) -> "ProxyError":
 def completeness_key(source: str, city_display: str, *, multi_source: bool) -> str:
     """completeness 字典的 key。**这是唯一的实现，别再写第二份。**
 
-    多源时加 source 前缀防同名城市互相覆盖（H2S 的 Amsterdam 与 OurDomain 的
+    多源时加 source 前缀防同名城市互相覆盖（Codomo 的 Amsterdam 与 OurDomain 的
     Amsterdam）；单源时退化为纯 ``city_display``，保持与旧 ``scrape_all``
     输出兼容。
 
@@ -396,9 +379,8 @@ __all__ = [
     "RATE_LIMIT_BACKOFF",
     "AbstractScraper",
     "BlockedError",
-    "HollandStayScraper",
+    "CodomoScraper",
     "OurCampusScraper",
-    "OperationNotAllowedError",
     "OurDomainScraper",
     "XiorScraper",
     "ProxyError",
@@ -413,7 +395,6 @@ __all__ = [
     "get_scraper",
     "is_cloudflare_body",
     "is_maintenance_body",
-    "is_operation_rejected_body",
     "is_proxy_error",
     "is_proxy_account_error",
     "is_proxy_service_error",

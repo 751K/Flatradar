@@ -13,11 +13,9 @@ bookers/plaza.py — Plaza (newnewnew.space) 自动应征
     add=<toewijzingId>&dwellingID=<objectId>
 
 没有表单、没有证件上传、没有 IBAN、没有支付方式。Xior / OurDomain 卡在「走到
-Save 之后要填 IBAN」（代填金融凭据是硬限制），H2S 要用户先绑好支付方式；Plaza
-两样都不需要。资料在**注册**阶段一次性交给站点（€27.50/年），booker 不碰。
+Save 之后要填 IBAN」（代填金融凭据是硬限制）；Plaza 不需要。资料在**注册**阶段一次性交给站点（€27.50/年），booker 不碰。
 
-也没有 Cloudflare、没有 captcha——H2S 那套预热浏览器 + 过挑战 + 借 lane 的复杂度
-一条都用不上，纯 HTTP 即可。
+也没有 Cloudflare、没有 captcha，不需要浏览器，纯 HTTP 即可。
 
 ⚠️ 三个坑
 ---------

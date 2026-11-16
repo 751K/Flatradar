@@ -2,8 +2,8 @@
 
 为什么需要分片：Xior 的请求间隔是 5s（限流按速率算，调小会直接撞回 429，
 见 commit 4d71b9d），实测**每栋楼 13.9 秒**。官方注册表 30 栋 ≈ 417 秒/轮，
-而 CHECK_INTERVAL 是 300 秒；更糟的是 H2S 排在其它 source **之后**执行，
-不分片等于每轮把真正出房源的那个 source 推迟 7 分钟。
+而 CHECK_INTERVAL 是 300 秒；不分片等于每轮把排在它后面的 source 推迟
+7 分钟。
 
 这里守两条：
 1. **轮转必须覆盖全部 target**，不能有楼栋被系统性漏掉。
@@ -92,10 +92,10 @@ class TestShardRotation:
 
 class TestApplySharding:
     def test_only_configured_source_is_sharded(self, st):
-        tasks = _tasks("xior", 30) + _tasks("holland2stay", 10, "C")
+        tasks = _tasks("xior", 30) + _tasks("codomo", 10, "C")
         out = _apply_task_sharding(tasks, _Cfg({"xior": 5}), st)
         assert sum(1 for t in out if t.source == "xior") == 5
-        assert sum(1 for t in out if t.source == "holland2stay") == 10
+        assert sum(1 for t in out if t.source == "codomo") == 10
 
     def test_cursor_advances_across_rounds(self, st):
         tasks = _tasks("xior", 30)
@@ -151,7 +151,7 @@ class TestApplySharding:
 class TestShardConfig:
     def test_default_shards_xior_only(self, monkeypatch):
         monkeypatch.delenv("SHARD_SIZES", raising=False)
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         from config import _DEFAULT_SHARD_SIZES
         # 守的是「只有 xior 有默认分片」，不是那个数字——
@@ -161,21 +161,21 @@ class TestShardConfig:
 
     def test_explicit_override(self, monkeypatch):
         monkeypatch.setenv("SHARD_SIZES", "xior:8,ourdomain:2")
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         sizes = config.load_config().shard_sizes
         assert sizes["xior"] == 8 and sizes["ourdomain"] == 2
 
     def test_zero_disables_a_source(self, monkeypatch):
         monkeypatch.setenv("SHARD_SIZES", "xior:0")
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         assert config.load_config().shard_sizes["xior"] == 0
 
     def test_malformed_entries_are_fatal(self, monkeypatch):
         """格式错误必须拒绝启动；实体未知才只警告。"""
         monkeypatch.setenv("SHARD_SIZES", "garbage,xior:abc,:5,ourdomain:3")
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         with pytest.raises(ValueError, match="SHARD_SIZES"):
             config.load_config()
@@ -183,7 +183,7 @@ class TestShardConfig:
     def test_unknown_source_is_warning_not_fatal(self, monkeypatch):
         """未知平台名可能是上游新平台，不能因此拒绝启动。"""
         monkeypatch.setenv("SHARD_SIZES", "nope:5,ourdomain:3")
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         sizes = config.load_config().shard_sizes
         assert sizes["ourdomain"] == 3

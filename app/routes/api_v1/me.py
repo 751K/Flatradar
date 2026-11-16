@@ -257,8 +257,8 @@ def _filter_options():
             "finishing":     st.get_feature_values("Finishing"),
             "energy":        list(ENERGY_LABELS),
             # 每个维度实际生效于哪些平台。客户端拿它在筛选表单里标注
-            # "Only applies to Holland2Stay"——contract / neighborhood / offer
-            # 七个平台里只对一个生效，此前界面上没有任何地方说过。
+            # "Only applies to …"——有的维度只对少数平台生效，此前界面上没有
+            # 任何地方说过。
             "dim_sources":   filter_dim_sources(),
         }
     return _err.ok(data)

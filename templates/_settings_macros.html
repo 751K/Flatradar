@@ -69,19 +69,26 @@
   </div>
 {% elif key == 'location' %}
   {{ checks(_('user_form_cities'), prefix ~ 'ALLOWED_CITIES', city_options, lf.allowed_cities, pairs=false) }}
+  {#- 没有平台支持的维度不显示：勾了也对所有房源整体跳过（见 web.py 的 dim_supported） -#}
+  {% if dim_supported('neighborhood') %}
   <fieldset class="account-field">
     <legend>{{ _('user_form_hoods') }}{{ scope('neighborhood') }}</legend>
     <div class="mail-options account-options" data-dynamic-options="neighborhoods" data-name="{{ prefix }}ALLOWED_NEIGHBORHOODS" data-cities="{{ prefix }}ALLOWED_CITIES">
       {% for n in lf.allowed_neighborhoods %}<label><input type="checkbox" name="{{ prefix }}ALLOWED_NEIGHBORHOODS" value="{{ n }}" checked> {{ n }}</label>{% endfor %}
     </div>
   </fieldset>
+  {% endif %}
   <fieldset class="account-field">
     <legend>{{ _('user_form_buildings') }}</legend>
     <div class="mail-options account-options" data-dynamic-options="buildings" data-name="{{ prefix }}ALLOWED_BUILDINGS" data-cities="{{ prefix }}ALLOWED_CITIES">
       {% for b in lf.allowed_buildings %}<label><input type="checkbox" name="{{ prefix }}ALLOWED_BUILDINGS" value="{{ b }}" checked> {{ b }}</label>{% endfor %}
     </div>
   </fieldset>
+  {% if dim_supported('neighborhood') %}
   <p class="account-help">{{ '片区和楼盘按所选城市列出；未选城市时列出全部。' if lang == 'zh' else 'Neighbourhoods and buildings follow the selected cities, or list everything when no city is selected.' }}</p>
+  {% else %}
+  <p class="account-help">{{ '楼盘按所选城市列出；未选城市时列出全部。' if lang == 'zh' else 'Buildings follow the selected cities, or list everything when no city is selected.' }}</p>
+  {% endif %}
 {% elif key == 'sources' %}
   {{ checks(_('user_form_sources'), prefix ~ 'ALLOWED_SOURCES', source_options, lf.allowed_sources) }}
   <p class="account-help">{{ '不选择表示关注全部平台。' if lang == 'zh' else 'Select none to follow every platform.' }}</p>
@@ -91,7 +98,9 @@
   {{ checks(_('user_form_occupancy'), prefix ~ 'ALLOWED_OCCUPANCY', occupancy_options, lf.allowed_occupancy, dim='occupancy') }}
 {% elif key == 'terms' %}
   <p class="account-help">{{ _('user_form_dim_scope_intro') }}</p>
+  {% if dim_supported('contract') %}
   {{ checks(_('user_form_offer'), prefix ~ 'ALLOWED_CONTRACT', contract_options, lf.allowed_contract, dim='contract') }}
+  {% endif %}
   {{ checks(_('user_form_tenant'), prefix ~ 'ALLOWED_TENANT', tenant_options, lf.allowed_tenant, dim='tenant') }}
 {% elif key == 'extras' %}
   <p class="account-help">{{ _('user_form_dim_scope_intro') }}</p>

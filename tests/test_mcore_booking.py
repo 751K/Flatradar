@@ -164,6 +164,7 @@ class TestBookWithFallback:
             available_from="2030-01-01", features=[],
             url=f"https://t/{idx}", city="E",
             sku=f"SKU-{idx}", contract_id=42, contract_start_date="2030-01-01",
+            source="plaza",
         )
 
     def _make_user(self):
@@ -174,13 +175,13 @@ class TestBookWithFallback:
             name="A", id="u1", enabled=True, notifications_enabled=True,
             notification_channels=[],
             auto_book=AutoBookConfig(
-                enabled=True, email="a@x.com", password="pw",
-                dry_run=False, payment_method="ideal",
+                enabled=True, plaza_enabled=True,
+                plaza_username="a", plaza_password="pw", dry_run=False,
             ),
         )
 
     def test_success_on_first_candidate(self):
-        with patch("bookers.holland2stay.try_book") as mock_try:
+        with patch("bookers.plaza.PlazaBooker.book") as mock_try:
             mock_try.return_value = MagicMock(
                 success=True, dry_run=False, phase="success"
             )
@@ -194,7 +195,7 @@ class TestBookWithFallback:
         race_lost = MagicMock(success=False, dry_run=False, phase="race_lost")
         success = MagicMock(success=True, dry_run=False, phase="success")
 
-        with patch("bookers.holland2stay.try_book", side_effect=[race_lost, success]) as mock_try:
+        with patch("bookers.plaza.PlazaBooker.book", side_effect=[race_lost, success]) as mock_try:
             candidates = [self._make_listing(1), self._make_listing(2)]
             result = book_with_fallback(candidates, self._make_user(), float("inf"))
             assert result.success is True
@@ -204,7 +205,7 @@ class TestBookWithFallback:
         """非 race_lost 失败（如 reserved_conflict） → 立即停止，不继续试备选。"""
         failure = MagicMock(success=False, dry_run=False, phase="reserved_conflict")
 
-        with patch("bookers.holland2stay.try_book", return_value=failure) as mock_try:
+        with patch("bookers.plaza.PlazaBooker.book", return_value=failure) as mock_try:
             candidates = [self._make_listing(1), self._make_listing(2)]
             result = book_with_fallback(candidates, self._make_user(), float("inf"))
             assert result.success is False
@@ -214,7 +215,7 @@ class TestBookWithFallback:
         """dry_run → 视为成功，不重试。"""
         dr = MagicMock(success=False, dry_run=True, phase="success")
 
-        with patch("bookers.holland2stay.try_book", return_value=dr) as mock_try:
+        with patch("bookers.plaza.PlazaBooker.book", return_value=dr) as mock_try:
             candidates = [self._make_listing(1), self._make_listing(2)]
             result = book_with_fallback(candidates, self._make_user(), float("inf"))
             assert result.dry_run is True
@@ -224,10 +225,37 @@ class TestBookWithFallback:
         """截止时间到 → 停止备选，返回最后一个 race_lost 结果。"""
         race_lost = MagicMock(success=False, dry_run=False, phase="race_lost")
 
-        with patch("bookers.holland2stay.try_book", return_value=race_lost) as mock_try:
+        with patch("bookers.plaza.PlazaBooker.book", return_value=race_lost) as mock_try:
             candidates = [self._make_listing(1), self._make_listing(2), self._make_listing(3)]
             # 设截止时间为当前，只来得及试第一套
             result = book_with_fallback(candidates, self._make_user(), time.monotonic())
             # 第一套无条件尝试（忽略 deadline），第二套才检查截止 → 第二套赶不上
             assert result.phase == "race_lost"
             assert mock_try.call_count >= 1
+
+    def test_mutation_failure_does_not_try_fallback(self, tmp_path):
+        """请求已发出（mutated）后失败，不能当 race_lost 去换下一套。"""
+        from bookers.base import BookingResult
+        from mcore.booking_guard import attempt_context, record_mutation
+        from mcore.plaza_guard import PlazaGuard
+        from storage import Storage
+
+        st = Storage(tmp_path / "booking.sqlite")
+        try:
+            guard = PlazaGuard(st)
+            attempt = guard.acquire("a", "u1", "L-1", "Test-1")
+            calls = []
+
+            def fake_book(request):
+                calls.append(request.listing)
+                record_mutation(request.listing.name)
+                return BookingResult(request.listing, False, "connection lost", phase="race_lost")
+
+            candidates = [self._make_listing(1), self._make_listing(2)]
+            with patch("bookers.plaza.PlazaBooker.book", side_effect=fake_book), \
+                    attempt_context(guard, attempt):
+                result = book_with_fallback(candidates, self._make_user(), float("inf"))
+            assert result.phase == "uncertain"
+            assert len(calls) == 1
+        finally:
+            st.close()

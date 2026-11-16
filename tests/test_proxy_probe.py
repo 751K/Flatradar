@@ -116,9 +116,9 @@ class TestNavigationFailureMessage:
     """探针的结论要真的出现在抓取失败的那条日志里，否则等于没修。"""
 
     def _fetcher(self, proxy_url: str = "http://user:pw@proxy.example:80"):
-        from browser_fetcher import H2S_PROFILE, BrowserFetcher
+        from browser_fetcher import XIOR_PROFILE, BrowserFetcher
 
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f._proxy_url = proxy_url
         return f
 
@@ -184,7 +184,7 @@ class TestNavigationFailureMessage:
         f._describe_navigation_failure(Exception("net::ERR_TUNNEL_CONNECTION_FAILED"))
 
         assert seen[0][0] == "http://user:pw@exit-in-use.example:80"
-        assert seen[0][1] == "www.holland2stay.com"
+        assert seen[0][1] == "www.xiorstudenthousing.eu"
 
     def test_no_proxy_configured_says_so(self, monkeypatch):
         import config

@@ -3,7 +3,7 @@
 fail-open 本身是对的：一套过滤条件作用于四个平台，若「白名单匹配不到就拒绝」，
 会把整批抓不到该属性的房源误杀。但此前界面上一个字都没提。
 
-后果具体是这样：勾「装修 = Furnished」，H2S 命中 307 条，而 Xior + OurDomain 的
+后果具体是这样：勾「装修 = Furnished」，H2S（现 Codomo）命中 307 条，而 Xior + OurDomain 的
 83 条**一条没筛，全放行**。用户以为收到的都是 Furnished，实际不是。
 """
 from __future__ import annotations
@@ -21,15 +21,21 @@ from models import Listing
 
 
 class TestSupportMatrix:
-    def test_h2s_only_dimensions(self):
-        """energy 于 2026-09-01 接入 Magis 时不再是 H2S 独有——它的卡片直接印着
-        能耗标签（12/12 条实测都解析得出）。其余三个仍是 H2S 独有。"""
-        for dim in ("contract", "offer", "neighborhood"):
-            assert sources_supporting_dim(dim) == ["holland2stay"], dim
-        assert sources_supporting_dim("energy") == ["holland2stay", "magis"]
+    def test_single_platform_dimensions(self):
+        """2026-11 Holland2Stay 改名 Codomo，新站列表页不给合同、能耗、片区
+        （详情页才有），这三个维度不再登记给它。
 
-    def test_tenant_covers_every_platform_but_magis(self):
-        """租客资格四家全覆盖。**这个断言被来回改过两次，两次都是有原因的。**
+        - offer 仍只有 Codomo：卡片徽标（Parking included 等）写成 Offer。
+        - energy 只剩 Magis：它的卡片直接印着能耗标签。
+        - contract / neighborhood 眼下没有任何平台登记，对所有房源 fail-open。
+        """
+        assert sources_supporting_dim("offer") == ["codomo"]
+        assert sources_supporting_dim("energy") == ["magis"]
+        for dim in ("contract", "neighborhood"):
+            assert sources_supporting_dim(dim) == [], dim
+
+    def test_tenant_covers_every_platform_but_codomo_and_magis(self):
+        """租客资格。**这个断言被来回改过三次，每次都是有原因的。**
 
         v1.16.2 加这个维度时四家都在。2026-08-18 H2S 上线 operation 白名单，
         我们只能照抄它那条 GetCategories，租客属性不在字段集里——房源不带
@@ -39,16 +45,18 @@ class TestSupportMatrix:
         2026-08-19 恢复：站点另有一条同样在白名单里的 GetProductDetail，字段集里
         有 tenant_profile，按需单取即可补齐（scrapers/holland2stay.py 的详情补齐）。
 
+        2026-11 改名 Codomo 后再次摘掉：新站只有部分卡片打「Student only」
+        徽标，「没有徽标」是「不限」还是「未标注」没有证据——与 Magis 同一取舍。
+
         改这条断言之前先确认**房源真的带上了 Tenant 标签**——只改能力表不改抓取，
         就又回到「勾了就收不到」的那个坑里。
         """
         assert sources_supporting_dim("tenant") == [
-            "holland2stay", "ourdomain", "ourcampus", "xior",
-            "studentexperience", "plaza",
+            "ourdomain", "ourcampus", "xior", "studentexperience", "plaza",
         ]
 
-    def test_tenant_badge_says_magis_is_excluded(self):
-        """接入 Magis 之前四家全覆盖，徽标为空；现在必须说出 Magis 不在内。
+    def test_tenant_badge_says_codomo_and_magis_are_excluded(self):
+        """接入 Magis 之前四家全覆盖，徽标为空；现在必须说出 Codomo、Magis 不在内。
 
         Magis 只在部分房源上打「Students only」徽标，「没有徽标」是「不限」还是
         「未标注」没有证据，因此不登记该维度（见 scrapers/magis.py 的 TENANT_MAP）。
@@ -56,21 +64,23 @@ class TestSupportMatrix:
         收到的 Magis 房源都已按资格筛过。这正是本文件开头那条教训。
         """
         assert "magis" not in sources_supporting_dim("tenant")
-        assert dim_scope_badge("tenant") == "Magis 除外"
-        assert dim_scope_badge("tenant", "en") == "Except Magis"
+        assert "codomo" not in sources_supporting_dim("tenant")
+        assert dim_scope_badge("tenant") == "Codomo、Magis 除外"
+        assert dim_scope_badge("tenant", "en") == "Except Codomo, Magis"
         # 说明句列的是「哪些平台生效」，被排除的那个由徽标点名
         assert "Magis" not in dim_scope_note("tenant")
-        for name in ("Holland2Stay", "OurDomain", "OurCampus", "Xior"):
+        assert "Codomo" not in dim_scope_note("tenant")
+        for name in ("OurDomain", "OurCampus", "Xior"):
             assert name in dim_scope_note("tenant"), name
 
-    def test_finishing_is_no_longer_h2s_only(self):
+    def test_finishing_is_not_single_platform(self):
         """Xior 与 OurDomain 的装修档位由 SOURCE_ASSUMED_FEATURES 声明。
 
         声明之后能力表必须跟着登记，否则该维度仍走 fail-open——勾 Unfurnished
         时这些房源照样会出现，而它们恰恰不是无家具的。
         """
         assert sources_supporting_dim("finishing") == [
-            "holland2stay", "ourdomain", "xior", "magis",
+            "codomo", "ourdomain", "xior", "magis",
         ]
 
     def test_xior_lacks_the_rentcafe_dimensions(self):
@@ -92,28 +102,35 @@ class TestScopeNote:
         assert dim_scope_note("max_rent") == ""
         assert dim_scope_badge("max_rent") == ""
 
-    def test_h2s_only_note_names_the_platform(self):
+    def test_single_platform_note_names_the_platform(self):
         note = dim_scope_note("energy")
-        assert "Holland2Stay" in note
+        assert "Magis" in note
         assert "仅" in note
         # 必须说清楚「其它平台的房源不受影响」，只说「仅对 X 生效」会被读成
         # 「其它平台的房源会被排除」——那是相反的意思
         assert "不受此条件影响" in note
 
     def test_english_note(self):
-        note = dim_scope_note("contract", "en")
-        assert "Holland2Stay only" in note
+        note = dim_scope_note("offer", "en")
+        assert "Codomo only" in note
         assert "unaffected" in note
+
+    def test_dimension_no_platform_supports_has_no_note(self):
+        """contract / neighborhood 眼下没有平台登记：没有可点名的平台，徽标与
+        说明都为空（与全平台通用的维度一样不加提示）。"""
+        for dim in ("contract", "neighborhood"):
+            assert dim_scope_note(dim) == ""
+            assert dim_scope_badge(dim) == ""
 
     def test_partial_support_note_lists_all(self):
         note = dim_scope_note("occupancy")
-        for name in ("Holland2Stay", "OurDomain", "OurCampus"):
+        for name in ("Codomo", "OurDomain", "OurCampus"):
             assert name in note
         assert "Xior" not in note
 
     def test_badge_is_short(self):
-        assert dim_scope_badge("contract") == "仅 Holland2Stay"
-        assert dim_scope_badge("contract", "en") == "Holland2Stay only"
+        assert dim_scope_badge("offer") == "仅 Codomo"
+        assert dim_scope_badge("offer", "en") == "Codomo only"
         # 上限随平台数增长：四个平台时「Xior 除外」是 7 字，加了 Magis 之后
         # 「Xior、Magis 除外」是 13 字。这条守的是「别长成一句话」——真正的说明
         # 在 dim_scope_note 里，徽标只是标签旁边那一小块。
@@ -128,7 +145,7 @@ class TestScopeNote:
         from config import KNOWN_SOURCES
         names = {source_display_name(s) for s in KNOWN_SOURCES}
         for dim in ("type", "occupancy", "finishing", "energy",
-                    "contract", "neighborhood", "offer", "floor"):
+                    "offer", "floor", "tenant"):
             for lang in ("zh", "en"):
                 badge = dim_scope_badge(dim, lang)
                 assert badge, f"{dim} 应当有徽标"
@@ -144,10 +161,10 @@ class TestScopeNote:
         # 缺 1 个（Xior）→ 报缺的
         assert dim_scope_badge("type") == "Xior 除外"
         assert dim_scope_badge("type", "en") == "Except Xior"
-        # 缺 1 个（Magis：只在部分房源上打徽标，「没徽标」的语义没有证据）
-        assert dim_scope_badge("tenant") == "Magis 除外"
+        # 缺 2 个（Codomo、Magis：只在部分房源上打徽标，「没徽标」的语义没有证据）
+        assert dim_scope_badge("tenant") == "Codomo、Magis 除外"
         # 只支持 1 个 → 报支持的
-        assert dim_scope_badge("contract") == "仅 Holland2Stay"
+        assert dim_scope_badge("offer") == "仅 Codomo"
 
     def test_badge_prefers_the_unfolded_side_when_both_are_long(self):
         """两边都长时，优先选不需要折叠的那边；都要折叠才比字数。
@@ -160,7 +177,7 @@ class TestScopeNote:
         这条守的是「折叠是丢信息」那个优先级：曾经按纯字数比，会为了省一个字
         挑走信息不全的那一边。
         """
-        assert dim_scope_badge("finishing") == "仅 Holland2Stay、OurDomain 等 4 家"
+        assert dim_scope_badge("finishing") == "仅 Codomo、OurDomain 等 4 家"
         assert dim_scope_badge("floor") == "Xior、Student Experience 除外"
 
     def test_badge_and_note_agree_on_which_platforms(self):
@@ -192,39 +209,45 @@ class TestFailOpenBehaviourIsWhatTheNoteSays:
     """提示写的和代码做的必须是一回事。"""
 
     def test_unsupported_platform_passes_through(self):
-        # 装修不能再拿来举例——Xior 现在有声明值了。合同仍是 H2S 独有。
-        f = ListingFilter(allowed_contract=["Indefinite"])
-        assert f.passes(_listing("xior")), "Xior 不提供合同类型，应放行"
+        # 装修不能再拿来举例——Xior 现在有声明值了。offer 只有 Codomo 提供。
+        f = ListingFilter(allowed_offer=["Short-stay"])
+        assert f.passes(_listing("xior")), "Xior 不提供优惠徽标，应放行"
 
     def test_supported_platform_still_filtered(self):
-        f = ListingFilter(allowed_finishing=["Furnished"])  # H2S 自己上报该属性
-        assert f.passes(_listing("holland2stay", Finishing="Furnished"))
+        f = ListingFilter(allowed_finishing=["Furnished"])  # Codomo 自己上报该属性
+        assert f.passes(_listing("codomo", Finishing="Furnished"))
         # Unfurnished 是反义词。裸子串匹配会把它一起收走
         # （"Furnished" in "Unfurnished" 为真），词边界匹配才排得掉。
-        assert not f.passes(_listing("holland2stay", Finishing="Unfurnished"))
+        assert not f.passes(_listing("codomo", Finishing="Unfurnished"))
 
     def test_supported_platform_missing_value_is_rejected(self):
         """平台支持但这条恰好缺值 → 照常拒绝，不削弱该平台的严格度。"""
         f = ListingFilter(allowed_finishing=["Furnished"])
-        assert not f.passes(_listing("holland2stay"))
+        assert not f.passes(_listing("codomo"))
+
+    def test_offer_is_fail_open_off_codomo(self):
+        assert sources_supporting_dim("offer") == ["codomo"]
+        f = ListingFilter(allowed_offer=["Short-stay"])
+        assert f.passes(_listing("xior"))
+        # 支持的平台照常严格
+        assert not f.passes(_listing("codomo", Offer="Parking included"))
 
     @pytest.mark.parametrize("dim,kw", [
         ("contract", dict(allowed_contract=["Indefinite"])),
-        ("offer", dict(allowed_offer=["Short-stay"])),
+        ("neighborhood", dict(allowed_neighborhoods=["Strijp"])),
     ])
-    def test_every_h2s_only_dim_is_fail_open_elsewhere(self, dim, kw):
-        assert sources_supporting_dim(dim) == ["holland2stay"]
-        assert ListingFilter(**kw).passes(_listing("xior"))
+    def test_unregistered_dim_is_fail_open_everywhere(self, dim, kw):
+        """没有平台登记的维度对任何平台都整体跳过，包括 Codomo。"""
+        assert sources_supporting_dim(dim) == []
+        for src in KNOWN_SOURCES:
+            assert ListingFilter(**kw).passes(_listing(src)), src
 
     def test_energy_is_fail_open_on_platforms_that_lack_it(self):
-        """energy 自 Magis 接入起是两家支持，对其余两家仍 fail-open。
-
-        单独一条而不是继续挂在上面那组参数里：那组的前提是「H2S 独有」，
-        而 energy 已经不是了——留在里面会让这条断言在下次有人加平台时误导。
-        """
-        assert sources_supporting_dim("energy") == ["holland2stay", "magis"]
+        """energy 只有 Magis 支持，对其余平台（含 Codomo）fail-open。"""
+        assert sources_supporting_dim("energy") == ["magis"]
         assert ListingFilter(allowed_energy="A").passes(_listing("xior"))
         assert ListingFilter(allowed_energy="A").passes(_listing("ourdomain"))
+        assert ListingFilter(allowed_energy="A").passes(_listing("codomo"))
         # 支持的平台照常严格
         assert not ListingFilter(allowed_energy="A").passes(_listing("magis"))
         assert ListingFilter(allowed_energy="A").passes(

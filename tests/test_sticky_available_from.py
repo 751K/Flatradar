@@ -21,7 +21,7 @@ from models import Listing, is_sentinel_available_from
 from mstorage._listings import _sticky_available_from
 
 
-def _l(lid="l1", *, status="Available to book", avail=None, source="holland2stay"):
+def _l(lid="l1", *, status="Available to book", avail=None, source="codomo"):
     return Listing(
         id=lid, name="Test flat", status=status,
         price_raw="€900", available_from=avail,
@@ -66,14 +66,17 @@ class TestMergeRule:
         st.diff([_l(status="Reserved", avail="2050-01-01")])
         assert st.get_all_listings()[0]["available_from"] == "2026-09-01"
 
-    def test_scraper_and_storage_share_one_criterion(self):
-        """两处各写一个 2050 会分叉，而分叉的表现是一个假日期悄悄进了库。"""
+    def test_storage_uses_the_shared_criterion(self):
+        """两处各写一个 2050 会分叉，而分叉的表现是一个假日期悄悄进了库。
+
+        当年第二处是 scrapers/holland2stay.py；它随改名 Codomo 下线后，落库这一侧
+        仍须用 models 里那一个判据，不许自己手写年份。
+        """
         import inspect
 
-        import scrapers.holland2stay as h2s
         import mstorage._listings as li
 
-        for mod in (h2s, li):
+        for mod in (li,):
             src = inspect.getsource(mod)
             assert "is_sentinel_available_from" in src, mod.__name__
             assert ">= 2050" not in src, f"{mod.__name__} 里还留着手写的 2050"
@@ -158,10 +161,10 @@ def test_applies_to_every_platform(temp_db):
     """今天只有 H2S 会产生空值（其余三个线上 0 条），但「未知不该覆盖已知」
     和平台无关。写成 H2S 专属是在赌上游行为不变。"""
     st = temp_db
-    for src in ("holland2stay", "xior", "ourdomain", "ourcampus"):
+    for src in ("codomo", "xior", "ourdomain", "ourcampus"):
         st.diff([_l(lid=f"x-{src}", avail="2026-09-01", source=src)])
         st.diff([_l(lid=f"x-{src}", status="Reserved", avail=None, source=src)])
 
     rows = {r["id"]: r for r in st.get_all_listings()}
-    for src in ("holland2stay", "xior", "ourdomain", "ourcampus"):
+    for src in ("codomo", "xior", "ourdomain", "ourcampus"):
         assert rows[f"x-{src}"]["available_from"] == "2026-09-01", src

@@ -2,7 +2,7 @@
 
 本使用条款约束您对 FlatRadar 的访问和使用。
 
-FlatRadar 是一款独立的、非官方的租房监控工具，跨平台跟踪 Holland2Stay、OurDomain、Xior 等多个平台的房源。FlatRadar 与其监控的任何房源平台均不存在关联、认可、赞助、维护或运营关系。
+FlatRadar 是一款独立的、非官方的租房监控工具，跨平台跟踪 Codomo、OurDomain、Xior 等多个平台的房源。FlatRadar 与其监控的任何房源平台均不存在关联、认可、赞助、维护或运营关系。
 
 创建账户、访问或使用 FlatRadar，即表示您同意本条款。
 
@@ -36,7 +36,7 @@ FlatRadar 账户密码采用服务器端安全措施进行保护。密码不以�
 
 4. 房源平台及第三方条款
 
-您有责任自行遵守您所交互的每个房源平台（包括 Holland2Stay、OurDomain、Xior 等）的服务条款及所有适用的法律法规。
+您有责任自行遵守您所交互的每个房源平台（包括 Codomo、OurDomain、Xior 等）的服务条款及所有适用的法律法规。
 
 FlatRadar 不授予您任何以相关平台不允许的方式访问、使用、复制、抓取、绕过或干扰其系统的权利。
 

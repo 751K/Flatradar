@@ -41,19 +41,22 @@ class TestMergeHelper:
         """旧值坏了就当没有，绝不能因此抛异常——这是写库路径。"""
         assert _merge_sticky_features(["Type: Studio"], bad) == ["Type: Studio"]
 
-    def test_all_enrichment_keys_are_covered(self):
-        """粘性表必须覆盖详情补齐产出的全部 key，漏一个那个字段就会闪。"""
-        import scrapers.holland2stay as h2s
-        produced = set(h2s._detail_features(
-            {"building_name": 614, "tenant_profile": 6213,
-             "neighborhood": "Strijp", "min_income": "3.5"},
-            [{"attribute_code": "building_name",
-              "options": [{"value": "614", "label": "X"}]}],
-        ))
-        assert produced <= set(_STICKY_FEATURE_KEYS), (
-            f"详情补齐产出了 {produced - set(_STICKY_FEATURE_KEYS)}，"
-            f"但它不在粘性表里——会在补齐失败的轮次被抹掉"
-        )
+    def test_sticky_table_covers_the_enrichment_keys(self):
+        """粘性表覆盖曾由详情补齐产出的全部 key，漏一个那个字段就会闪。
+
+        产出这些 key 的 H2S 详情补齐已随改名 Codomo 一起下线，但库里的存量
+        房源仍带着它们，粘性照样要保住。
+        """
+        assert {"Building", "Tenant", "Neighborhood", "MinIncome"} <= set(
+            _STICKY_FEATURE_KEYS)
+
+    @pytest.mark.parametrize("key", sorted(_STICKY_FEATURE_KEYS))
+    def test_every_sticky_key_is_restored(self, key):
+        """表里的每一个 key 都要真的被补回来，而不只是登记在表里。"""
+        got = _merge_sticky_features(
+            ["Type: Studio"], json.dumps([f"{key}: kept", "Type: Loft"]))
+        assert f"{key}: kept" in got
+        assert "Type: Loft" not in got
 
 
 def _feats(row) -> list[str]:
@@ -70,7 +73,7 @@ class TestDiffKeepsStickyFeatures:
         return Listing(
             id="L1", name="L1", status=status, price_raw="€1000",
             available_from="", url="", city="Eindhoven",
-            source="holland2stay", features=list(features),
+            source="codomo", features=list(features),
         )
 
     def test_building_survives_a_round_without_enrichment(self, tmp_path):

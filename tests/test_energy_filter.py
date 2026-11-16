@@ -57,8 +57,13 @@ class TestEnergyRank:
 # ── ListingFilter.allowed_energy ──────────────────────────
 
 def _listing(**overrides):
-    """最小 Listing，覆盖 feature_map 用 features 列表构造。"""
+    """最小 Listing，覆盖 feature_map 用 features 列表构造。
+
+    source 取 magis：它同时登记了 energy 与 finishing 两个维度，这里测的严格
+    过滤只在登记了该维度的平台上生效（其余平台 fail-open）。
+    """
     defaults = {
+        "source": "magis",
         "id": "test-1",
         "name": "Test",
         "status": "Available to book",

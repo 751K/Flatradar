@@ -38,13 +38,13 @@ class TestMatching:
 
     def test_matching_is_case_insensitive_substring(self):
         f = ListingFilter(allowed_buildings=["laagstraat"])
-        assert f.passes(_l("Laagstraat", source="holland2stay"))
+        assert f.passes(_l("Laagstraat", source="codomo"))
 
     def test_several_buildings_are_or_ed(self):
         f = ListingFilter(allowed_buildings=["Novum", "Laagstraat"])
         assert f.passes(_l("Novum", source="magis"))
-        assert f.passes(_l("Laagstraat", source="holland2stay"))
-        assert not f.passes(_l("De Eendracht", source="holland2stay"))
+        assert f.passes(_l("Laagstraat", source="codomo"))
+        assert not f.passes(_l("De Eendracht", source="codomo"))
 
 
 class TestFailClosed:
@@ -70,7 +70,7 @@ class TestFailClosed:
         assert not f.passes(_l("De Eendracht", source="some_future_source"))
 
     @pytest.mark.parametrize("source", [
-        "holland2stay", "plaza", "xior", "ourdomain",
+        "codomo", "plaza", "xior", "ourdomain",
         "magis", "studentexperience", "ourcampus"])
     def test_every_current_source_supports_it(self, source):
         """七个平台都写 Building（生产实测 835/836），所以都该受约束。"""
@@ -85,9 +85,9 @@ class TestIntegration:
 
     def test_it_ands_with_the_other_conditions(self):
         f = ListingFilter(allowed_buildings=["Laagstraat"], max_rent=800.0)
-        assert not f.passes(_l("Laagstraat", source="holland2stay",
+        assert not f.passes(_l("Laagstraat", source="codomo",
                                price_raw="€ 1.200,00")), "楼对了但超预算，仍要拒"
-        assert f.passes(_l("Laagstraat", source="holland2stay",
+        assert f.passes(_l("Laagstraat", source="codomo",
                            price_raw="€ 700,00"))
 
     def test_an_empty_list_does_not_filter(self):

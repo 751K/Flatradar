@@ -137,7 +137,7 @@ def _is_upstream_ok(code) -> bool:
 class XiorScraper(BrowserBackedScraper):
     """Unit-level scraper for Xior properties backed by RENTCafe.
 
-    浏览器生命周期归 ``BrowserBackedScraper``（与 H2S 共用同一份实现）。
+    浏览器生命周期归 ``BrowserBackedScraper``。
     """
 
     source = "xior"
@@ -242,12 +242,12 @@ class XiorScraper(BrowserBackedScraper):
     }
 
     # ── 浏览器生命周期 ─────────────────────────────────────────────────
-    # 浏览器最大存活时间（秒）。比 H2S 的 2 小时短得多，因为重建浏览器同时
+    # 浏览器最大存活时间（秒）。刻意设得短，因为重建浏览器同时
     # **换出口 IP**（XIOR_PROFILE.rotating_proxy=True）——这是把「按 IP 累积
     # 的限流」摊开的手段。
     #
     # 15 分钟 ≈ 3–4 轮 ≈ 40 个请求/IP，对 ~15–20 req/window 的端点留有余量。
-    # 代价是每小时多 4 次 CF 挑战（Xior 的挑战约 7–9s，比 H2S 便宜）。
+    # 代价是每小时多 4 次 CF 挑战（Xior 的挑战约 7–9s）。
     _BROWSER_MAX_AGE = 900  # 15 分钟
 
     def _new_fetcher(self, *, headless: bool) -> BrowserFetcher:
@@ -490,8 +490,7 @@ def _post_ajax(
 # （floorplans.aspx 权威校验），过不了的一律降级 Occupied。
 #
 # ⚠️ ``Vacant Unrented Not Ready`` 曾被映射成 ``Available in lottery``。那是错的：
-# **Xior 没有抽签机制**，"lottery" 是 Holland2Stay 专有概念（H2S 的
-# availability filter id=336 摇号池）。这个错标有两个实际后果，不只是标签难看：
+# **Xior 没有抽签机制**，"lottery" 是 Codomo（登记意向排队）这类平台的概念。这个错标有两个实际后果，不只是标签难看：
 #   1. 面板给用户显示橙色 "Lottery" 徽标，等于告诉他们要去参加一个不存在的摇号
 #   2. stale 收敛对 lottery 用的是 **2 天**阈值而非 7 天（见
 #      ``mstorage/_listings.py`` 的 ``_STALE_LOTTERY_STATUS``），这些单元会比

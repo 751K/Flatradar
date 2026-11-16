@@ -100,11 +100,10 @@ class TestJudgeStatus:
         assert h.status != health.STATUS_DOWN
 
     def test_low_completeness_alone_is_not_warn(self):
-        """低完整率**不再**告警——分层抓取让它对 H2S 永久为真。
+        """低完整率**不再**告警——分片 / 分层的 source 完整率结构性偏低。
 
-        H2S 每轮只查 _FRESH_STATUSES（一律 complete=False），只有每 30 分钟
-        一次的全量轮才可能完整，完整率结构性地停在 10% 上下。按 80% 阈值报，
-        它每天都在响，唯一的效果是训练人忽略告警。
+        曾经有 source 每轮只查少数状态（一律 complete=False），完整率长期停在
+        10% 上下。按 80% 阈值报，它每天都在响，唯一的效果是训练人忽略告警。
 
         指标本身保留在面板上，只是不再作为判据。
         """
@@ -274,8 +273,8 @@ class TestWatchdog:
         assert alerts[0].level == watchdog.LEVEL_DOWN
 
     def test_fires_for_zero_after_nonzero(self, st):
-        _seed(st, "holland2stay", [(284, 6, 6, "")] * 5 + [(0, 6, 6, "")] * 3)
-        assert [a.key for a in watchdog.poll(st)] == ["source_zero:holland2stay"]
+        _seed(st, "codomo", [(284, 6, 6, "")] * 5 + [(0, 6, 6, "")] * 3)
+        assert [a.key for a in watchdog.poll(st)] == ["source_zero:codomo"]
 
     def test_silent_source_never_fires(self, st):
         _seed(st, "xior", [(0, 4, 4, "")] * 20)
@@ -347,7 +346,7 @@ class TestWatchdog:
     def test_a_few_zero_rounds_do_not_fire(self, st):
         """判据是**多久**没抓到，不是**几轮**。
 
-        高峰期一轮 60 秒，而「全站 0 条」现在本来就是常态：H2S 高频轮只查可订、
+        高峰期一轮 60 秒，而「全站 0 条」现在本来就是常态：feed 只列可订房源、
         OurCampus 三个月 1 条、Xior 常态零可订。按轮数算的话六分钟就报一次
         ——2026-08-25 当天报了两次，两次都是正常状态。
         """
@@ -416,7 +415,7 @@ class TestShardedSourcesSkipZeroRule:
     def test_unsharded_zero_streak_still_warns(self):
         rows = [_row(0, 6, 6)] * 3 + [_row(284, 6, 6)]
         h = health.source_health_from_rows(
-            "holland2stay", rows, last_complete_at=_NOW.isoformat(), now=_NOW)
+            "codomo", rows, last_complete_at=_NOW.isoformat(), now=_NOW)
         assert h.sharded is False
         assert h.status == health.STATUS_WARN
 
@@ -424,7 +423,7 @@ class TestShardedSourcesSkipZeroRule:
         """老行没有这一列，保守按不分片处理，规则照常生效。"""
         rows = [_row(0, 6, 0)] * 3 + [_row(284, 6, 0)]
         h = health.source_health_from_rows(
-            "holland2stay", rows, last_complete_at=_NOW.isoformat(), now=_NOW)
+            "codomo", rows, last_complete_at=_NOW.isoformat(), now=_NOW)
         assert h.sharded is False
         assert h.status == health.STATUS_WARN
 
@@ -457,16 +456,17 @@ class TestAlertTextIsTerse:
 class TestTieredScrapingDoesNotAlert:
     """分层抓取让完整率结构性偏低，那不是故障。
 
-    H2S 每轮只查 _FRESH_STATUSES，一律 complete=False；只有每 30 分钟一次的
+    曾经有 source 每轮只查少数状态，一律 complete=False；只有每 30 分钟一次的
     全量轮才可能为 True。生产实测完整率长期在 9–11%，而阈值是 80%——这条告警
-    每天都在响。告警一旦被无视，等于没有告警。
+    每天都在响。告警一旦被无视，等于没有告警。判据（多久没有完整轮）对任何
+    source 都成立，这里保留这个形状做回归。
     """
 
     def _tiered(self, *, full_scan_ago_minutes, rounds=24):
-        """模拟 H2S：绝大多数轮 complete=0，全量轮在 N 分钟前。"""
+        """绝大多数轮 complete=0，全量轮在 N 分钟前。"""
         rows = _rows([(46, 2, 0, "")] * rounds)
         return health.source_health_from_rows(
-            "holland2stay", rows,
+            "codomo", rows,
             last_complete_at=(_NOW - timedelta(minutes=full_scan_ago_minutes)).isoformat(),
             now=_NOW,
         )
@@ -494,7 +494,7 @@ class TestTieredScrapingDoesNotAlert:
         """从未有过完整轮时答「至少这么久」，而不是当作 0。"""
         rows = _rows([(46, 2, 0, "")] * 24)
         h = health.source_health_from_rows(
-            "holland2stay", rows, last_complete_at="", now=_NOW + timedelta(hours=3))
+            "codomo", rows, last_complete_at="", now=_NOW + timedelta(hours=3))
         assert h.status == health.STATUS_WARN
         assert any("没有完整扫描" in r for r in h.reasons)
 
@@ -605,7 +605,7 @@ class TestWatchdogAlertShape:
 
 
 class TestLastCompleteRoundAt:
-    """跨窗口查「上次完整扫描」——H2S 的窗口比它的全量间隔还短。"""
+    """跨窗口查「上次完整扫描」——窗口可能比完整轮的间隔还短。"""
 
     def test_finds_the_most_recent_complete_round(self, st):
         _seed(st, "s", [(46, 2, 2, "")] + [(46, 2, 0, "")] * 5)
@@ -693,10 +693,10 @@ class TestCircuitMarkerIsOneString:
 class TestTieredZeroRoundsDoNotFeedZeroStreak:
     """高频轮的 0 和全量轮的非零不可比，不能放进同一个 streak。
 
-    H2S 每轮只查「可订 / 抽签 / 即将上线」（一律 complete=0），每 30 分钟才做
-    一次带 Reserved 的全量轮。2026-08-24 生产实测：平台上确实一套可订的都没有
-    （43 套全是 Reserved），于是高频轮连续返回 0、全量轮返回 43，凑够 3 轮报
-    「抓取成功但零房源」，下一次全量轮一到又「已恢复」——24 小时 7 报 7 恢复。
+    曾经有 source 每轮只查「可订 / 抽签 / 即将上线」（一律 complete=0），每 30
+    分钟才做一次全量轮。2026-08-24 生产实测：高频轮连续返回 0、全量轮返回 43，
+    凑够 3 轮报「抓取成功但零房源」，下一次全量轮一到又「已恢复」——24 小时
+    7 报 7 恢复。
 
     这和 TestShardedSourcesSkipZeroRule 是同一个坑，只是切的维度是「状态」而非
     「楼栋」，而 sharded 的判据（total_targets > targets）在分层时恒为假。
@@ -795,10 +795,10 @@ class TestEnabledSourcesFromEnv:
     """``SOURCES`` 由 settings_store 每轮注水进环境，切分规则要和 config 对齐。"""
 
     @pytest.mark.parametrize("raw,want", [
-        ("holland2stay,xior", {"holland2stay", "xior"}),
-        ("holland2stay|xior", {"holland2stay", "xior"}),
-        (" Holland2Stay , XIOR ", {"holland2stay", "xior"}),
-        ("holland2stay,,xior", {"holland2stay", "xior"}),
+        ("codomo,xior", {"codomo", "xior"}),
+        ("codomo|xior", {"codomo", "xior"}),
+        (" Codomo , XIOR ", {"codomo", "xior"}),
+        ("codomo,,xior", {"codomo", "xior"}),
     ])
     def test_parsing(self, monkeypatch, raw, want):
         monkeypatch.setenv("SOURCES", raw)
@@ -817,7 +817,7 @@ class TestEnabledSourcesFromEnv:
 
 class TestWatchdogSkipsDisabledSources:
     def test_disabled_source_produces_no_alert(self, st, monkeypatch):
-        monkeypatch.setenv("SOURCES", "holland2stay,xior")
+        monkeypatch.setenv("SOURCES", "codomo,xior")
         # ourdomain 早已停摆：全是完整轮，但最近一轮是 10 小时前
         st.record_round_stat(
             round_at=(_DB_NOW - timedelta(hours=10)).isoformat(),
@@ -826,14 +826,14 @@ class TestWatchdogSkipsDisabledSources:
         assert watchdog.poll(st) == []
 
     def test_enabled_source_in_the_same_db_still_alerts(self, st, monkeypatch):
-        monkeypatch.setenv("SOURCES", "holland2stay,xior")
+        monkeypatch.setenv("SOURCES", "codomo,xior")
         st.record_round_stat(
             round_at=(_DB_NOW - timedelta(hours=10)).isoformat(),
             source="ourdomain", listings=12, targets=2, complete=2,
         )
-        _seed(st, "holland2stay",
+        _seed(st, "codomo",
               [(284, 6, 6, "")] * 5 + [(0, 6, 6, "")] * 3)
-        assert [a.key for a in watchdog.poll(st)] == ["source_zero:holland2stay"]
+        assert [a.key for a in watchdog.poll(st)] == ["source_zero:codomo"]
 
     def test_report_marks_disabled_sources(self, st, monkeypatch):
         monkeypatch.setenv("SOURCES", "xior")
@@ -852,8 +852,7 @@ class TestSilenceIsMeasuredInTime:
     """轮数量不出「多久」：高峰期一轮 60 秒、峰外 390 秒，同样 6 轮可以是
     6 分钟也可以是 39 分钟。而现在「全站 0 条」是常态，不是故障——
 
-        H2S 高频轮只查可订/抽签，平台上没有可订房源时正确地返回 0
-        （2026-08-25 实测：库里 345 Occupied + 42 Reserved，可订 0）
+        feed 只列可订/抽签，平台上没有可订房源时正确地返回 0
         OurCampus 官网自述排队 16–18 个月，三个月抓到 1 条
         Xior 常态零可订
 

@@ -43,7 +43,7 @@ class TestCaseDedupe:
         assert temp_db.get_feature_values("Type") == ["Studio"]
 
     def test_does_not_merge_genuinely_different_values(self, temp_db):
-        _add(temp_db, "a", "holland2stay", ["Type: Studio"])
+        _add(temp_db, "a", "codomo", ["Type: Studio"])
         _add(temp_db, "b", "plaza", ["Type: House"])
         _add(temp_db, "c", "magis", ["Type: 2-room apartment"])
         assert sorted(temp_db.get_feature_values("Type")) == [
@@ -59,12 +59,12 @@ class TestCaseDedupe:
 
     def test_synonym_merging_still_works(self, temp_db):
         """大小写去重不能把原有的同义词归一顶掉（荷/英两版房型）。"""
-        _add(temp_db, "a", "holland2stay", ["Type: Loft (open bedroom area)"])
-        _add(temp_db, "b", "holland2stay", ["Type: Loft (open slaapkamer)"])
+        _add(temp_db, "a", "codomo", ["Type: Loft (open bedroom area)"])
+        _add(temp_db, "b", "codomo", ["Type: Loft (open slaapkamer)"])
         assert temp_db.get_feature_values("Type") == ["Loft (open bedroom area)"]
 
     def test_other_dimensions_are_deduped_too(self, temp_db):
-        _add(temp_db, "a", "holland2stay", ["Tenant: Students only"])
+        _add(temp_db, "a", "codomo", ["Tenant: Students only"])
         _add(temp_db, "b", "magis", ["Tenant: students only"])
         assert temp_db.get_feature_values("Tenant") == ["Students only"]
 

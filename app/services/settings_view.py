@@ -44,7 +44,6 @@ def settings_sections(ctx: dict, *, zh: bool) -> list[dict]:
                    _t(zh, cn, en), tone)]
 
     weekdays = _on(env.get('PEAK_WEEKDAYS_ONLY', ''), True)
-    rest_on = _on(env.get('H2S_REST_ENABLED', ''), False)
     scrape = [
         _row('interval', _t(zh, '抓取间隔', 'Interval'),
              _t(zh, f"每 {get('CHECK_INTERVAL', '300')} 秒 · 日志 {get('LOG_LEVEL', 'INFO')}",
@@ -55,10 +54,6 @@ def settings_sections(ctx: dict, *, zh: bool) -> list[dict]:
              + _t(zh, f"{get('PEAK_INTERVAL', '60')}→{get('MIN_INTERVAL', '15')} 秒",
                   f"{get('PEAK_INTERVAL', '60')}→{get('MIN_INTERVAL', '15')} s")
              + (_t(zh, ' · 仅工作日', ' · weekdays') if weekdays else '')),
-        _row('h2s_rest', _t(zh, 'H2S 快速通道', 'H2S fast lane'),
-             _t(zh, f"每 {get('H2S_REST_INTERVAL', '3')} 秒 · {get('H2S_REST_START', '08:30')}–{get('H2S_REST_END', '17:45')}",
-                f"Every {get('H2S_REST_INTERVAL', '3')} s · {get('H2S_REST_START', '08:30')}–{get('H2S_REST_END', '17:45')}"),
-             *((_t(zh, '已开启', 'On'), 'ok') if rest_on else (_t(zh, '已关闭', 'Off'), 'muted'))),
     ]
 
     labels = dict(ctx['source_options'])
@@ -67,7 +62,7 @@ def settings_sections(ctx: dict, *, zh: bool) -> list[dict]:
                       _names([labels[k] for k in chosen], zh=zh) or _t(zh, '未选择', 'None selected'),
                       f"{len(chosen)} / {len(labels)}", 'muted' if chosen else 'attention')]
     lists = (
-        ('h2s', 'Holland2Stay', ctx['known_cities'], 'id', ctx['selected_city_ids'], _t(zh, '城市', 'cities')),
+        ('codomo', 'Codomo', ctx['known_codomo_cities'], 'key', ctx['selected_codomo_keys'], _t(zh, '城市', 'cities')),
         ('ourdomain', 'OurDomain', ctx['known_ourdomain_cities'], 'key', ctx['selected_ourdomain_keys'], _t(zh, '楼盘', 'buildings')),
         ('magis', 'Magis', ctx['known_magis_cities'], 'key', ctx['selected_magis_keys'], _t(zh, '城市', 'cities')),
         ('se', 'Student Experience', ctx['known_se_cities'], 'key', ctx['selected_se_keys'], _t(zh, '城市', 'cities')),

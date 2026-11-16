@@ -103,7 +103,7 @@ def system_info():
         与旧行为一致（override=True 让文件值胜出），但只影响这几行文本。
         """
         return _file_env.get(key, fallback)
-    info["cities"] = [c.name for c in cfg.cities]
+    info["cities"] = cfg.monitored_city_names()
     info["check_interval"] = _shown("CHECK_INTERVAL", cfg.check_interval)
     info["peak_interval"] = _shown("PEAK_INTERVAL", cfg.peak_interval)
     info["peak_start"] = _shown("PEAK_START", cfg.peak_start)

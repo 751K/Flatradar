@@ -9,6 +9,10 @@
     AVAILABILITY_FILTERS=…,999999       → 照单全收，抓一个不存在的状态
     SOURCES=holland2stay,xiorr          → 照单全收，一个不存在的平台
 
+2026-11 Holland2Stay 改名 Codomo：城市订阅改叫 ``CODOMO_CITIES``（``CITIES`` 只作
+旧名兜底读取），与其它平台一样走 ``parse_targets``——key 是字符串，不认识的 key
+是警告；``AVAILABILITY_FILTERS`` 随旧 GraphQL 一起退役。
+
 最糟的是第一种。空列表是**合法配置**（「不监控任何城市」），所以没有任何地方会
 报错——监控正常启动、正常跑轮次、一条房源都不抓。
 
@@ -32,12 +36,10 @@ class TestFormatErrorsAreFatal:
     """格式坏了一定是错的：没有哪种正确配置长这样。"""
 
     @pytest.mark.parametrize("key,value,why", [
-        ("CITIES", "Eindhoven", "漏了 ID"),
-        ("CITIES", "Eindhoven;29", "分号不是分隔符"),
-        ("CITIES", "Eindhoven,abc", "ID 不是整数"),
-        ("CITIES", ",29", "城市名为空"),
-        ("AVAILABILITY_FILTERS", "Available to book,179|Reserved", "第二项漏了 ID"),
-        ("AVAILABILITY_FILTERS", "Reserved,x", "ID 不是整数"),
+        ("CODOMO_CITIES", "Eindhoven", "漏了 key"),
+        ("CODOMO_CITIES", "Eindhoven;29", "分号不是分隔符"),
+        ("CODOMO_CITIES", ",29", "城市名为空"),
+        ("CODOMO_CITIES", "Eindhoven,", "key 为空"),
         ("XIOR_CITIES", "只有名字", "漏了 key"),
         ("SHARD_SIZES", "xior4", "漏了冒号"),
         ("SHARD_SIZES", "xior:abc", "值不是整数"),
@@ -49,8 +51,8 @@ class TestFormatErrorsAreFatal:
         assert _fatal(problems), f"{why} 没被判为致命：{value!r}"
 
     def test_message_names_the_offending_entry(self):
-        """只说「CITIES 有问题」等于没说——一条里有五个城市，是哪个？"""
-        [p] = _fatal(tc.validate({"CITIES": "Eindhoven,29|Amsterdam"}))
+        """只说「CODOMO_CITIES 有问题」等于没说——一条里有五个城市，是哪个？"""
+        [p] = _fatal(tc.validate({"CODOMO_CITIES": "Eindhoven,29|Amsterdam"}))
         assert "Amsterdam" in str(p)
         assert "Eindhoven" not in str(p), "把好的那项也报进来了"
 
@@ -59,9 +61,12 @@ class TestUnknownEntitiesAreWarningsNotErrors:
     """实体不认识只是警告：官方注册表会更新，写死拒绝会让新城市变成启动失败。"""
 
     @pytest.mark.parametrize("key,value", [
-        ("CITIES", "SomeNewTown,9999"),
-        ("AVAILABILITY_FILTERS", "X,999999"),
-        ("SOURCES", "holland2stay,xiorr"),
+        ("CODOMO_CITIES", "SomeNewTown,9999"),
+        # key 改成字符串之后，非数字 key 只是「不认识」，不再是格式错误
+        ("CODOMO_CITIES", "Eindhoven,abc"),
+        ("SOURCES", "codomo,xiorr"),
+        # 改名前的平台名：不认识，警告并丢弃，不挡启动
+        ("SOURCES", "holland2stay"),
         ("XIOR_CITIES", "某楼,p9999999"),
         ("SHARD_SIZES", "nosuchsource:4"),
     ])
@@ -70,19 +75,14 @@ class TestUnknownEntitiesAreWarningsNotErrors:
         assert problems, f"{value!r} 一声不吭"
         assert not _fatal(problems), f"{value!r} 不该阻止保存"
 
-    def test_name_id_mismatch_is_caught(self):
-        """ID 对得上但名字写错——面板不会产生，手改会。"""
-        [p] = tc.validate({"CITIES": "Amsterdam,29"})
-        assert "Eindhoven" in str(p) and not p.fatal
 
 
 class TestValidConfigIsSilent:
     @pytest.mark.parametrize("key,value", [
-        ("CITIES", "Eindhoven,29|Amsterdam,24"),
-        ("CITIES", "Eindhoven,29|"),          # 尾部多一个分隔符是手写常见笔误
-        ("CITIES", ""),                        # 空 = 不监控，是合法配置
-        ("SOURCES", "holland2stay,ourdomain,xior"),
-        ("AVAILABILITY_FILTERS", "Available to book,179|Reserved,6203"),
+        ("CODOMO_CITIES", "Eindhoven,29|Amsterdam,24"),
+        ("CODOMO_CITIES", "Eindhoven,29|"),   # 尾部多一个分隔符是手写常见笔误
+        ("CODOMO_CITIES", ""),                 # 空 = 不监控，是合法配置
+        ("SOURCES", "codomo,ourdomain,xior"),
         ("SHARD_SIZES", "xior:4"),
         ("SHARD_SIZES", "xior:0"),             # 0 = 关掉分片
         ("SOURCE_MIN_INTERVALS", "xior:180"),
@@ -94,50 +94,47 @@ class TestValidConfigIsSilent:
     def test_the_real_production_values(self):
         """生产在用的这一组必须干净，否则升级上去满屏 ERROR。"""
         assert tc.validate({
-            "SOURCES": "holland2stay,ourdomain,ourcampus,xior",
-            "CITIES": "Eindhoven,29|Amsterdam,24",
+            "SOURCES": "codomo,ourdomain,ourcampus,xior",
+            "CODOMO_CITIES": "Eindhoven,29|Amsterdam,24",
             "OURDOMAIN_CITIES": "Amsterdam Diemen,diemen",
             "OURCAMPUS_CITIES": "OurCampus Amsterdam Diemen,diemen",
-            "AVAILABILITY_FILTERS":
-                "Available to book,179|Available in lottery,336|Reserved,6203",
             "SHARD_SIZES": "xior:4",
             "SOURCE_MIN_INTERVALS": "xior:180",
         }) == []
 
 
 class TestTheSilentZeroCities:
-    """整条 CITIES 解析不出东西 → H2S 什么都不抓，而且没有任何地方会报错。
+    """整条 CODOMO_CITIES 解析不出东西 → Codomo 什么都不抓，而且没有任何地方会报错。
 
     这是本次要修的核心：空列表是合法配置，所以「解析全军覆没」和「你就是不想监控
     任何城市」在下游完全无法区分。只有在解析这一层才分得出来。
     """
 
     def test_all_entries_broken_is_reported(self):
-        problems = tc.validate_effective({"CITIES": "Eindhoven;29|Amsterdam"})
-        assert any("整条都没解析出城市" in str(p) for p in problems)
+        problems = tc.validate_effective({"CODOMO_CITIES": "Eindhoven;29|Amsterdam"})
+        assert any("整条都没解析出目标" in str(p) for p in problems)
 
     def test_deliberately_empty_is_not_reported(self):
-        """真的不想监控 H2S 时不该被骚扰。"""
-        problems = tc.validate_effective({"CITIES": ""})
-        assert not any("整条都没解析出城市" in str(p) for p in problems)
+        """真的不想监控 Codomo 时不该被骚扰。"""
+        problems = tc.validate_effective({"CODOMO_CITIES": ""})
+        assert not any("整条都没解析出目标" in str(p) for p in problems)
 
     def test_partially_broken_does_not_trigger_it(self):
         """还剩至少一个城市时，报的是那一项，不是「整条」。"""
-        problems = tc.validate_effective({"CITIES": "Eindhoven,29|Amsterdam"})
+        problems = tc.validate_effective({"CODOMO_CITIES": "Eindhoven,29|Amsterdam"})
         assert any("Amsterdam" in str(p) for p in problems)
-        assert not any("整条都没解析出城市" in str(p) for p in problems)
+        assert not any("整条都没解析出目标" in str(p) for p in problems)
 
 
 class TestRoundTrip:
     """解析与生成必须对得上——面板和迁移都要往回写。"""
 
-    @pytest.mark.parametrize("value", [
-        "Eindhoven,29|Amsterdam,24",
-        "Available to book,179|Reserved,6203",
+    @pytest.mark.parametrize("key,value", [
+        ("CODOMO_CITIES", "Eindhoven,29|Amsterdam,24"),
+        ("XIOR_CITIES", "Eindhoven Kronehoefstraat,p0196467"),
     ])
-    def test_pairs_survive(self, value):
-        parsed, problems = (tc.parse_cities(value) if "Eindhoven" in value
-                            else tc.parse_availability(value))
+    def test_pairs_survive(self, key, value):
+        parsed, problems = tc.parse_targets(key, value)
         assert not problems
         assert tc.format_pairs(parsed) == value
 
@@ -153,14 +150,22 @@ class TestEveryStructuredKeyHasAParser:
     def test_covers_all_delimiter_packed_runtime_keys(self):
         from env_registry import RUNTIME_KEYS
 
-        # runtime 里剩下的都是标量（间隔、时间点、开关），不需要解析
+        # runtime 里剩下的都是标量（间隔、时间点、开关），不需要解析。
+        # CITIES 是 CODOMO_CITIES 的旧名，只在新键未设置时兜底读取
+        # （TargetSpec.legacy_env_key），本身不单独校验。
         packed = {
-            "SOURCES", "SHADOW_SOURCES", "CITIES",
+            "SOURCES", "SHADOW_SOURCES",
             *tc.TARGET_KEYS,
-            "AVAILABILITY_FILTERS", "SHARD_SIZES", "SOURCE_MIN_INTERVALS",
+            "SHARD_SIZES", "SOURCE_MIN_INTERVALS",
         }
+        assert "CODOMO_CITIES" in tc.TARGET_KEYS
         assert packed <= RUNTIME_KEYS
         assert packed == set(tc.STRUCTURED_KEYS)
+
+    def test_retired_availability_filters_has_no_parser(self):
+        from env_registry import RETIRED_KEYS
+        assert "AVAILABILITY_FILTERS" in RETIRED_KEYS
+        assert "AVAILABILITY_FILTERS" not in tc.STRUCTURED_KEYS
 
     def test_unknown_keys_are_ignored_not_crashed(self):
         assert tc.validate({"CHECK_INTERVAL": "300"}) == []
@@ -202,7 +207,7 @@ class TestRegistryDrift:
     def test_first_run_reports_nothing(self):
         """没有快照时只记录不报。
 
-        这条不是「宽容一点」，是**不报假警**：实测生效配置里 holland2stay 26 城
+        这条不是「宽容一点」，是**不报假警**：实测生效配置里 H2S（今 Codomo）26 城
         订 2 个、Xior 30 栋订 4 栋，都是明确的选择。首轮把它们全报出来，50 条里
         0 条是真的，然后没人再看这类提醒。
         """
@@ -213,7 +218,7 @@ class TestRegistryDrift:
     def test_a_deliberate_subset_is_not_drift(self):
         """只订两个城市不是漂移——快照里已经有的，不管订没订都不报。"""
         seen = {k: sorted(tc.registry_of(k)) for k in tc.DRIFT_KEYS if tc.registry_of(k)}
-        env = {"CITIES": "Amsterdam,24|Eindhoven,29"}
+        env = {"CODOMO_CITIES": "Amsterdam,24|Eindhoven,29"}
         problems, _ = tc.registry_drift(env, seen)
         assert problems == []
 
@@ -278,8 +283,8 @@ class TestRegistryDrift:
         for key in ("PLAZA_CITIES", "MAGIS_CITIES",
                     "STUDENTEXPERIENCE_CITIES", "XIOR_CITIES"):
             assert tc.subscribed_keys(key, "") == set(tc.registry_of(key)), key
-        # CITIES / OURDOMAIN_CITIES 的空串是真的空
-        assert tc.subscribed_keys("CITIES", "") == set()
+        # CODOMO_CITIES / OURDOMAIN_CITIES 的空串是真的空
+        assert tc.subscribed_keys("CODOMO_CITIES", "") == set()
         assert tc.subscribed_keys("OURDOMAIN_CITIES", "") == set()
 
     def test_empty_all_platforms_never_drift(self):
@@ -317,7 +322,7 @@ class TestRegistryDrift:
         from config import load_config
 
         attr = {
-            "CITIES": "cities",
+            "CODOMO_CITIES": "codomo_cities",
             "OURDOMAIN_CITIES": "ourdomain_cities",
             "OURCAMPUS_CITIES": "ourcampus_cities",
             "XIOR_CITIES": "xior_cities",
@@ -325,10 +330,10 @@ class TestRegistryDrift:
             "STUDENTEXPERIENCE_CITIES": "studentexperience_cities",
             "PLAZA_CITIES": "plaza_cities",
         }
-        source_of_key = {"CITIES": "holland2stay", **tc.TARGET_KEYS}
+        assert set(attr) == set(tc.TARGET_KEYS), "新平台的目标键没进这张对照表"
 
         for key, field in attr.items():
-            monkeypatch.setenv("SOURCES", source_of_key[key])
+            monkeypatch.setenv("SOURCES", tc.TARGET_KEYS[key])
             monkeypatch.setenv(key, "")
             got = len(getattr(load_config(), field))
             empty_means_all = got == len(tc.registry_of(key)) and got > 0

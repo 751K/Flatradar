@@ -1,29 +1,16 @@
-"""抓取熔断从「H2S 专属」推广到「每个 source 一个」。
+"""每个 source 一个抓取熔断，策略按 source 配。
 
-问题
-----
-`monitor` 里 H2S 专属逻辑有 56 处引用：source 级熔断、canary 恢复探测、登录抑制、
-专属 executor 线程。抽象层是对称的（``AbstractScraper`` + ``SCRAPER_REGISTRY``），
-但编排层把 H2S 硬编码成了特例——这是历史遗留（H2S 曾是唯一 source）固化成的架构。
+编排层不再有任何平台特例：熔断、canary 恢复探测都走同一条通用路径。
 
-保护装在了最不需要它的那个 source 上。保留日志全量统计「整体抓取失败」次数：
+为什么每个 source 都要有：保留日志全量统计「整体抓取失败」次数里，xior 整源
+RateLimitError 147 次、ourdomain / ourcampus 网络失败各六十多次——当年只有一个
+source 装了熔断，保护装在了最不需要它的那个上。
 
-    xior       RateLimitError     147 次   ← 无熔断
-    ourdomain  ScrapeNetworkError  67 次   ← 无熔断
-    ourcampus  ScrapeNetworkError  60 次   ← 无熔断
-    xior       ScrapeNetworkError  57 次   ← 无熔断
-    holland2stay 全部合计            6 次   ← 有熔断
-
-Xior 的限流是**按 IP 累积**的（模块头写着 ~15–20 req/window），整源 429 之后没有
-任何退避，下一轮照常再打——正是「限流最狠的时候接着撞」。
-
-策略是按 source 配的，不是一刀切
---------------------------------
-各家的失败语义不同，退避参数也就不该相同：
-
-- H2S 的 403 要换出口 IP 才好，冷却长（30 分钟起，最长 6 小时）
-- Xior 的 429 等一会就好，冷却短（10 分钟起，最长 1 小时），但**必须有**
-- 429 是否该熔断，按 source 配：H2S 那边「等等就好」的判断没变，不能顺手改掉
+策略按 source 配
+----------------
+- 403 要换出口 IP / 指纹才好 → 默认冷却中等
+- Xior 的 429 按 IP 累积，等一会就好 → 冷却短，但**必须有**
+- 429 是否该熔断按 source 配：其余平台的 429 由 scrapers 内部退避与自适应节奏处理
 """
 from __future__ import annotations
 
@@ -56,49 +43,41 @@ class TestEverySourceGetsOne:
         assert p.base_cooldown > 0 and p.max_cooldown >= p.base_cooldown
 
     @pytest.mark.parametrize("source", [
-        "holland2stay", "xior", "ourdomain", "ourcampus",
+        "codomo", "xior", "ourdomain", "ourcampus",
     ])
     def test_all_registered_sources_have_a_circuit(self, source, cs, st):
         cs.trip(source, BlockedError("403"), storage=st)
         assert cs.remaining(source) > 0
 
     def test_circuits_are_independent(self, cs, st):
-        """一个 source 熔断不能牵连另一个——这正是当初把 H2S 单拎出来的理由。"""
+        """一个 source 熔断不能牵连另一个。"""
         cs.trip("xior", RateLimitError("429"), storage=st)
         assert cs.remaining("xior") > 0
-        assert cs.remaining("holland2stay") == 0
+        assert cs.remaining("codomo") == 0
 
 
 class TestPolicyIsPerSource:
-    def test_h2s_cooldown_is_unchanged(self, cs):
-        """H2S 的参数一个字都不能变——这次是推广机制，不是调它的策略。"""
-        import monitor
+    def test_codomo_uses_the_default_policy(self, cs):
+        """Codomo 没有任何特例：走默认策略。"""
+        assert cs.policy("codomo") == cs.policy("some-new-platform")
 
-        p = cs.policy("holland2stay")
-        assert p.base_cooldown == monitor._H2S_CIRCUIT_BASE_COOLDOWN
-        assert p.max_cooldown == monitor._H2S_CIRCUIT_MAX_COOLDOWN
-
-    def test_h2s_does_not_trip_on_rate_limit(self, cs, st):
-        """H2S 那边「429 等等就好」的判断没变，不能顺手改掉。
-
-        它的 429 由 scrapers 内部的 RATE_LIMIT_BACKOFF 退避处理，而且实测
-        403 才是需要换 IP 的那个。
-        """
-        cs.trip("holland2stay", RateLimitError("429"), storage=st)
-        assert cs.remaining("holland2stay") == 0
+    def test_default_does_not_trip_on_rate_limit(self, cs, st):
+        """默认策略的 429 由 scrapers 内部退避处理，不熔断。"""
+        cs.trip("codomo", RateLimitError("429"), storage=st)
+        assert cs.remaining("codomo") == 0
 
     def test_xior_trips_on_rate_limit(self, cs, st):
         """Xior 的 429 是按 IP 累积的，不退避就是接着撞——147 次实测。"""
         cs.trip("xior", RateLimitError("429"), storage=st)
         assert cs.remaining("xior") > 0
 
-    def test_xior_cooldown_is_shorter_than_h2s(self, cs):
+    def test_xior_cooldown_is_shorter_than_default(self, cs):
         """429 等一会就好，403 要换 IP。退避长度该反映这个差别。"""
-        assert cs.policy("xior").base_cooldown < cs.policy("holland2stay").base_cooldown
+        assert cs.policy("xior").base_cooldown < cs.policy("codomo").base_cooldown
 
     def test_network_errors_never_trip(self, cs, st):
         """网络失败已经有连续失败计数 + 冷却那条路，别叠两层退避。"""
-        for source in ("holland2stay", "xior", "ourdomain"):
+        for source in ("codomo", "xior", "ourdomain"):
             cs.trip(source, ScrapeNetworkError("timeout"), storage=st)
             assert cs.remaining(source) == 0
 
@@ -145,7 +124,7 @@ class TestSurvivesRestart:
         assert c2.remaining("xior") > 0, (
             "熔断状态没跨重启——部署一次就把退避清零，正是限流最狠的时候"
         )
-        assert c2.remaining("holland2stay") == 0
+        assert c2.remaining("codomo") == 0
 
 
 class TestNeverBlocksStartup:
@@ -185,25 +164,28 @@ class TestNeverBlocksStartup:
 
 
 class TestMonitorWiring:
-    """守卫：monitor 必须真的用上 per-source 熔断，而不是留着 H2S 专属那套。"""
+    """守卫：monitor 必须真的用上 per-source 熔断，没有平台特例。"""
 
     def test_monitor_holds_source_circuits(self):
         import monitor
 
         assert isinstance(monitor._source_circuits, SourceCircuits)
 
-    def test_h2s_only_globals_are_gone(self):
+    def test_platform_specific_circuits_are_gone(self):
         import monitor
+        from mcore import scrape_round
 
-        assert not hasattr(monitor, "_h2s_circuit"), (
-            "H2S 专属熔断器又回来了——机制会重新分叉成两套"
-        )
+        for mod in (monitor, scrape_round):
+            for name in vars(mod):
+                assert "h2s" not in name.lower(), (
+                    f"{mod.__name__}.{name}：平台专属的熔断/调度又回来了"
+                )
 
-    def test_non_h2s_failures_trip_a_circuit(self):
+    def test_failures_trip_a_circuit(self):
         """源码级守卫：通用调度路径必须调 trip()。
 
-        少了这一行，非 H2S 的 source 就还是「失败了下一轮原速再来」——
-        xior 整源 429 失败 147 次正是这么攒出来的。
+        少了这一行，source 就还是「失败了下一轮原速再来」——xior 整源 429
+        失败 147 次正是这么攒出来的。
         """
         import ast
         import pathlib
@@ -214,22 +196,10 @@ class TestMonitorWiring:
             if isinstance(node, ast.AsyncFunctionDef) and node.name == "_dispatch_source":
                 body = ast.unparse(node)
                 assert "runtime.source_circuits.trip" in body, (
-                    "通用调度路径没有打开熔断，非 H2S source 依然裸奔"
+                    "通用调度路径没有打开熔断，source 依然裸奔"
                 )
                 assert "runtime.source_circuits.recover" in body, (
                     "canary 成功后没有关闭熔断，会一直停在 canary 模式"
                 )
                 return
         raise AssertionError("找不到 _dispatch_source，这条守卫已失效")
-
-    def test_h2s_still_suppresses_login_on_block(self):
-        """反向守卫：熔断推广了，但 H2S 独有的登录抑制不能跟着丢。
-
-        只有 H2S 有自动预订，403 之后继续碰登录接口只会让 WAF 状态更热。
-        """
-        import inspect
-
-        from mcore import h2s_guard
-
-        src = inspect.getsource(h2s_guard.mark_h2s_scrape_blocked)
-        assert "mark_h2s_login_blocked" in src

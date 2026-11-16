@@ -2,22 +2,17 @@
 scrapers/base.py — 抓取层抽象（source-agnostic）
 ==================================================
 
-P0 引入：把抓取从 H2S 单源耦合中解放出来，每个第三方租房平台实现
-``AbstractScraper`` 子类，注册到 ``scrapers/__init__.py:SCRAPER_REGISTRY``。
+每个第三方租房平台实现 ``AbstractScraper`` 子类，注册到
+``scrapers/__init__.py:SCRAPER_REGISTRY``。
 
 设计要点
 --------
 - **同步 API**：保留现有 sync 范式，monitor 那边继续用 ``run_in_executor``
   把抓取放进线程池。改 async 是另一坨工作量，不在 P0 范围内。
-- **零回归承诺**：仅 Holland2Stay 一家时行为完全不变——多城市编排归
-  dispatcher，I/O 形状一致。
+- **多 target 编排归 dispatcher**，scraper 只管单个 target，I/O 形状一致。
 - **异常分类**：``RateLimitError`` / ``BlockedError`` / ``ScrapeNetworkError``
   都来自这里。P0 之前它们住在顶层 `scraper.py`；那个模块迁移后只剩 re-export，
   生产代码零 import，2026-08-20 删除。
-- **数据模型保守演进**：Listing 在 P0 里只新增 `source` 字段（默认
-  ``"holland2stay"``），id / native_id 的前缀化迁移留到 P1（接 OurDomain
-  时一起做，避免提前改 status_changes / web_notifications / iOS deep
-  link 的 listing_id 引用）。
 """
 from __future__ import annotations
 
@@ -75,7 +70,7 @@ class ScrapeNetworkError(Exception):
 class ProxyError(ScrapeNetworkError):
     """
     抓取代理（``HTTPS_PROXY`` / ``ALL_PROXY``）本身故障——CONNECT 502 /
-    隧道建立失败 / 连接被拒等。**注意是代理层挂了，不是 H2S 挂了。**
+    隧道建立失败 / 连接被拒等。**注意是代理层挂了，不是目标平台挂了。**
 
     继承 ``ScrapeNetworkError``：沿用"网络失败"的连续计数 + 冷却路径，
     无需改 monitor 的现有控制流。但 monitor 会 ``isinstance`` 出它来额外
@@ -147,8 +142,8 @@ def is_proxy_error(exc: BaseException) -> bool:
 #: 除非人去后台充值/改密码。
 #:
 #: 2026-08-26 生产：webshare 两个账号同时 402，而冷却统一是 10 分钟，于是每 10
-#: 分钟就有一段窗口，各 source 重新去敲那个明知欠费的代理。H2S 因为浏览器一建
-#: 用 2 小时躲过了，Xior（15 分钟重建）和 OurCampus（每轮现取）则反复中招。
+#: 分钟就有一段窗口，各 source 重新去敲那个明知欠费的代理，Xior（15 分钟重建）
+#: 和 OurCampus（每轮现取）反复中招。
 _PROXY_ACCOUNT_ERROR_CODES = frozenset({402, 407})
 
 #: **瞬时**服务端异常：网关抽风、后端过载。这类可能几分钟后自己好，值得早点回去试。
@@ -248,52 +243,6 @@ class UpstreamMaintenanceError(Exception):
     """
 
 
-class OperationNotAllowedError(Exception):
-    """
-    上游按 GraphQL **operation 白名单**放行，而我们发的这一条不在名单里。
-
-    与 BlockedError 的区别 —— 这是整个类存在的理由
-    ------------------------------------------------
-    两者都是 HTTP 403，但成因、修法、代价完全相反：
-
-    - BlockedError → Cloudflare 说「不服务**这个 IP**」。正文是挑战页 HTML，
-      换出口 IP / 换指纹 / 等冷却都有意义。
-    - OperationNotAllowedError → 应用层说「不认识**这条 operation**」。正文是
-      JSON（``content-type: application/json``），Cloudflare 只是转发。
-      **和 IP 毫无关系**：同一个会话里换一条已登记的 operation 立刻 200。
-
-    把后者当成前者的代价是实打实的。2026-08-19 一次自动预订失败：
-    连续两次「重建 CF 会话」各跑一轮完整挑战，75 秒、约 3 MB 代理流量，
-    结束时仍是同一个 403；随后误判触发 1 小时登录链路抑制，把本来只坏了
-    预订的故障扩散到整条登录路径。换多少个 IP 都不会好。
-
-    唯一的修法是把站点自己发的那条 operation 原样照抄回来
-    （见 ``docs/H2S.md`` §4.1）。因此它**不该进任何自动冷却**——等待不会
-    改变结果，重试只是重复烧钱。
-    """
-
-
-#: 403 正文里出现这些 = 上游按 operation 白名单拒绝，与出口 IP 无关。
-#:
-#: 同一道闸门，两种文案，都实测过：
-#:   抓取侧 2026-08-18  ``{"code":"operation_not_allowed"}``
-#:   预订侧 2026-08-19  ``{"error":"This operation is not available through the public API"}``
-#: 只认其中一条会漏判另一条——漏判的后果就是上面那段 75 秒白烧。
-_OPERATION_REJECTED_MARKERS: tuple[str, ...] = (
-    "operation_not_allowed",
-    "not available through the public api",
-)
-
-
-def is_operation_rejected_body(body: str) -> bool:
-    """判断 403 响应体是否为「这条 operation 没登记」而非 CF 屏蔽。
-
-    只看正文，不看 ``content-type``：JSON 头是强信号但不是判据——CF 自己的
-    某些拒绝也带 JSON 头，而这两句文案是上游应用独有的。
-    """
-    lower = body.lower()
-    return any(marker in lower for marker in _OPERATION_REJECTED_MARKERS)
-
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -317,7 +266,7 @@ def is_cloudflare_body(body: str) -> bool:
 
 
 # 维护页关键词（大小写不敏感匹配）。
-# Holland2Stay 在计划维护期间会把整站换成一个简单 HTML，含以下短语之一。
+# 平台计划维护期间常把整站换成一个简单 HTML，含以下短语之一。
 # 抽成常量便于复用 + 测试时 monkeypatch 注入"假维护页"。
 _MAINTENANCE_MARKERS: tuple[str, ...] = (
     "we'll be back soon",
@@ -332,16 +281,12 @@ def is_maintenance_body(body: str) -> bool:
     """
     判断响应体（HTML 字符串）是否为"平台维护中"占位页。
 
-    判定基于多个英文短语任一命中——H2S 维护页是固定模板，命中率高。
-    对短 body / JSON 不会误伤（这些字符串不会出现在正常 GraphQL 响应里）。
+    判定基于多个英文短语任一命中。对短 body / JSON 不会误伤（这些字符串不会
+    出现在正常的列表页里）。调用方是各 scraper 的非 200 / 异常页分支（如
+    ``scrapers/codomo.py``）。
 
-    调用方是 ``browser_fetcher._h2s_maintenance_check``（H2S_PROFILE 的
-    ``maintenance_check`` 钩子），在 CF 挑战解开**之后**拿页面正文来判——
-    挑战页是 Cloudflare 生成的，解开前的标题/正文与站点真实状态无关。
-
-    曾经还有一个 ``probe_h2s_maintenance(session)``：连续 403 时用 curl_cffi
-    另开一次主站 GET 来探维护。H2S 迁到浏览器传输层后它再无调用者（浏览器
-    导航本来就会经过主站，顺手判掉即可），已删除。
+    浏览器型 source 要在 CF 挑战解开**之后**再拿正文来判——挑战页是 Cloudflare
+    生成的，解开前的标题/正文与站点真实状态无关。
     """
     if not body:
         return False
@@ -357,18 +302,16 @@ class ScrapeTask:
     一次抓取的最小单位。source-agnostic。
 
     由 ``Config.scrape_tasks_v2()`` 产出，每个 ScrapeTask 描述 "在某个
-    source 上抓某个城市"。``city_key`` 是平台内部的城市标识（H2S 是
-    数字 city_id 字符串，OurDomain 可能是 slug），``city_display`` 是
-    用户可见的城市名，最终写入 ``Listing.city`` 字段。
+    source 上抓某个订阅目标"。``city_key`` 是平台的 target key（订阅串里的
+    key，含义见 ``mcore.registry.TARGET_SPECS`` 对应的注册表），``city_display``
+    是用户可见的名字，最终写入 ``Listing.city`` 字段。
 
-    单平台 / 多平台都按这个抽象走——H2S 多个城市 = 多个 ScrapeTask；
-    将来 OurDomain 加进来 = 多 N 个 ScrapeTask，归 OurDomainScraper 处理。
+    每个平台的每个订阅目标 = 一个 ScrapeTask。
     """
-    source: str          # "holland2stay" / "ourdomain" / "duwo" ...
-    city_key: str        # 平台内部城市标识（H2S 的 city_id_str 等）
-    city_display: str    # 用户可见城市名（写进 Listing.city）
-    # 扩展位：每个平台可能有自己的 filter 字段（例如 H2S 的 availability_ids）。
-    # 放 dict 而非具体类型，避免基类感知子类细节。
+    source: str          # "codomo" / "ourdomain" / "xior" ...
+    city_key: str        # 平台的 target key（订阅串里的 key）
+    city_display: str    # 用户可见名（写进 Listing.city）
+    # 扩展位：平台自己的额外参数。放 dict 而非具体类型，避免基类感知子类细节。
     extra: dict = field(default_factory=dict)
 
 
@@ -403,27 +346,24 @@ class AbstractScraper(ABC):
 
     **抓取层不管预订。** 这里曾经还挂着 ``prewarm_session()`` 与
     ``try_book(listing)`` 两个 no-op 钩子，设想是「支持自动预订的平台各自实现」。
-    实际从未接线：预登录走 ``mcore/prewarm.py → booker.create_prewarmed_session``，
-    下单走 ``monitor`` 直接调 ``booker`` / ``bookers/*``，全仓库没有一处调过这
-    两个钩子。而 H2S 那个 override 里还留着一句「暂未适配新 API」——它在 booker
-    换成 NextAuth（v1.16.9）之后就是错的，等于在基类文档上给后来人指一条不存在
-    的路。2026-08-20 删除。
+    实际从未接线：下单走 ``bookers/*``，全仓库没有一处调过这两个钩子。
+    2026-08-20 删除。
 
     线程模型
     --------
     实例由 ``get_scraper()`` 按 source 缓存并**跨轮复用**，dispatcher 逐
     source 串行调用，所以同一实例不会被并发进入。
 
-    浏览器型 source（H2S / Xior）还有一条更强的约束：Playwright 对象**绑定
+    浏览器型 source（Xior）还有一条更强的约束：Playwright 对象**绑定
     创建它的线程**，换线程即失效，且两个独立的 Playwright sync 实例不能共存
     于同一线程。因此它们各自运行在独立的常驻浏览器工作进程中。往这类
     scraper 里塞自己的线程池会直接抛
     ``greenlet.error: Cannot switch to a different thread``。
 
-    纯 HTTP 的 source（OurDomain）没有这个约束，跑在默认 executor 上。
+    纯 HTTP 的 source（Codomo / OurDomain 等）没有这个约束，跑在默认 executor 上。
     """
 
-    # 子类必须覆盖。例：``source = "holland2stay"``
+    # 子类必须覆盖。例：``source = "codomo"``
     source: str = ""
 
     @abstractmethod

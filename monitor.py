@@ -15,8 +15,7 @@ monitor.py — 监控主程序
 2. 逐 source 调 `dispatch_scrape_tasks()`（sync，在 executor 线程中运行），
    拿到房源 + 每个城市的完整扫描信号。一个 source 失败只隔离它自己
 3. `storage.diff()` 对比库中快照，产出 new_listings / status_changes
-4. 收集自动预订候选（纯内存）；**只对本轮真有候选的用户**做 H2S 预登录，
-   然后立即把 try_book() 提交到线程池
+4. 收集自动预订候选（纯内存），立即把 try_book() 提交到线程池
 5. 发送新房源/状态变更通知（与步骤 4 的预订并发进行）
 6. 等待预订完成，推送预订结果通知
 7. 写 meta（last_scrape_at）；按完整扫描信号决定是否做 stale 收敛；
@@ -76,18 +75,11 @@ from mcore.state import (
 from mcore.throttles import (
     should_notify_block as _should_notify_block,  # noqa: F401
 )
-from mcore.h2s_guard import (
-    H2S_SOURCE,
-    h2s_login_suppressed_remaining as _h2s_login_suppressed_remaining,  # noqa: F401
-)
 from mcore.interval import apply_jitter, get_interval
-from mcore.prewarm_round import PrewarmRound
 from mcore.post_round import run_post_scrape as _run_post_scrape
 from mcore.round_failures import (
-    handle_h2s_blocked as _handle_h2s_blocked,
     handle_scrape_failure as _handle_scrape_failure,
 )
-from mcore.h2s_rest import RestTrigger
 from mcore import geocode as _geocode
 # 从 monitor.py 拆出的自包含块。保留带下划线的别名，测试与既有调用点
 # （monitor._apply_source_intervals 等）继续按原名字工作。
@@ -101,7 +93,6 @@ from mcore.sources import (
     AUTO_BOOK_SOURCES as _AUTO_BOOK_SOURCES,  # noqa: F401
     BROWSER_SOURCES as _BROWSER_SOURCES,  # noqa: F401
     PROXYLESS_CAPABLE_SOURCES as _PROXYLESS_CAPABLE_SOURCES,  # noqa: F401
-    REST_WAKE_SOURCES as _REST_WAKE_SOURCES,
 )
 from mcore.scrape_round import (
     _ROUND_FAILURE_PRIORITY,  # noqa: F401
@@ -109,7 +100,7 @@ from mcore.scrape_round import (
     close_browser_workers,
     dispatch_diagnostic,
     dispatch_scrape_tasks_async as _dispatch_scrape_tasks_async,  # noqa: F401
-    dispatch_with_h2s_circuit as _dispatch_with_h2s_circuit,
+    dispatch_with_circuits as _dispatch_with_circuits,
     get_browser_executor as _get_browser_executor,  # noqa: F401
     pick_round_failure as _pick_round_failure,  # noqa: F401
     report_source_proxy_failure as _report_source_proxy_failure,  # noqa: F401
@@ -167,7 +158,6 @@ from mcore.booking_round import (
 _GEOCODE_INTERVAL_SEC = 1800
 from scrapers import (
     BlockedError,
-    OperationNotAllowedError,
     ProxyError,
     RateLimitError,
     ScrapeNetworkError,
@@ -328,24 +318,10 @@ _ADAPTIVE_INCREASE = 2.0
 _BLOCKED_COOLDOWN = 900  # 15 分钟
 _BLOCKED_COOLDOWN_MAX = 7200  # 连续 Cloudflare 403 时最长冷却 2 小时
 
-# 平台维护冷却时间（秒）。H2S 公告通常 1–2 小时窗口，15 分钟一次再探即可：
+# 平台维护冷却时间（秒）。维护窗口通常一两个小时，15 分钟一次再探即可：
 # 探到还在维护 → 继续冷却；探到恢复 → 当轮成功，正常回到 check_interval。
 # 不发用户告警，不计入 network_fail_streak，安静等。
 _MAINTENANCE_COOLDOWN = 900  # 15 分钟
-
-#: 上游按 operation 白名单拒绝后的冷却（秒）。
-#:
-#: 这条**不会自己好**——修法只有一个：把站点自己发的那条 operation 原样照抄
-#: 回来（docs/H2S.md §4.1）。所以冷却在这里不是「等它恢复」，是**限流**：
-#: 不冷却的话每轮（高峰期约 60 秒）都会重跑一次完整抓取 + 浏览器会话，在一个
-#: 必然失败的查询上反复烧代理流量。
-#:
-#: 也不宜太长：修好之后是要发版的，而发版会重启进程、冷却随之清零，所以 15 分钟
-#: 只影响「人还没来得及修」的那段窗口。
-#:
-#: 刻意**不**走 BlockedError 那套指数退避 + 换 IP + 熔断：换多少个 IP 都不会好，
-#: 见 scrapers.base.OperationNotAllowedError 的 docstring。
-_OPERATION_REJECTED_COOLDOWN = 900  # 15 分钟
 
 # 连续网络失败阈值：连续 N 次全部城市第 1 页网络失败时触发冷却，
 # 避免坏代理/断网时监控空转刷屏 error log
@@ -371,21 +347,8 @@ def _env_int_positive(name: str, default: int) -> int:
 
 
 _PERSONAL_PROXY_MIN_INTERVAL = _env_int_positive("PERSONAL_PROXY_MIN_INTERVAL", 120)
-_PREWARM_CANDIDATE_WAIT_SEC = 2.0  # 有真实候选时最多等 2s 让预登录赶上快速通道
-
-#: 单个 source 一轮抓取的墙钟上限。见 _dispatch_scrape_tasks_async。
-#:
-#: 取 600 秒的依据：最慢的 source 是 Xior（实测每栋楼 13.9 秒，分片后每轮
-#: 上限 8 栋 ≈ 112 秒），留出 5 倍余量。比 CHECK_INTERVAL(300) 大是有意的——
-#: 这不是「该多久跑完」的目标，是「卡死了」的判据，宁可宽也不要误杀慢轮。
-_H2S_CIRCUIT_BASE_COOLDOWN = 1800  # H2S 抓取 403 后 30 分钟后做 canary
-_H2S_CIRCUIT_MAX_COOLDOWN = 21600  # H2S 抓取连续 403 时最多暂停 6 小时
-_H2S_LONG_BLOCK_STREAK = 3  # 第 3 次连续 H2S 403 起视为长时间被 block
 
 # 屏蔽通知节流：避免每轮抓取都给用户推一次相同的告警。
-# operation 被拒是个**只能靠改代码修好**的状态：不会自愈，也不随时间变化。
-# 用 blocked 那 30 分钟的节奏去提醒，等于在人上班之前先发 16 条一模一样的告警。
-# 6 小时一条足够——真正的紧迫感来自第一条。
 # 维护通知节流：admin 已经在 dashboard banner 上看到维护态了，再叠加 web 通知
 # 主要是让 admin 在收 push（如果接了）/ 刷通知面板时也能看到一条记录。
 # 间隔比屏蔽长一截——维护态用户什么都做不了，没必要 30 min 一刷。
@@ -394,16 +357,14 @@ _H2S_LONG_BLOCK_STREAK = 3  # 第 3 次连续 H2S 403 起视为长时间被 bloc
 # 第一轮会再发通知，符合预期」——那在部署一天 12 次的节奏下就不符合预期了，
 # 等于每次部署都给 admin 重发一遍同样的告警。见 mcore/backoff.py。
 _throttle_notify_block = runtime.throttles["block"]
-_throttle_notify_operation_rejected = runtime.throttles["operation_rejected"]
-_throttle_h2s_long_block = runtime.throttles["h2s_long_block"]
 _throttle_notify_maintenance = runtime.throttles["maintenance"]
 
 
 #: 供 _should_notify_* 落库用的 Storage 句柄。由 main() 在启动时设一次。
 #:
 #: 为什么是模块级而不是参数：这几个 _should_notify_* 散布在十几个调用点，全都
-#: 没有 storage 在手，逐个穿参数会把签名污染一大片。和 retry_queue / prewarm_cache
-#: 一样按模块级单例处理。为 None 时节流退化成进程内——测试与 CLI 场景正是如此。
+#: 没有 storage 在手，逐个穿参数会把签名污染一大片。和 retry_queue 一样按
+#: 模块级单例处理。为 None 时节流退化成进程内——测试与 CLI 场景正是如此。
 def _throttle_storage():
     return runtime.throttle_storage
 
@@ -415,18 +376,6 @@ def _bind_persistent_state(storage) -> None:
     ——正是本次要修的那个问题。
     """
     runtime.bind_storage(storage)
-
-    # H2S 详情补齐缓存同样是进程级的。不回填的话，重启后头几轮会把几十条早就
-    # 补齐过的房源重新问一遍详情，撞出 429 收手，本轮真正的新房源反而轮不上
-    # （见 scrapers/holland2stay.py 的 prime_detail_cache）。
-    try:
-        from scrapers.holland2stay import prime_detail_cache
-
-        primed = prime_detail_cache(storage.detail_feature_snapshot("holland2stay"))
-        if primed:
-            logger.info("详情补齐缓存回填 %d 条，重启后不再重复取详情", primed)
-    except Exception:
-        logger.warning("回填详情补齐缓存失败（按空缓存处理）", exc_info=True)
 
 
 # ── 全面故障告警 ────────────────────────────────────────────────────
@@ -454,71 +403,36 @@ _RELOAD_REQUEST_FILE = DATA_DIR / "monitor.reload"
 # 热重载事件（SIGHUP → 唤醒 main_loop 中的 sleep，立即重载配置）
 _reload_event: asyncio.Event | None = None
 
-# H2S REST 触发器发现新房时设置 → 主循环提前结束等待，跑一轮只抓 H2S 的抓取。
-# 见 mcore/h2s_rest.py。
-_h2s_wake_event: asyncio.Event | None = None
 
-#: REST 唤醒轮只抓这些 source。
-
-#: 两个唤醒轮之间至少隔多久（从上一轮开始算）。一批房陆续放出时几秒内会有好几次
-#: 新 id，一轮 H2S 抓取约 1 秒，没必要每一次都单独跑；也防补抓定时器和新 id
-#: 撞在一起时连跑。
-_REST_WAKE_MIN_GAP = 5.0
-
-
-async def _wait_reload_or_wake(timeout: float) -> str:
-    """等热重载或 REST 唤醒，返回 ``"reload"`` / ``"wake"`` / ``"timeout"``。
-
-    两个都已设置时热重载优先：配置变了，先换上新配置再跑哪一轮都对。
-    """
-    events: dict[str, asyncio.Event] = {}
-    if _reload_event is not None:
-        events["reload"] = _reload_event
-    if _h2s_wake_event is not None:
-        events["wake"] = _h2s_wake_event
-    for name in ("reload", "wake"):
-        if name in events and events[name].is_set():
-            # 已经置位也先让出一次：调用方要是忘了 clear，下一圈又立刻返回，
-            # 不让出就是一个饿死整个事件循环的忙等（REST 协程、超时全都不动）。
-            await asyncio.sleep(0)
-            return name
-    if not events:
+async def _wait_reload(timeout: float) -> bool:
+    """等热重载事件，至多 ``timeout`` 秒；触发了返回 True。"""
+    if _reload_event is None:
         await asyncio.sleep(timeout)
-        return "timeout"
-    waiters = {asyncio.ensure_future(ev.wait()): name for name, ev in events.items()}
+        return False
+    if _reload_event.is_set():
+        # 已经置位也先让出一次：调用方要是忘了 clear，下一圈又立刻返回，
+        # 不让出就是一个饿死整个事件循环的忙等。
+        await asyncio.sleep(0)
+        return True
     try:
-        done, _ = await asyncio.wait(waiters, timeout=timeout,
-                                     return_when=asyncio.FIRST_COMPLETED)
-    finally:
-        for w in waiters:
-            if not w.done():
-                w.cancel()
-    fired = {waiters[w] for w in done}
-    for name in ("reload", "wake"):
-        if name in fired:
-            return name
-    return "timeout"
+        await asyncio.wait_for(_reload_event.wait(), timeout=timeout)
+    except asyncio.TimeoutError:
+        return False
+    return True
+
 
 # 类型别名：每个用户与其对应通知器的配对列表
 UserNotifiers = list[tuple[UserConfig, BaseNotifier]]
 
 # mcore 服务实例（进程生命周期内单例）
-prewarm_cache = runtime.prewarm_cache
-#: H2S 熔断 / 登录抑制的退避状态。**落库，跨进程重启存活**——见 mcore/backoff.py。
-#:
-#: 这些以前是裸的模块级 float（基于 time.monotonic），重启即清零。也就是说正在被
-#: CF 封、退避已拉到 6 小时的时候部署一次，立刻满速重打。2026-08-20 一天部署 12 次
-#: = 12 次退避清零。
-#: 每个 source 一个熔断器，策略按 source 配（mcore/circuit.py）。以前只有 H2S 有
-#: ——而实测整源失败次数是 xior 147 / ourdomain 67 / ourcampus 60 / H2S 6，
-#: 保护恰好装在最不需要它的那个上。
+#: 每个 source 一个熔断器，策略按 source 配（mcore/circuit.py）。**落库，跨进程
+#: 重启存活**——见 mcore/backoff.py。
 _source_circuits = runtime.source_circuits
 
 #: 按 429 历史自动伸缩各 source 的最小抓取间隔。和熔断分工不同：熔断管「出事
 #: 之后停多久」，这个管「平时多久打一次」。只有熔断的话，冷却一结束节奏就回到
 #: 原值，过三五十分钟再撞一次——生产实测每天约 10 次，从没停过。
 _source_pacing = runtime.source_pacing
-_h2s_login_block = runtime.h2s_login_block
 
 
 # ------------------------------------------------------------------ #
@@ -627,7 +541,7 @@ async def _dispatch_watchdog_alerts(
             log("watchdog[%s] %s", a.level, a.title)
             # kind 带上 alert key：push 的 dedup 键是 (admin, kind, kind)，
             # 所有 watchdog 告警共用一个 kind 的话，同一轮里「xior 挂了」和
-            # 「h2s 完整率低」会被压成一条。
+            # 「codomo 完整率低」会被压成一条。
             await _notify_admin_only(
                 storage, web_notifier, a.message(), kind=f"watchdog:{a.key}",
             )
@@ -677,12 +591,12 @@ class ScrapePlan(NamedTuple):
     multi_source: bool
 
 
-def _prepare_scrape_plan(cfg, storage, user_count: int, *, dry_run: bool, only_sources) -> ScrapePlan | None:
+def _prepare_scrape_plan(cfg, storage, user_count: int, *, dry_run: bool) -> ScrapePlan | None:
     scrape_tasks = cfg.scrape_tasks_v2()
     logger.info("开始抓取，任务数: %d，活跃用户数: %d", len(scrape_tasks), user_count)
 
     if not scrape_tasks:
-        logger.warning("未配置任何抓取任务，本轮不抓取。请检查 .env 中 SOURCES / CITIES / OURDOMAIN_CITIES 设置。")
+        logger.warning("未配置任何抓取任务，本轮不抓取。请检查 SOURCES 与各平台的 *_CITIES 设置。")
         return None
 
     # 分片**之前**的每 source 总 target 数。遥测要同时记「本轮抓了几个」和
@@ -694,16 +608,10 @@ def _prepare_scrape_plan(cfg, storage, user_count: int, *, dry_run: bool, only_s
 
     # 整轮是否跨多个 source——按**配置**算，在任何筛选之前。completeness key
     # 的 source 前缀靠它（scrapers.completeness_key）。按筛剩的任务算会出错：
-    # 节流跳过 Xior、或者 REST 唤醒轮只抓 H2S 的时候，剩下只有 H2S，前缀消失，
-    # 「Eindhoven」这个裸 key 让 mark_stale_listings 退化成不带 source 的
-    # ``city IN (...)``，用 H2S 的完整性把同城 Xior 这轮没抓的房源一起老化掉。
+    # 节流跳过 Xior 的时候，剩下只有 Codomo，前缀消失，「Eindhoven」这个裸
+    # key 让 mark_stale_listings 退化成不带 source 的 ``city IN (...)``，用
+    # Codomo 的完整性把同城 Xior 这轮没抓的房源一起老化掉。
     multi_source = len(source_totals) > 1
-
-    if only_sources is not None:
-        scrape_tasks = [t for t in scrape_tasks if t.source in only_sources]
-        if not scrape_tasks:
-            logger.info("本轮只抓 %s，但它们都不在配置里，跳过", sorted(only_sources))
-            return None
 
     # 代理全挂时只留下**直连打得通**的 source。放在节流和分片之前：被代理
     # 挡住的 source 本轮根本不该占分片游标。
@@ -725,13 +633,9 @@ async def _run_once_snapshot(
         web_notifier: WebNotifier | None = None,
         dry_run: bool = False,
         booking_deadline: float = float("inf"),
-        only_sources: frozenset[str] | None = None,
 ) -> dict[str, bool]:
     """
     执行一次完整的「抓取 → 对比 → 通知 → 自动预订」流程。
-
-    ``only_sources`` 给了就只抓这些 source（H2S REST 触发器叫醒的那一轮只抓
-    H2S，见 mcore/h2s_rest.py）。其余流程不变。
 
     Parameters
     ----------
@@ -762,10 +666,9 @@ async def _run_once_snapshot(
     try_book() 是同步函数，通过 run_in_executor 在线程池中运行。
     所有候选在步骤 3 末尾立即提交，步骤 4/5 的通知网络调用（send_*）与之并行进行。
     到步骤 6 await 时，booking 往往已经完成，几乎零额外等待。
-    预订请求在发出通知之前就已进入 Holland2Stay 服务器，可节省 1-3 秒。
     """
     plan = _prepare_scrape_plan(
-        cfg, storage, len(user_notifiers), dry_run=dry_run, only_sources=only_sources,
+        cfg, storage, len(user_notifiers), dry_run=dry_run,
     )
     if plan is None:
         return {}
@@ -773,27 +676,19 @@ async def _run_once_snapshot(
 
     loop = asyncio.get_running_loop()
 
-    prewarm = PrewarmRound(loop, storage, user_notifiers, dry_run)
-
     try:
-        fresh, completeness, h2s_blocked, h2s_mode = await _dispatch_with_h2s_circuit(
+        fresh, completeness = await _dispatch_with_circuits(
             loop, scrape_tasks, storage=storage, source_totals=plan.source_totals,
             multi_source=plan.multi_source, dry_run=dry_run,
         )
         _log_scrape_completeness(completeness)
-        stop = await _handle_h2s_blocked(
-            h2s_blocked, h2s_mode, fresh, completeness,
-            storage=storage, web_notifier=web_notifier, dry_run=dry_run,
-        )
-        if stop is not None:
-            return stop
     except Exception as e:
-        # 失败分支自己 stash prewarm；多数会重抛给 main_loop 做退避。
+        # 多数分支会重抛给 main_loop 做退避。
         return await _handle_scrape_failure(
             e,
             storage=storage, web_notifier=web_notifier,
             scrape_tasks=scrape_tasks, user_notifiers=user_notifiers,
-            dry_run=dry_run, prewarm=prewarm,
+            dry_run=dry_run,
         )
 
     logger.info("本次抓取共 %d 条房源", len(fresh))
@@ -805,7 +700,7 @@ async def _run_once_snapshot(
     return await _run_post_scrape(
         cfg, storage, user_notifiers, fresh, completeness,
         web_notifier=web_notifier, dry_run=dry_run,
-        booking_deadline=booking_deadline, loop=loop, prewarm=prewarm,
+        booking_deadline=booking_deadline, loop=loop,
     )
 
 @functools.wraps(_run_once_snapshot)
@@ -869,20 +764,6 @@ async def _prepare_reload():
     return new_cfg, new_notifiers
 
 
-def _invalidate_changed_prewarm(old_notifiers, new_notifiers):
-    """Keep compatible prelogin sessions; forget removed or changed accounts."""
-    def credentials(user):
-        ab = getattr(user, "auto_book", None)
-        return (getattr(ab, "enabled", False), getattr(ab, "email", ""),
-                getattr(ab, "password", ""))
-
-    old = {u.id: credentials(u) for u, _ in old_notifiers}
-    new = {u.id: credentials(u) for u, _ in new_notifiers}
-    for uid in old.keys() | set(prewarm_cache.keys()):
-        if uid not in new or old.get(uid) != new[uid]:
-            prewarm_cache.invalidate(uid)
-
-
 def _record_applied_config(storage):
     from mcore.config_status import publish
     from settings_store import _active_runtime
@@ -918,15 +799,8 @@ async def main_loop(
     SIGHUP 信号处理器通过 loop.call_soon_threadsafe 设置 _reload_event，
     使 wait_for 提前返回。热重载完成后清除事件，继续下一轮。
     """
-    global _reload_event, _h2s_wake_event
+    global _reload_event
     _reload_event = asyncio.Event()
-    _h2s_wake_event = asyncio.Event()
-    # REST 触发器常驻后台。开关 H2S_REST_ENABLED 每个 tick 现读，关着的时候它
-    # 一个请求都不发，所以无条件启动。lambda 读的是本函数的局部 cfg，热重载
-    # 换掉 cfg 之后它自然看到新的。
-    rest_trigger = RestTrigger(_h2s_wake_event)
-    # 保留引用：asyncio 文档要求调用方持有 task 的强引用，否则可能被 GC。
-    _rest_task = asyncio.create_task(rest_trigger.run(lambda: cfg))
 
     round_count = 0
     last_heartbeat_time = time.monotonic()  # 启动时记为刚发过，避免第一轮立即心跳
@@ -945,15 +819,14 @@ async def main_loop(
         "监控启动，常规间隔 %d 秒，高峰期自适应 %d–%d 秒（%s–%s / %s–%s 荷兰时间），城市: %s，用户: %d 个",
         cfg.check_interval, cfg.min_interval, cfg.peak_interval,
         cfg.peak_start, cfg.peak_end, cfg.peak_start_2, cfg.peak_end_2,
-        [c.name for c in cfg.cities], len(user_notifiers),
+        cfg.monitored_city_names(), len(user_notifiers),
     )
     # 启动时打印每个用户的自动预订状态，并检查通知渠道是否可用
     for user, notifier in user_notifiers:
         ab = user.auto_book
         if ab.enabled:
             mode = "⚠️  试运行（dry_run）" if ab.dry_run else "🚀 真实预订"
-            # 摘要打「他实际会碰到哪些平台、各自凭据齐没齐」。此前只打 ab.email
-            # （H2S 的），于是一个只订 Plaza 的用户永远显示「账号: (未设置)」。
+            # 摘要打「他实际会碰到哪些平台、各自凭据齐没齐」。
             targets = _autobook_targets(user)
             gaps = _autobook_credential_gaps(user)
             logger.info(
@@ -987,20 +860,12 @@ async def main_loop(
             logger.info("自动预订 [%s]: 已关闭", user.name)
 
     network_fail_streak = 0  # ScrapeNetworkError 连续计数
-    # 下一轮是不是 REST 唤醒的（只抓 H2S）；以及被唤醒打断时原计划的等待截止
-    # 时刻——唤醒轮跑完回到原计划，不重新起算一整个间隔，否则一批房陆续放出的
-    # 那几分钟里，其它 source 会被一直往后推。
-    next_round_rest_wake = False
-    planned_deadline: float | None = None
-    last_round_started = float("-inf")
     from mcore.token_maintenance import TokenMaintenance
     token_maintenance = TokenMaintenance()
     blocked_fail_streak = 0  # Cloudflare 403 连续计数
 
     while True:
         round_count += 1
-        rest_wake_round = next_round_rest_wake
-        next_round_rest_wake = False
         try:
             base_interval, is_peak = get_interval(cfg)
 
@@ -1040,14 +905,12 @@ async def main_loop(
                     )
                 peak_tag = f"{peak_tag}【代理降级直连】"
 
-            if rest_wake_round:
-                peak_tag = f"{peak_tag}【REST 唤醒·只抓 H2S】"
             logger.info("===== 第 %d 轮 %s=====", round_count, peak_tag)
 
             # 心跳：**在抓取之前**写，抓取成功与否都刷新。
             #
             # 它回答的是「监控循环还活着吗」，和 last_scrape_at 的「抓到数据了
-            # 吗」是两个问题。H2S 熔断冷却最长 6 小时（_H2S_CIRCUIT_MAX_COOLDOWN），那期间没有任何成功抓取，
+            # 吗」是两个问题。source 熔断冷却可达数小时（mcore/circuit.py），那期间没有任何成功抓取，
             # 但 monitor 完全健康、只是在按设计退避——拿 last_scrape_at 做健康
             # 判定会把正常退避误报成故障。
             try:
@@ -1063,24 +926,13 @@ async def main_loop(
 
             # booking_deadline：在此时刻后不再尝试备选房源，让下一轮扫描优先进行
             booking_deadline = time.monotonic() + effective_interval
-            # 任何一轮只要抓了 H2S，就顺带核对 REST 报过的 id——所以每轮都清掉
-            # 唤醒标记，不只是唤醒轮：正常轮刚抓完，没必要再叫醒一次。
-            _h2s_wake_event.clear()
-            rest_check_ids = rest_trigger.begin_round()
-            round_started_at = datetime.now(timezone.utc)
-            last_round_started = time.monotonic()
             city_completeness = await run_once(
                 cfg,
                 storage,
                 user_notifiers,
                 web_notifier=web_notifier,
                 booking_deadline=booking_deadline,
-                only_sources=_REST_WAKE_SOURCES if rest_wake_round else None,
             )
-            try:
-                rest_trigger.end_round(rest_check_ids, storage, round_started_at)
-            except Exception:
-                logger.exception("核对 REST 发现的房源失败（已忽略）")
 
             # 全面故障结束。紧跟 run_once 之后判定，不放到本段末尾——下面那些
             # 收尾步骤（剪枝、watchdog）自己也可能抛，那会被 except Exception 记成
@@ -1118,9 +970,7 @@ async def main_loop(
                 blocked_fail_streak = 0
 
             # 成功：高峰期将自适应间隔缩短 5%（逐步逼近 min_interval）。
-            # 唤醒轮不算：它不是按间隔排出来的，算进去会让一批房放出的那几秒把
-            # 自适应间隔连压好几档。
-            if is_peak and not rest_wake_round:
+            if is_peak:
                 prev = adaptive_peak
                 adaptive_peak = max(float(cfg.min_interval), adaptive_peak * _ADAPTIVE_DECREASE)
                 if int(prev) != int(adaptive_peak):
@@ -1140,7 +990,7 @@ async def main_loop(
                     r_h, o_h = _stale_hours()
                     logger.info(
                         "已收敛 %d 条未见 listing（消失 %gh 转推测 Reserved，"
-                        "%gh 判 Occupied——后者对齐 H2S 官方付款限时）",
+                        "%gh 判 Occupied）",
                         aged, r_h, o_h,
                     )
             except Exception:
@@ -1235,31 +1085,22 @@ async def main_loop(
                     last_geocode_time = time.monotonic()
 
             loop = asyncio.get_running_loop()
-            if (rest_wake_round and planned_deadline is not None
-                    and planned_deadline > loop.time()):
-                # 唤醒轮插在原计划的等待中间：跑完回到原计划，不重新起算。
-                deadline = planned_deadline
-                logger.info("REST 唤醒轮结束，回到原计划：再等 %d 秒",
-                            int(deadline - loop.time()))
-            else:
-                actual = apply_jitter(effective_interval, cfg.jitter_ratio)
-                # 抖动是 ±jitter_ratio，会把间隔往下拉——下限必须在抖动之后再夹一次，
-                # 否则 0.4 的抖动能把 120 秒打到 72 秒，降速就漏了。
-                if personal_proxy_active:
-                    actual = max(actual, _PERSONAL_PROXY_MIN_INTERVAL)
-                if native_fallback_active:
-                    actual = max(actual, _NATIVE_PROXY_FALLBACK_INTERVAL)
-                dev_pct = (actual - effective_interval) / effective_interval * 100
-                logger.info(
-                    "等待 %d 秒（基准 %d s，%+.0f%%）%s",
-                    actual, effective_interval, dev_pct,
-                    "（高峰期自适应）" if is_peak else "",
-                )
-                deadline = loop.time() + float(actual)
-            planned_deadline = deadline
+            actual = apply_jitter(effective_interval, cfg.jitter_ratio)
+            # 抖动是 ±jitter_ratio，会把间隔往下拉——下限必须在抖动之后再夹一次，
+            # 否则 0.4 的抖动能把 120 秒打到 72 秒，降速就漏了。
+            if personal_proxy_active:
+                actual = max(actual, _PERSONAL_PROXY_MIN_INTERVAL)
+            if native_fallback_active:
+                actual = max(actual, _NATIVE_PROXY_FALLBACK_INTERVAL)
+            dev_pct = (actual - effective_interval) / effective_interval * 100
+            logger.info(
+                "等待 %d 秒（基准 %d s，%+.0f%%）%s",
+                actual, effective_interval, dev_pct,
+                "（高峰期自适应）" if is_peak else "",
+            )
+            deadline = loop.time() + float(actual)
 
-            # 等待下一轮：超时正常继续；SIGHUP 或 reload 文件触发则热重载；
-            # REST 发现新房则提前结束、下一轮只抓 H2S。
+            # 等待下一轮：超时正常继续；SIGHUP 或 reload 文件触发则热重载。
             # Windows 不支持可靠的 SIGHUP，因此每秒轮询一次 reload 请求文件。
             reload_triggered = False
 
@@ -1273,19 +1114,8 @@ async def main_loop(
                 if remaining <= 0:
                     break
 
-                fired = await _wait_reload_or_wake(min(1.0, remaining))
-                if fired == "reload":
+                if await _wait_reload(min(1.0, remaining)):
                     reload_triggered = True
-                    break
-                if fired == "wake":
-                    _h2s_wake_event.clear()
-                    if not rest_trigger.has_due():
-                        # 补抓定时器到点时那个 id 已经被别的轮次核对掉了
-                        continue
-                    gap = _REST_WAKE_MIN_GAP - (time.monotonic() - last_round_started)
-                    if gap > 0:
-                        await asyncio.sleep(min(gap, max(0.0, deadline - loop.time())))
-                    next_round_rest_wake = True
                     break
 
             if reload_triggered:
@@ -1302,11 +1132,6 @@ async def main_loop(
                     apply_logging_level(cfg.log_level)
                     _record_applied_config(storage)
                     adaptive_peak = float(cfg.peak_interval)
-                    # Configuration is already committed; cleanup cannot roll it back.
-                    try:
-                        _invalidate_changed_prewarm(old_notifiers, user_notifiers)
-                    except Exception:
-                        logger.warning("热重载后更新预登录缓存失败", exc_info=True)
                     for _, n in old_notifiers:
                         try:
                             await n.close()
@@ -1314,7 +1139,7 @@ async def main_loop(
                             logger.warning("关闭旧 notifier 失败（忽略）", exc_info=True)
                     logger.info(
                         "配置已热重载：城市=%s  用户=%d  间隔=%ds  高峰自适应=%d–%ds(%s–%s/%s–%s)",
-                        [c.name for c in cfg.cities], len(user_notifiers),
+                        cfg.monitored_city_names(), len(user_notifiers),
                         cfg.check_interval, cfg.min_interval, cfg.peak_interval,
                         cfg.peak_start, cfg.peak_end, cfg.peak_start_2, cfg.peak_end_2,
                     )
@@ -1334,7 +1159,7 @@ async def main_loop(
         except BlockedError:
             # 被 Cloudflare 屏蔽：等待无法恢复，但仍然冷却 15 分钟以减少
             # 错误日志刷屏。连续命中时指数退避到最多 2 小时，避免同一出口
-            # 每 15 分钟反复撞 GraphQL 把 WAF 状态越打越热。
+            # 每 15 分钟反复撞上去把 WAF 状态越打越热。
             blocked_fail_streak += 1
             base = min(
                 _BLOCKED_COOLDOWN_MAX,
@@ -1354,20 +1179,6 @@ async def main_loop(
                     "或暂停几小时让 WAF 状态冷下来。",
                 )
             await asyncio.sleep(cooldown)
-        except OperationNotAllowedError:
-            # 上游按 operation 白名单拒绝。**不会自己好**，冷却在这里是限流不是
-            # 等待：不冷却的话每轮都在一个必然失败的查询上重跑完整抓取 + 浏览器
-            # 会话。修好要发版，发版会重启进程、冷却清零，所以这 15 分钟只影响
-            # 「人还没来得及修」的那段窗口。
-            #
-            # 刻意不做指数退避、不换 IP、不进熔断——换多少个 IP 都不会好。
-            cooldown = apply_jitter(_OPERATION_REJECTED_COOLDOWN, cfg.jitter_ratio)
-            logger.error(
-                "⛔ 上游按 operation 白名单拒绝，冷却 %d 秒。"
-                "这条不会自己恢复，需要照抄站点那条 operation（docs/H2S.md §4.1）。",
-                cooldown,
-            )
-            await asyncio.sleep(cooldown)
         except UpstreamMaintenanceError:
             # 平台维护：和 BlockedError 用相同冷却长度，但语义完全不同：
             #   - 不打 ERROR 日志（INFO 已在 run_once 里打过）
@@ -1376,7 +1187,7 @@ async def main_loop(
             # 冷却结束后下一轮 run_once 会再次尝试，若仍维护则继续走本分支。
             cooldown = apply_jitter(_MAINTENANCE_COOLDOWN, cfg.jitter_ratio)
             logger.info(
-                "🔧 H2S 平台维护中，冷却 %d 秒后再探。无需人工操作。",
+                "🔧 上游平台维护中，冷却 %d 秒后再探。无需人工操作。",
                 cooldown,
             )
             await asyncio.sleep(cooldown)
@@ -1426,9 +1237,9 @@ async def main_loop(
                 cooldown = apply_jitter(_NETWORK_FAIL_COOLDOWN, cfg.jitter_ratio)
                 # 不要在这里替用户断言「是代理/网络的问题」。走到这条分支只说明
                 # **所有 source 都失败了**，成因可能是代理、网络，也可能是某个
-                # 平台改了 API——2026-08-11 与 08-17 两次 H2S 端点迁移，这句
-                # 「请检查代理/网络」各刷了三天与半天，而代理自始至终正常，
-                # 排查方向被它带偏了两次。异常文本里已经带着真正的成因，让它说话。
+                # 平台改了 API——这句「请检查代理/网络」曾在两次上游端点迁移时
+                # 各刷了三天与半天，而代理自始至终正常，排查方向被它带偏了两次。
+                # 异常文本里已经带着真正的成因，让它说话。
                 logger.error(
                     "🌐 连续 %d 次网络失败（阈值 %d），冷却 %d 秒。"
                     "本轮全部 source 均未取到数据 — 成因见下方异常文本，"
@@ -1476,7 +1287,7 @@ def _autobook_targets(user) -> list[str]:
     """这个用户的自动预订实际会碰到哪些平台。
 
     ``allowed_sources`` 为空 = 不限平台，那就是所有支持下单的 source。非空时取交集
-    ——用户只订 Plaza 的话，H2S 凭据缺不缺跟他没关系。
+    ——用户只订 Plaza 的话，别的平台凭据缺不缺跟他没关系。
 
     与 ``_AUTO_BOOK_SOURCES`` 取交集而不是直接用 ``allowed_sources``：后者可以写进
     还没实现 booker 的平台，据此去警告「没填凭据」会让人去填一个填了也没用的东西。
@@ -1491,16 +1302,12 @@ def _autobook_targets(user) -> list[str]:
 def _autobook_credential_gaps(user) -> list[str]:
     """他会碰到的平台里，哪些缺凭据。返回人话，供启动摘要告警。
 
-    **按平台分别判**。此前这里无条件检查 H2S 的 email / password，于是一个
-    ``allowed_sources=['plaza']`` 的用户每次启动都吃两条「未填写 H2S 账号」——
-    他根本不抓 H2S。运维日志里的警告要是经常是假的，真的那条就没人看了。
+    **按平台分别判**：运维日志里的警告要是经常是假的，真的那条就没人看了。
     """
     ab = user.auto_book
     gaps: list[str] = []
     for src in _autobook_targets(user):
-        if src == H2S_SOURCE and not (ab.email and ab.password):
-            gaps.append("H2S 账号邮箱/密码（AUTO_BOOK_EMAIL / AUTO_BOOK_PASSWORD）")
-        elif src == "plaza":
+        if src == "plaza":
             if not (ab.plaza_username and ab.plaza_password):
                 gaps.append("Plaza 用户名/密码")
             elif not ab.plaza_enabled:
@@ -1509,7 +1316,7 @@ def _autobook_credential_gaps(user) -> list[str]:
 
 
 async def _async_main() -> None:
-    parser = argparse.ArgumentParser(description="Holland2Stay 房源监控")
+    parser = argparse.ArgumentParser(description="FlatRadar 房源监控")
     parser.add_argument("--once", action="store_true", help="只运行一次后退出")
     parser.add_argument("--test", action="store_true", help="抓取并打印，不写库不发通知")
     parser.add_argument("--reset-db", action="store_true", help="启动前清空数据库（非交互式）")
@@ -1622,19 +1429,9 @@ async def _async_main() -> None:
             await main_loop(cfg, storage, user_notifiers, web_notifier=web_notifier)
     finally:
         close_browser_workers()
-        from mcore.booking_worker import close_booking_workers
-        close_booking_workers()
         storage.close()
         for _, n in user_notifiers:
             await n.close()
-        prewarm_cache.clear()
-        # 常驻浏览器不归 prewarm_cache 管（借出去的 session 一律不许关它），
-        # 所以进程退出要在这里单独关一次，否则漏一个 Chromium。
-        try:
-            from mcore.warm_browser import warm_lane
-            warm_lane.close(reason="monitor 退出")
-        except Exception:
-            logger.debug("关闭常驻浏览器失败（已忽略）", exc_info=True)
         _remove_pid()
 
 

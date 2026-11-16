@@ -53,13 +53,13 @@ def calendar_user(test_app):
         st.diff([Listing(id=key,name=name,available_from=when,status=status,price_raw=price,
             features=['Area: 30 m²'],city='Eindhoven',source=source,url='https://example.com/'+key)
             for key,name,when,status,price,source in [
-                ('cal-match','Calendar match','2026-12-01','Available to book','€950','holland2stay'),
+                ('cal-match','Calendar match','2026-12-01','Available to book','€950','codomo'),
                 ('cal-next','Next day','2026-12-02','Available to book','€950','plaza'),
                 ('cal-expensive','Outside personal budget','2026-12-01','Available to book','€1800','plaza'),
-                ('cal-unknown','Unknown move-in date',None,'Available to book','€800','holland2stay'),
-                ('cal-sentinel','Undetermined date',f'{SENTINEL_AVAILABLE_FROM_YEAR}-01-01','Available to book','€850','holland2stay'),
+                ('cal-unknown','Unknown move-in date',None,'Available to book','€800','codomo'),
+                ('cal-sentinel','Undetermined date',f'{SENTINEL_AVAILABLE_FROM_YEAR}-01-01','Available to book','€850','codomo'),
                 ('cal-invalid','Invalid recorded date','not-a-date','Available to book','€700','plaza'),
-                ('cal-reserved','Reserved home','2026-12-01','Reserved','€900','holland2stay'),
+                ('cal-reserved','Reserved home','2026-12-01','Reserved','€900','codomo'),
             ]])
     finally:
         st.close()

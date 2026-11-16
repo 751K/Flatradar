@@ -51,23 +51,6 @@
 {{ ui.section_heads(sections) }}
 
 {% if booking_guard_error %}<div class="alert alert-warning">{{ _('booking_review_error') }}</div>{% endif %}
-{% if booking_attempt %}
-<div class="alert alert-warning">
-  <strong>{{ _('booking_review_title') }}</strong>
-  {% if booking_attempt.user_id == u.id %}
-  <p>{{ _('booking_review_listing') }}: {{ booking_attempt.listing }}. {{ _('booking_review_check') }}</p>
-  {% if booking_attempt.cart %}<p>{{ _('booking_review_cart') }}: {{ booking_attempt.cart }}</p>{% endif %}
-  {% if booking_attempt.order_number %}<p>{{ _('booking_review_order') }}: {{ booking_attempt.order_number }}</p>{% endif %}
-  {% if booking_attempt.pay_url %}<p>{{ _('booking_review_pay') }}</p>{% endif %}
-  <p>{{ _('booking_review_running') }}</p>
-  <form method="post" action="{{ url_for('user_acknowledge_booking', user_id=u.id) }}" data-confirm="{{ _('booking_review_confirm') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="attempt" value="{{ booking_attempt.attempt }}">
-    <button class="btn btn-warning" type="submit">{{ _('booking_review_action') }}</button>
-  </form>
-  {% else %}<p>{{ _('booking_review_shared') }}</p>{% endif %}
-</div>
-{% endif %}
 {% for attempt in plaza_attempts or [] %}
 <div class="alert alert-warning">
   <strong>{{ _('plaza_review_title') }}</strong>
@@ -229,17 +212,6 @@
     <h3 class="account-subhead">{{ subheads[key] }}</h3>
     {{ ui.filter_fields(key, ab.listing_filter, prefix='AUTO_BOOK_') }}
     {% endfor %}
-    {{ ui.save_actions(label=save_label) }}
-  {% elif s.key == 'autobook' and row.key == 'h2s' %}
-    <div class="account-fields">
-      <label class="account-field"><span>{{ _('user_form_ab_email') }}</span><input type="email" name="AUTO_BOOK_EMAIL" value="{{ ab.email }}"></label>
-      <label class="account-field"><span>{{ _('user_form_ab_pass') }}</span><input type="password" name="AUTO_BOOK_PASSWORD" placeholder="{{ _('user_form_pw_keep') if ab.password else '' }}" autocomplete="new-password"></label>
-      <label class="account-field"><span>{{ _('user_form_ab_payment') }}</span>
-        <select name="AUTO_BOOK_PAYMENT_METHOD">
-          {% for v, l in [('idealcheckout_ideal', 'user_form_ab_ideal'), ('idealcheckout_visa', 'user_form_ab_visa'), ('idealcheckout_mastercard', 'user_form_ab_mc')] %}<option value="{{ v }}"{% if ab.payment_method == v %} selected{% endif %}>{{ _(l) }}</option>{% endfor %}
-        </select>
-      </label>
-    </div>
     {{ ui.save_actions(label=save_label) }}
   {% elif s.key == 'autobook' and row.key == 'xior' %}
     <p class="account-help">{{ _('user_form_xior_note') }}</p>

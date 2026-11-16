@@ -22,7 +22,7 @@
 
 **三个平台都未开放给用户。** `monitor._AUTO_BOOK_SOURCES` 由
 [mcore/sources.py](../mcore/sources.py) 的 `SourceSpec.auto_bookable` 派生，当前只有
-`holland2stay` 和 `plaza`。注册了 booker 不等于面板上能启用。
+`plaza`（Codomo 的前身 Holland2Stay 的预订流程随 2026-11 改名失效，已删除）。注册了 booker 不等于面板上能启用。
 
 预订目标主机是 `*.securerc.co.uk`，不在 Cloudflare 托管挑战之后，因此这一条链路
 **不需要浏览器**，使用 `curl_cffi` 加指纹轮换即可（与抓取侧的 Xior 不同）。

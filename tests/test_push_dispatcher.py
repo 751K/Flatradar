@@ -89,6 +89,7 @@ class FakeListing:
     status: str = "Available to book"
     price_display: str = "€700"
     available_from: str = "2026-06-01"
+    source: str = "codomo"
 
     def feature_map(self):
         return {"area": "26 m²"}
@@ -180,7 +181,7 @@ class TestDispatch:
         call = with_apns.calls[0]
         assert call["payload"]["kind"] == "new"
         assert call["payload"]["listing_id"] == "l1"
-        assert call["payload"]["aps"]["alert"]["title"].startswith("[H2S]")
+        assert call["payload"]["aps"]["alert"]["title"].startswith("[CD]")
 
     def test_booked(self, with_apns, store_with_one_device):
         n = _run(push.dispatch(
@@ -375,7 +376,8 @@ class TestTranslation:
 
     def test_payload_booked_zh(self):
         from mcore.push import _payload_booked
-        p = _payload_booked(FakeListing("l1"), lang="zh")
+        # 订房模板只用于有占房窗口的平台（BOOKING_HOLD_SOURCES）
+        p = _payload_booked(FakeListing("l1", source="ourdomain"), lang="zh")
         assert "预订成功" in p["aps"]["alert"]["title"]
 
     def test_payload_error_zh(self):
@@ -506,6 +508,7 @@ class _FcmListing:
     status: str = "Available to book"
     price_display: str = "€700"
     available_from: str = "2026-06-01"
+    source: str = "codomo"
 
     def feature_map(self):
         return {"area": "26 m²"}
@@ -593,7 +596,7 @@ class TestFcmPayload:
         p = _fcm_payload_new_listing(_FcmListing("l123"), lang="en")
         msg = p["message"]
         assert "notification" not in msg  # data-only
-        assert msg["data"]["title"].startswith("[H2S]")
+        assert msg["data"]["title"].startswith("[CD]")
         assert msg["data"]["listing_id"] == "l123"
         assert msg["data"]["kind"] == "new"
         assert "h2smonitor" in msg["data"]["deep_link"]

@@ -2,14 +2,14 @@ flowchart TD
     A["启动 monitor"] --> B["解析环境、.env 和 SQLite 配置<br/>建立运行快照与通知器"]
     B --> C["一轮开始：写入心跳并规划抓取"]
     C --> D["按平台统一调度<br/>熔断、限流、代理和故障隔离"]
-    D --> E["Holland2Stay / Xior<br/>独立浏览器工作进程"]
-    D --> F["OurDomain / OurCampus / Magis<br/>Student Experience / Plaza"]
+    D --> E["Xior<br/>独立浏览器工作进程"]
+    D --> F["Codomo / OurDomain / OurCampus / Magis<br/>Student Experience / Plaza（纯 HTTP）"]
     E --> G["合并房源与完整性结果"]
     F --> G
     G --> H["对比并写库：新房源与状态变更"]
     H --> I["重放未处理事件，再过滤影子平台"]
     I --> J["匹配用户、收集预订候选"]
-    J --> K["Holland2Stay 预登录与预订<br/>Plaza 自动应征需用户启用"]
+    J --> K["Plaza 自动应征<br/>需用户启用"]
     K --> L["提交预订任务，与房源通知并行"]
     L --> M["新房源 / 状态变更 / 预订结果通知<br/>Web、外部渠道与移动推送"]
     M --> N["记录事件已处理、保存重试状态"]
@@ -17,8 +17,7 @@ flowchart TD
     O --> P["轮次收尾与维护，等待下一轮"]
     P --> C
     K --> Q{"结果是否明确？"}
-    Q -->|否| R["持久化保护并提示用户核实<br/>H2S 按账号；Plaza 按账号和房源"]
-    Q -->|H2S 成功| S["返回支付链接，用户自行支付"]
+    Q -->|否| R["持久化保护并提示用户核实<br/>Plaza 按账号和房源"]
     Q -->|Plaza 成功| T["应征已提交，不保证获得房源"]
     W["Web / API"] <--> DB[("SQLite")]
     H <--> DB

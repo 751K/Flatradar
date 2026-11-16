@@ -1,5 +1,5 @@
 """
-Holland2Stay 监控 Web 面板 — 应用引导层
+FlatRadar 监控 Web 面板 — 应用引导层
 ==========================================
 
 职责
@@ -397,9 +397,20 @@ def _inject_translations():
         from app.filter_scope import dim_scope_badge as _badge
         return _badge(dim, lang)
 
+    def dim_supported(dim: str) -> bool:
+        """是否至少有一个平台真的按这个维度过滤。
+
+        一个都没有时表单不该再显示这个字段：条件对所有房源整体跳过，勾了等于没勾，
+        而「仅对 X 生效」的提示在这种情况下也说不出话（没有 X）。2026-11 Holland2Stay
+        改名 Codomo 后 contract / neighborhood 就是这种状态。
+        """
+        from mcore.sources import sources_supporting_dim
+        return bool(sources_supporting_dim(dim))
+
     return {
         "_": _, "lang": lang,
         "dim_scope": dim_scope, "dim_scope_badge": dim_scope_badge,
+        "dim_supported": dim_supported,
         "source_display_names": SOURCE_DISPLAY_NAMES,
     }
 
@@ -407,7 +418,7 @@ def _inject_translations():
 @app.context_processor
 def _inject_upstream_maintenance():
     """
-    向所有模板注入 H2S 平台维护态。
+    向所有模板注入上游平台维护态。
 
     base.html 用 `upstream_maintenance.active` 决定是否渲染顶部 banner。
     异常时静默——dashboard 永远不应该因为状态查询失败而崩。
@@ -459,7 +470,7 @@ def main() -> None:
     # gunicorn / launcher 启动 web:app 时不会经过 main()，避免无谓的启动开销。
     from update_checker import check_for_updates
 
-    parser = argparse.ArgumentParser(description="Holland2Stay Web 面板")
+    parser = argparse.ArgumentParser(description="FlatRadar Web 面板")
     parser.add_argument("--port", type=int, default=8088)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--debug", action="store_true", default=os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"})

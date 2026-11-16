@@ -7,7 +7,7 @@
 走的是 incognito context，HTTP 缓存只在内存里，浏览器一关即弃，缓存目录里只
 留下几个索引文件。必须换成 `launch_persistent_context()`。
 
-本地实测（2026-08-05，H2S 首页）冷 profile 3.93MB、暖 profile 0.25MB，
+本地实测（2026-08-05，某站点首页）冷 profile 3.93MB、暖 profile 0.25MB，
 143 个请求命中磁盘缓存，页面照常渲染。
 
 这里盯三件事：
@@ -20,7 +20,12 @@ from __future__ import annotations
 import pytest
 
 import browser_fetcher
-from browser_fetcher import H2S_PROFILE, XIOR_PROFILE, BrowserFetcher
+from browser_fetcher import XIOR_PROFILE, BrowserFetcher, SiteProfile
+
+#: 第二个浏览器 profile，用来验证「不同 source 不共用目录」。
+_OTHER_PROFILE = SiteProfile(
+    name="Other", source="other", challenge_url="https://example.test/",
+)
 
 
 class _FakePage:
@@ -83,26 +88,26 @@ def spy(monkeypatch):
 
 class TestUsesPersistentProfile:
     def test_persistent_is_the_default(self, spy):
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
 
         assert len(spy["persistent"]) == 1
         assert not spy["ephemeral"], "退回了临时 profile，缓存复用不到"
 
     def test_profile_dir_is_per_source_and_stable(self, spy):
-        f1 = BrowserFetcher(profile=H2S_PROFILE)
+        f1 = BrowserFetcher(profile=XIOR_PROFILE)
         f1.__enter__()
         first = spy["persistent"][0].kwargs["user_data_dir"]
         f1.close()
 
-        f2 = BrowserFetcher(profile=H2S_PROFILE)
+        f2 = BrowserFetcher(profile=XIOR_PROFILE)
         f2.__enter__()
         second = spy["persistent"][1].kwargs["user_data_dir"]
 
         assert first == second, "换了目录就等于每次都是冷启动"
-        assert "holland2stay" in first
+        assert "xior" in first
 
     def test_sources_do_not_share_a_profile(self, spy):
-        h = BrowserFetcher(profile=H2S_PROFILE)
+        h = BrowserFetcher(profile=_OTHER_PROFILE)
         h.__enter__()
         x = BrowserFetcher(profile=XIOR_PROFILE)
         x.__enter__()
@@ -113,7 +118,7 @@ class TestUsesPersistentProfile:
 
     def test_disk_cache_is_capped(self, spy):
         """生产 VPS 磁盘已用 82%，缓存不能无限长。"""
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
         args = spy["persistent"][0].kwargs["args"]
         assert any(a.startswith("--disk-cache-size=") for a in args)
 
@@ -124,12 +129,12 @@ class TestUsesPersistentProfile:
         monkeypatch.setattr(
             config, "get_proxy_url", lambda source="", **kw: "http://u:p@px:80"
         )
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
         assert spy["persistent"][0].kwargs["proxy"] == "http://u:p@px:80"
 
     def test_reuses_the_context_existing_page(self, spy):
         """持久化 context 自带一个页面，再 new_page 等于白占一份内存。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         assert f._page is spy["persistent"][0].pages[0]
 
@@ -141,7 +146,7 @@ class TestCookiesAreNotCarriedOver:
         带着上一个 IP 的 cf_clearance 去请求，CF 只会当作可疑并重新挑战——
         要复用的只是磁盘缓存里那些静态资源。
         """
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
         assert spy["persistent"][0].cookies_cleared
 
     def test_clear_cookies_failure_does_not_abort(self, spy, monkeypatch):
@@ -154,48 +159,48 @@ class TestCookiesAreNotCarriedOver:
             return ctx
 
         monkeypatch.setattr(cloakbrowser, "launch_persistent_context", boom_ctx)
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         assert f._page is not None
 
 
 class TestSlotLocking:
     def test_second_fetcher_gets_a_different_slot(self, spy):
-        """H2S 的 scraper 与 booker 同用一个 source、跑在不同线程上。
+        """同一 source 可能同时有两个浏览器（常驻抓取 + 工具脚本）。
         一个 profile 目录只能被一个 Chromium 打开，必须分到不同槽位。"""
-        a = BrowserFetcher(profile=H2S_PROFILE)
+        a = BrowserFetcher(profile=XIOR_PROFILE)
         a.__enter__()
-        b = BrowserFetcher(profile=H2S_PROFILE)
+        b = BrowserFetcher(profile=XIOR_PROFILE)
         b.__enter__()
 
         dirs = [c.kwargs["user_data_dir"] for c in spy["persistent"]]
         assert dirs[0] != dirs[1], "两个实例拿到同一个 profile，Chromium 会锁冲突"
 
     def test_slot_is_released_on_close(self, spy):
-        a = BrowserFetcher(profile=H2S_PROFILE)
+        a = BrowserFetcher(profile=XIOR_PROFILE)
         a.__enter__()
         first = spy["persistent"][0].kwargs["user_data_dir"]
         a.close()
 
-        b = BrowserFetcher(profile=H2S_PROFILE)
+        b = BrowserFetcher(profile=XIOR_PROFILE)
         b.__enter__()
         assert spy["persistent"][1].kwargs["user_data_dir"] == first, \
             "槽位没释放，下一个实例被迫换目录，缓存也就白暖了"
 
     def test_falls_back_to_ephemeral_when_all_slots_taken(self, spy, monkeypatch):
         monkeypatch.setattr(browser_fetcher, "_PROFILE_SLOTS", 2)
-        held = [BrowserFetcher(profile=H2S_PROFILE) for _ in range(2)]
+        held = [BrowserFetcher(profile=XIOR_PROFILE) for _ in range(2)]
         for f in held:
             f.__enter__()
 
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
 
         assert len(spy["persistent"]) == 2
         assert len(spy["ephemeral"]) == 1, "槽位占满时应退回临时 profile 而不是报错"
 
     def test_lock_survives_until_browser_closed(self, spy):
         """锁必须比浏览器活得久：提前放锁，别人拿到目录时 Chromium 还没退出。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         assert f._profile_lock is not None
 
@@ -225,12 +230,12 @@ class TestStaleSingletonLocks:
 
         root = tmp_path / "profiles"
         monkeypatch.setattr(bf, "_profile_root", lambda: root)
-        self._seed_locks(root / "holland2stay-0")
+        self._seed_locks(root / "xior-0")
 
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
 
         for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
-            assert not (root / "holland2stay-0" / name).is_symlink(), \
+            assert not (root / "xior-0" / name).is_symlink(), \
                 f"{name} 没清掉，Chromium 会拒绝启动"
         assert len(spy["persistent"]) == 1
 
@@ -274,7 +279,7 @@ class TestStaleSingletonLocks:
 
         root = tmp_path / "profiles"
         monkeypatch.setattr(bf, "_profile_root", lambda: root)
-        self._seed_locks(root / "holland2stay-0")
+        self._seed_locks(root / "xior-0")
 
         from pathlib import Path
         real_unlink = Path.unlink
@@ -283,7 +288,7 @@ class TestStaleSingletonLocks:
             lambda self, *a, **kw: (_ for _ in ()).throw(OSError("只读"))
             if self.name.startswith("Singleton") else real_unlink(self, *a, **kw),
         )
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         assert f._page is not None
 
@@ -297,7 +302,7 @@ class TestDegradesGracefully:
             cloakbrowser, "launch_persistent_context",
             lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("profile 打不开")),
         )
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
 
         assert len(spy["ephemeral"]) == 1
@@ -320,24 +325,24 @@ class TestDegradesGracefully:
 
         monkeypatch.setattr(cloakbrowser, "launch_persistent_context", flaky)
 
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()  # 失败，退回临时
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()  # 失败，退回临时
 
         # 唯一那个槽位必须已经放回去，否则下一个实例永远走不了持久化
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         assert f._profile_lock is not None
         assert len(spy["persistent"]) == 1
 
     def test_can_be_switched_off(self, spy, monkeypatch):
         monkeypatch.setenv("BROWSER_PERSIST_PROFILE", "0")
-        BrowserFetcher(profile=H2S_PROFILE).__enter__()
+        BrowserFetcher(profile=XIOR_PROFILE).__enter__()
 
         assert not spy["persistent"]
         assert len(spy["ephemeral"]) == 1
 
     def test_rebuild_keeps_using_persistent_profile(self, spy):
         """403 换 IP 重建时也要复用 profile，否则每次换 IP 都是冷启动。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f.__enter__()
         f._rebuild_browser()
 

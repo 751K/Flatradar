@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from browser_fetcher import (
-    H2S_PROFILE,
+    XIOR_PROFILE,
     BrowserFetcher,
     _should_block,
 )
@@ -21,8 +21,8 @@ from browser_fetcher import (
 
 class TestBlocksWaste:
     @pytest.mark.parametrize("url", [
-        "https://media.holland2stay.com/catalog/product/x.jpg",
-        "https://www.holland2stay.com/static/logo.png",
+        "https://media.xiorstudenthousing.eu/catalog/product/x.jpg",
+        "https://www.xiorstudenthousing.eu/static/logo.png",
     ])
     def test_images_blocked(self, url):
         assert _should_block(url, "image")
@@ -31,7 +31,7 @@ class TestBlocksWaste:
         assert _should_block("https://www.xiorstudenthousing.eu/f/x.woff2", "font")
 
     def test_video_blocked(self):
-        assert _should_block("https://www.holland2stay.com/tour.mp4", "media")
+        assert _should_block("https://www.xiorstudenthousing.eu/tour.mp4", "media")
 
     @pytest.mark.parametrize("host", [
         "www.googletagmanager.com",
@@ -59,7 +59,7 @@ class TestBlocksWaste:
         说明省下的钱变少了，应当是有意为之而不是顺手删的。
         """
         measured = {
-            "media.holland2stay.com": (32.0, "image"),
+            "media.xiorstudenthousing.eu": (32.0, "image"),
             "www.googletagmanager.com": (24.3, "script"),
             "fonts.gstatic.com": (15.2, "font"),
             "ka-p.fontawesome.com": (8.7, "script"),
@@ -94,8 +94,8 @@ class TestNeverBlocksWhatTheChallengeNeeds:
         assert not _should_block(f"https://{host}/turnstile/v0/api.js", rtype)
 
     @pytest.mark.parametrize("url", [
-        "https://www.holland2stay.com/residences",
-        "https://api.holland2stay.com/api/graphql",
+        "https://codomo.eu/homes/nl/en",
+        "https://codomo.eu/homes/nl/en?page=2",
         "https://www.xiorstudenthousing.eu/wp-admin/admin-ajax.php",
         "https://thisisourdomain.securerc.co.uk/onlineleasing/x/floorplans.aspx",
     ])
@@ -106,8 +106,8 @@ class TestNeverBlocksWhatTheChallengeNeeds:
 
     def test_site_scripts_and_styles_allowed(self):
         """站点自身的 JS/CSS 不能拦——页面渲染不出来，CF 的行为检测也会失真。"""
-        assert not _should_block("https://www.holland2stay.com/app.js", "script")
-        assert not _should_block("https://www.holland2stay.com/app.css", "stylesheet")
+        assert not _should_block("https://www.xiorstudenthousing.eu/app.js", "script")
+        assert not _should_block("https://www.xiorstudenthousing.eu/app.css", "stylesheet")
 
     def test_shared_cdn_allowed(self):
         """jsdelivr 同时供着站点自己的 bundle，从域名分不出来，只能放行。"""
@@ -159,7 +159,7 @@ def _fetcher_with_route(monkeypatch, env: str | None = None):
         monkeypatch.delenv("BROWSER_BLOCK_RESOURCES", raising=False)
     else:
         monkeypatch.setenv("BROWSER_BLOCK_RESOURCES", env)
-    f = BrowserFetcher(profile=H2S_PROFILE)
+    f = BrowserFetcher(profile=XIOR_PROFILE)
     f._page = _FakePage()
     f._install_resource_blocking()
     return f
@@ -168,7 +168,7 @@ def _fetcher_with_route(monkeypatch, env: str | None = None):
 class TestHandlerWiring:
     def test_blocked_request_is_aborted_and_counted(self, monkeypatch):
         f = _fetcher_with_route(monkeypatch)
-        route = _FakeRoute("https://media.holland2stay.com/a.jpg", "image")
+        route = _FakeRoute("https://media.xiorstudenthousing.eu/a.jpg", "image")
         f._page.handler(route)
 
         assert route.aborted and not route.continued
@@ -176,7 +176,7 @@ class TestHandlerWiring:
 
     def test_allowed_request_continues(self, monkeypatch):
         f = _fetcher_with_route(monkeypatch)
-        route = _FakeRoute("https://api.holland2stay.com/api/graphql", "fetch")
+        route = _FakeRoute("https://codomo.eu/homes/nl/en?page=2", "fetch")
         f._page.handler(route)
 
         assert route.continued and not route.aborted
@@ -191,7 +191,7 @@ class TestHandlerWiring:
             browser_fetcher, "_should_block",
             lambda *a: (_ for _ in ()).throw(RuntimeError("判定炸了")),
         )
-        route = _FakeRoute("https://media.holland2stay.com/a.jpg", "image")
+        route = _FakeRoute("https://media.xiorstudenthousing.eu/a.jpg", "image")
         f._page.handler(route)
 
         assert route.continued, "判定异常导致请求既没拦也没放"
@@ -212,6 +212,6 @@ class TestHandlerWiring:
             def route(self, *a):
                 raise RuntimeError("route 不可用")
 
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         f._page = _BadPage()
         f._install_resource_blocking()  # 不抛即通过

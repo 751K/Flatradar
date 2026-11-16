@@ -4,8 +4,7 @@
 ----
 这些状态全是 monitor 的模块级全局，重启即清零：
 
-    _h2s_circuit_open_until / _fail_streak      H2S 熔断（最长 6 小时退避）
-    _h2s_login_blocked_until                    登录抑制（1 小时）
+    source 熔断的 open_until / fail_streak       整源熔断（最长数小时退避）
     blocked_fail_streak                         403 指数退避（最长 2 小时）
     _last_*_notify_at ×6                        全部告警节流
 
@@ -43,13 +42,13 @@ def st(tmp_path):
 
 class TestSurvivesRestart:
     def test_deadline_outlives_the_process(self, st):
-        b1 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b1 = PersistedBackoff("circuit_x", max_seconds=21600)
         b1.load(st)
         b1.open(1800, reason="403", storage=st)
         assert 1700 < b1.remaining() <= 1800
 
         # 「进程重启」：全新对象，只有库里的东西
-        b2 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b2 = PersistedBackoff("circuit_x", max_seconds=21600)
         b2.load(st)
         assert 1700 < b2.remaining() <= 1800, (
             "重启后退避清零——正在被封的时候部署一次就满速重打"
@@ -58,23 +57,23 @@ class TestSurvivesRestart:
 
     def test_fail_streak_outlives_the_process(self, st):
         """连败计数也要活下来，否则指数退避每次重启都从第一级重新爬。"""
-        b1 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b1 = PersistedBackoff("circuit_x", max_seconds=21600)
         b1.load(st)
         for _ in range(4):
             b1.bump()
         b1.open(600, reason="x", storage=st)
 
-        b2 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b2 = PersistedBackoff("circuit_x", max_seconds=21600)
         b2.load(st)
         assert b2.fail_streak == 4
 
     def test_reset_clears_persisted_state(self, st):
-        b1 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b1 = PersistedBackoff("circuit_x", max_seconds=21600)
         b1.load(st)
         b1.bump(); b1.open(600, reason="x", storage=st)
         b1.reset(st)
 
-        b2 = PersistedBackoff("h2s_circuit", max_seconds=21600)
+        b2 = PersistedBackoff("circuit_x", max_seconds=21600)
         b2.load(st)
         assert b2.remaining() == 0
         assert b2.fail_streak == 0
@@ -90,7 +89,7 @@ class TestClockJumpIsClamped:
     """墙钟是持久化的代价：NTP 往回跳会让 deadline 看起来远在未来。
 
     钳到配置上限是安全方向——**永远不会等得比配置的最长退避还久**。不钳的话
-    一次时钟跳变能让 H2S 停摆到天荒地老，而且没有任何日志说得清为什么。
+    一次时钟跳变能让一个 source 停摆到天荒地老，而且没有任何日志说得清为什么。
     """
 
     def test_remaining_never_exceeds_the_configured_max(self, st):
@@ -133,17 +132,16 @@ class TestThrottleAlsoPersists:
 class TestMonitorUsesIt:
     """守卫：monitor 里这几个状态不能再退回裸的模块级 float。"""
 
-    def test_h2s_circuit_state_is_persisted(self):
+    def test_circuit_state_is_persisted(self):
         import monitor
 
         assert isinstance(monitor._source_circuits, SourceCircuits)
-        assert isinstance(monitor._h2s_login_block, PersistedBackoff)
 
     def test_no_monotonic_backed_circuit_globals_remain(self):
         import monitor
 
-        for name in ("_h2s_circuit_open_until", "_h2s_circuit_fail_streak",
-                     "_h2s_login_blocked_until"):
+        for name in ("_circuit_open_until", "_circuit_fail_streak",
+                     "_login_blocked_until"):
             assert not hasattr(monitor, name), (
                 f"monitor.{name} 又变回进程内全局了——部署会重置退避"
             )
@@ -218,14 +216,14 @@ class TestStartupActuallyWiresIt:
         """所有实例都要被 load，漏一个那一项就永远从零开始。"""
         import monitor
 
-        st.set_meta("backoff:circuit_holland2stay:until", str(9e18))
+        st.set_meta("backoff:circuit_codomo:until", str(9e18))
         st.set_meta("backoff:throttle_notify_block:until", str(9e18))
         try:
             monitor._bind_persistent_state(st)
-            assert monitor._source_circuits.remaining("holland2stay") > 0
+            assert monitor._source_circuits.remaining("codomo") > 0
             assert monitor._throttle_notify_block.remaining() > 0
         finally:
-            monitor._source_circuits.recover("holland2stay")
+            monitor._source_circuits.recover("codomo")
             monitor._throttle_notify_block.reset()
             monitor.runtime.throttle_storage = None
 

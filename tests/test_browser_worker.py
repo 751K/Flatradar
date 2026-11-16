@@ -22,7 +22,7 @@ def _worker_echo(conn, source):
         request = conn.recv()
         if request[0] == "stop":
             return
-        conn.send(("result", (os.getpid(), request[1]), None))
+        conn.send(("result", (os.getpid(), request[1])))
 
 
 def _worker_hangs(conn, source):
@@ -42,18 +42,7 @@ def _worker_requests_proxy(conn, source):
         conn.send(("proxy", source, True))
         kind, proxy = conn.recv()
         assert kind == "proxy_result"
-        conn.send(("result", (proxy, request[3].get("TEST_BROWSER_SETTING")), None))
-
-
-def _worker_adds_details(conn, source):
-    if os.name == "posix":
-        os.setsid()
-    conn.send(("ready",))
-    request = conn.recv()
-    detail = dict(request[4])
-    detail["fresh"] = {"tenant": "student"}
-    conn.send(("result", request[4], detail))
-    time.sleep(30)
+        conn.send(("result", (proxy, request[3].get("TEST_BROWSER_SETTING"))))
 
 
 def _serve_with_proxy_scraper(conn, source):
@@ -207,19 +196,6 @@ def test_proxy_selection_and_environment_follow_parent(monkeypatch):
         assert calls == [("xior", True), ("xior", True)]
     finally:
         worker.stop()
-
-
-def test_h2s_detail_cache_is_seeded_and_returned(monkeypatch):
-    import scrapers.holland2stay as h2s
-
-    monkeypatch.setattr(h2s, "_DETAIL_CACHE", {"old": {"tenant": "working"}})
-    worker = BrowserWorker("holland2stay", entrypoint=_worker_adds_details)
-    try:
-        sent_cache = worker.execute([], multi_source=False, timeout=10)
-        assert sent_cache == {"old": {"tenant": "working"}}
-        assert h2s._DETAIL_CACHE["fresh"] == {"tenant": "student"}
-    finally:
-        worker.close()
 
 
 def test_real_worker_uses_parent_proxy_and_preserves_error_chain(monkeypatch):

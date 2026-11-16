@@ -25,7 +25,7 @@ from urllib import request as urllib_request
 
 from dotenv import dotenv_values
 
-from net import NO_PROXY_CURL  # 见 check_h2s_network 里 proxies 处的注释
+from net import NO_PROXY_CURL  # 见 check_codomo_network 里 proxies 处的注释
 from config import BASE_DIR, DATA_DIR, DB_PATH, ENV_PATH, get_impersonate, get_proxy_url
 
 
@@ -393,9 +393,9 @@ def check_proxy(ctx: DoctorContext) -> list[CheckResult]:
     return results
 
 
-def check_h2s_network(ctx: DoctorContext) -> list[CheckResult]:
+def check_codomo_network(ctx: DoctorContext) -> list[CheckResult]:
     if ctx.no_network:
-        return [CheckResult(SKIP, "H2S GraphQL", "--no-network")]
+        return [CheckResult(SKIP, "Codomo listings", "--no-network")]
     proxy = get_proxy_url()
     # 空串 = 代理全在冷却、已降级直连。**不能传 {}**：curl_cffi 见到空字典会
     # 静默回落到 HTTP_PROXY / HTTPS_PROXY，也就是回落到那个刚被判失效的代理。
@@ -405,27 +405,21 @@ def check_h2s_network(ctx: DoctorContext) -> list[CheckResult]:
     try:
         import curl_cffi.requests as req
 
-        resp = req.post(
-            "https://api.holland2stay.com/graphql/",
-            json={"query": "{ __typename }"},
-            headers={
-                "Content-Type": "application/json",
-                "Origin": "https://www.holland2stay.com",
-                "Referer": "https://www.holland2stay.com/",
-                "Accept": "application/json",
-            },
+        resp = req.get(
+            "https://codomo.eu/homes/nl/en",
+            headers={"Accept": "text/html"},
             impersonate=get_impersonate(),
             proxies=proxies,
             timeout=ctx.timeout,
         )
         body = resp.text[:220].replace("\n", "\\n")
         if resp.status_code == 200:
-            return [CheckResult(OK, "H2S GraphQL", "HTTP 200")]
+            return [CheckResult(OK, "Codomo listings", "HTTP 200")]
         if resp.status_code in {403, 429}:
-            return [CheckResult(FAIL, "H2S GraphQL", f"HTTP {resp.status_code}; proxy/IP likely blocked", body)]
-        return [CheckResult(WARN, "H2S GraphQL", f"HTTP {resp.status_code}", body)]
+            return [CheckResult(FAIL, "Codomo listings", f"HTTP {resp.status_code}; proxy/IP likely blocked", body)]
+        return [CheckResult(WARN, "Codomo listings", f"HTTP {resp.status_code}", body)]
     except Exception as exc:
-        return [CheckResult(FAIL, "H2S GraphQL", "request failed", str(exc))]
+        return [CheckResult(FAIL, "Codomo listings", "request failed", str(exc))]
 
 
 def check_supervisor(_: DoctorContext) -> list[CheckResult]:
@@ -540,7 +534,7 @@ def build_context(args: argparse.Namespace) -> DoctorContext:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run FlatRadar pre-release health checks.")
-    parser.add_argument("--no-network", action="store_true", help="skip proxy/H2S/SMTP network probes")
+    parser.add_argument("--no-network", action="store_true", help="skip proxy/Codomo/SMTP network probes")
     parser.add_argument("--smtp-login", action="store_true", help="also test SMTP username/password login")
     parser.add_argument("--timeout", type=float, default=8.0, help="network timeout in seconds")
     args = parser.parse_args(argv)
@@ -562,7 +556,7 @@ def main(argv: list[str] | None = None) -> int:
         ("APNs", check_apns),
         ("SMTP", check_smtp),
         ("Proxy", check_proxy),
-        ("Holland2Stay", check_h2s_network),
+        ("Codomo", check_codomo_network),
         ("Docker Supervisor", check_supervisor),
     ]
     for title, func in sections:

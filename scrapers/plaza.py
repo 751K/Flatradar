@@ -52,7 +52,7 @@ Plaza（plaza.newnewnew.space，运营方 Plaza Resident Services）是跑在 **
 - Plaza 的房源是**公开的**：上面那个端点无 cookie、无 referer 直接 200（2026-09-02
   两次独立验证）。站点 disclaimer 只有标准免责声明，没有再分发限制条款。
 
-也就是说 €27.50 买的是「能应征」，不是「能看见」——与 Xior / H2S 需要账号才能下单
+也就是说 €27.50 买的是「能应征」，不是「能看见」——与 Xior 需要账号才能下单
 是同一类，不影响只读监控。**但这笔钱要让用户知道**：所有房源的
 ``inschrijvingVereistVoorReageren`` 都是 true，收到通知却没注册就没法应征。因此
 每条 listing 都写一条 ``Registration`` 特征。
@@ -81,7 +81,7 @@ Arnhem）与当时实际在架的十个城市取并集。两份清单本来就�
 价格口径
 --------
 ``totalRent`` 是到手价（实测 €867.75），``netRent`` 是 kale huur（€653）。
-``price_raw`` 报前者，与 H2S / Xior / Magis 同一口径；后者写进 features 的
+``price_raw`` 报前者，与 Codomo / Xior / Magis 同一口径；后者写进 features 的
 ``Net rent`` 供核对。
 
 维度登记

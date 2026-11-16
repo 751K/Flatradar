@@ -1,7 +1,7 @@
 """mcore/watchdog.py — 数据退化告警
 =====================================
 
-现有的 admin 告警全部**对异常触发**：代理失效、H2S 熔断、未分类异常、管线异常。
+现有的 admin 告警全部**对异常触发**：代理失效、source 熔断、未分类异常、管线异常。
 它们看不见的是**没有异常的故障**——某个 source 一直「成功」返回 0 条，或者完整
 扫描率悄悄从 100% 滑到 40%。2026-06-13 起那次 7 周静默停摆就是这一类的极端形态：
 进程没崩，只是不干活了。
@@ -48,7 +48,7 @@ _REPEAT_INTERVAL = float(os.environ.get("WATCHDOG_REPEAT_INTERVAL", "21600"))
 # 全局静默的判据在 mcore/health.py 的 SILENT_SECONDS —— **按时间不按轮数**。
 # 这里原先是 `_SILENT_ROUNDS = 6`（连续 6 轮全站 0 条），2026-08-25 换掉：
 # 高峰期一轮 60 秒，6 轮就是 6 分钟，而「全站 0 条」现在本来就是常态
-# （H2S 高频轮只查可订、OurCampus 三个月 1 条、Xior 常态零可订）。当天报了
+# （feed 只列可订房源、OurCampus 三个月 1 条、Xior 常态零可订）。当天报了
 # 两次，两次都是正常状态。理由与阈值见那个常量的注释。
 
 LEVEL_WARN = "warn"
@@ -106,8 +106,8 @@ def evaluate(storage, *, window: int | None = None) -> list[Alert]:
                     f"｜最近非零 {fmt_ts(h.last_nonzero_at, fallback='无')}"
                 ),
             ))
-        # 判据是「多久没有完整扫描」而不是完整率——分层抓取让后者对 H2S
-        # 永久为真，见 mcore/health.py 的 STALE_FULL_SCAN_SECONDS。
+        # 判据是「多久没有完整扫描」而不是完整率，见 mcore/health.py 的
+        # STALE_FULL_SCAN_SECONDS。
         if any("没有完整扫描" in r for r in h.reasons):
             alerts.append(Alert(
                 key=f"stale_full_scan:{h.source}",

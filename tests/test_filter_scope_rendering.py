@@ -52,7 +52,7 @@ class TestAccountFilters:
         expected = Counter(b for d in self.PAGE_DIMS if (b := dim_scope_badge(d, lang)))
         assert expected, "没有任何维度需要徽标，这条测试已经失去意义"
         for badge, n in expected.items():
-            # 数 `>徽标</small>`：英文 tooltip 里也含「Holland2Stay only」，裸数会多算
+            # 数 `>徽标</small>`：英文 tooltip 里也含「Codomo only」，裸数会多算
             anchor = f">{badge}</small>"
             assert html.count(anchor) == n, f"徽标 {badge!r} 应出现 {n} 次，实际 {html.count(anchor)} 次"
 
@@ -66,7 +66,9 @@ class TestUserForm:
     def test_fields_carry_badges(self, admin_client):
         html = admin_client.get(
             "/users/new", headers={"Accept-Language": "zh-CN"}).get_data(as_text=True)
-        assert html.count("仅 Holland2Stay") >= 4
+        # 单平台维度（offer → Codomo、energy → Magis）在通知与自动预订两组条件里各一个
+        assert html.count(">仅 Codomo</small>") >= 2
+        assert html.count(">仅 Magis</small>") >= 2
         # 徽标要点名平台，不能是「仅 3 个平台」那种只报数的写法
         assert "Xior 除外" in html
         assert "个平台" not in html
@@ -81,6 +83,6 @@ class TestUserForm:
 class TestEnglishUi:
     def test_english_badge_and_note(self, client):
         html = _account_html(client, "en-US")
-        assert "Holland2Stay only" in html
+        assert "Codomo only" in html
         assert "unaffected" in html
-        assert "仅 Holland2Stay" not in html
+        assert "仅 Codomo" not in html

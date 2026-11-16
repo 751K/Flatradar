@@ -63,7 +63,7 @@ class TestWritePath:
         assert row["city_normalized"] == "Utrecht"
 
     def test_h2s_city_unchanged(self, db):
-        db.diff([_listing("h1", "Eindhoven", "holland2stay")])
+        db.diff([_listing("h1", "Eindhoven", "codomo")])
         row = db.conn.execute(
             "SELECT city_normalized FROM listings WHERE id='h1'"
         ).fetchone()
@@ -120,11 +120,11 @@ class TestQueries:
     @pytest.fixture
     def seeded(self, db):
         db.diff([
-            _listing("h1", "Utrecht", "holland2stay"),
-            _listing("h2", "Eindhoven", "holland2stay"),
+            _listing("h1", "Utrecht", "codomo"),
+            _listing("h2", "Eindhoven", "codomo"),
             _listing("x1", "Utrecht Willem Dreeslaan", "xior"),
             _listing("o1", "Amsterdam Diemen", "ourdomain"),
-            _listing("h3", "Amsterdam", "holland2stay"),
+            _listing("h3", "Amsterdam", "codomo"),
         ])
         return db
 
@@ -202,16 +202,16 @@ class TestFallbackWhenNormalizedMissing:
         db.conn.commit()
 
     def test_row_is_still_findable(self, db):
-        self._insert_without_normalized(db, "raw1", "Eindhoven", "holland2stay")
+        self._insert_without_normalized(db, "raw1", "Eindhoven", "codomo")
         ids = {r["id"] for r in db.get_all_listings(city="Eindhoven")}
         assert ids == {"raw1"}
 
     def test_row_still_appears_in_the_dropdown(self, db):
-        self._insert_without_normalized(db, "raw1", "Eindhoven", "holland2stay")
+        self._insert_without_normalized(db, "raw1", "Eindhoven", "codomo")
         assert "Eindhoven" in db.get_distinct_cities()
 
     def test_counts_include_it(self, db):
-        self._insert_without_normalized(db, "raw1", "Eindhoven", "holland2stay")
+        self._insert_without_normalized(db, "raw1", "Eindhoven", "codomo")
         assert db.count_all(city="Eindhoven") == 1
 
 
@@ -320,19 +320,19 @@ class TestNotificationFilter:
         f = ListingFilter(allowed_cities=["Amsterdam Diemen"])
         assert f.passes(_city_listing("Amsterdam Diemen", "ourdomain"))
         # 归一之后它等价于 Amsterdam，同城的其它楼盘也一并放行
-        assert f.passes(_city_listing("Amsterdam", "holland2stay"))
+        assert f.passes(_city_listing("Amsterdam", "codomo"))
 
     def test_other_cities_still_excluded(self):
         """归一是把同城的合并，不是把所有城市合并。"""
         f = ListingFilter(allowed_cities=["Utrecht"])
-        assert not f.passes(_city_listing("Eindhoven", "holland2stay"))
+        assert not f.passes(_city_listing("Eindhoven", "codomo"))
         assert not f.passes(_city_listing("Eindhoven Zernikestraat", "xior"))
 
     def test_diemen_does_not_leak_into_amsterdam(self):
-        """勾 Diemen（H2S 的独立城市）不该收到 Amsterdam 的房。"""
+        """勾 Diemen（Codomo 的独立城市）不该收到 Amsterdam 的房。"""
         f = ListingFilter(allowed_cities=["Diemen"])
-        assert f.passes(_city_listing("Diemen", "holland2stay"))
-        assert not f.passes(_city_listing("Amsterdam", "holland2stay"))
+        assert f.passes(_city_listing("Diemen", "codomo"))
+        assert not f.passes(_city_listing("Amsterdam", "codomo"))
 
     def test_empty_filter_unaffected(self):
         assert ListingFilter().passes(_city_listing("Amsterdam Diemen", "ourdomain"))
@@ -341,9 +341,9 @@ def test_known_city_names_scopes_to_enabled_sources():
     """城市下拉只该列出实际启用平台的城市。"""
     from config import known_city_names
 
-    h2s = set(known_city_names(["holland2stay"]))
-    assert "Eindhoven" in h2s
-    assert "Wageningen" not in h2s        # Xior 独有
+    codomo = set(known_city_names(["codomo"]))
+    assert "Eindhoven" in codomo
+    assert "Wageningen" not in codomo     # Xior 独有
 
     xior = set(known_city_names(["xior"]))
     assert "Wageningen" in xior

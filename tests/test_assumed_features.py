@@ -245,7 +245,7 @@ class TestBackfill:
         st = Storage(path)
         st.diff([Listing(id="h1", name="h", status="Available to book",
                          price_raw="1000", available_from="", url="",
-                         city="Eindhoven", source="holland2stay", features=[])])
+                         city="Eindhoven", source="codomo", features=[])])
         st.close()
 
         st2 = self._reopen(path)

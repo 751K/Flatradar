@@ -6,8 +6,8 @@
 
 模块
 ----
-interval / pacing / health / circuit / backoff / watchdog / prewarm /
+interval / pacing / health / circuit / backoff / watchdog /
 booking / push / proxy / sources / state / telemetry / stale / dispatch /
-scrape_round / prewarm_round / post_round / round_failures / startup /
-outage / throttles / h2s_guard / h2s_rest / geocode / warm_browser
+scrape_round / post_round / round_failures / startup /
+outage / throttles / geocode
 """

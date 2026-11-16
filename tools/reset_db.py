@@ -111,7 +111,7 @@ def reset_file(db_path: Path, dry_run: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="清空 Holland2Stay 监控数据库（测试用）")
+    parser = argparse.ArgumentParser(description="清空 FlatRadar 监控数据库（测试用）")
     parser.add_argument("--all",     action="store_true", help="删除整个 .db 文件而非仅清空表")
     parser.add_argument("--dry-run", action="store_true", help="只预览，不实际修改")
     parser.add_argument("--db",      default=str(DB_PATH),  help=f"数据库路径（默认: {DB_PATH}）")

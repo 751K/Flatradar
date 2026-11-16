@@ -22,7 +22,8 @@ ROOT = Path(__file__).resolve().parent.parent
 @pytest.fixture
 def env(monkeypatch):
     """给一组干净的 source/城市环境变量，避免读到开发机的真实配置。"""
-    for k in ("SOURCES", "CITIES", "OURDOMAIN_CITIES", "OURCAMPUS_CITIES", "XIOR_CITIES"):
+    for k in ("SOURCES", "CITIES", "CODOMO_CITIES", "OURDOMAIN_CITIES",
+              "OURCAMPUS_CITIES", "XIOR_CITIES"):
         monkeypatch.delenv(k, raising=False)
 
     def _set(**kw):
@@ -37,18 +38,18 @@ def _xior(city: str) -> dict:
 
 
 class TestDerivedFromLiveConfig:
-    def test_h2s_cities(self, env):
-        cfg = env(SOURCES="holland2stay", CITIES="Amsterdam,24|Eindhoven,29")
+    def test_codomo_cities(self, env):
+        cfg = env(SOURCES="codomo", CODOMO_CITIES="Amsterdam,24|Eindhoven,29")
         assert cfg.monitored_city_names() == ["Amsterdam", "Eindhoven"]
 
     def test_deduplicates_across_sources(self, env):
-        """OurDomain 的「Amsterdam Diemen」和 H2S 的「Amsterdam」是同一座城市。
+        """OurDomain 的「Amsterdam Diemen」和 Codomo 的「Amsterdam」是同一座城市。
 
         分开列会让人以为监控了七八个城市。
         """
         cfg = env(
-            SOURCES="holland2stay,ourdomain",
-            CITIES="Amsterdam,24",
+            SOURCES="codomo,ourdomain",
+            CODOMO_CITIES="Amsterdam,24",
             OURDOMAIN_CITIES="Amsterdam Diemen,diemen",
         )
         assert cfg.monitored_city_names() == ["Amsterdam"]
@@ -56,8 +57,8 @@ class TestDerivedFromLiveConfig:
     def test_building_names_resolve_to_their_city(self, env):
         m, v = _xior("Maastricht"), _xior("Venlo")
         cfg = env(
-            SOURCES="holland2stay,xior",
-            CITIES="Eindhoven,29",
+            SOURCES="codomo,xior",
+            CODOMO_CITIES="Eindhoven,29",
             XIOR_CITIES=f"{m['city']} {m['bldg']},{m['key']}|{v['city']} {v['bldg']},{v['key']}",
         )
         assert cfg.monitored_city_names() == ["Eindhoven", "Maastricht", "Venlo"]
@@ -70,13 +71,13 @@ class TestDerivedFromLiveConfig:
         或将来命名格式变了。那时查表仍然对，猜名字会把楼盘名原样显示在横幅上。
         """
         a = _xior("Amsterdam")
-        cfg = env(SOURCES="xior", CITIES="",
+        cfg = env(SOURCES="xior", CODOMO_CITIES="",
                   XIOR_CITIES=f"Some Renamed Building,{a['key']}")
         assert cfg.monitored_city_names() == ["Amsterdam"]
 
     def test_unknown_key_falls_back_to_normalisation(self, env):
         """注册表里没有的 key（新楼盘尚未同步）退回按名字归一化，而不是丢掉。"""
-        cfg = env(SOURCES="xior", CITIES="",
+        cfg = env(SOURCES="xior", CODOMO_CITIES="",
                   XIOR_CITIES="Amsterdam Karspeldreef,p-not-in-registry")
         assert cfg.monitored_city_names() == ["Amsterdam"]
 
@@ -85,7 +86,7 @@ class TestDerivedFromLiveConfig:
         a = _xior("Aachen Vaals")
         cfg = env(
             SOURCES="xior",
-            CITIES="",
+            CODOMO_CITIES="",
             XIOR_CITIES=f"{a['city']} {a['bldg']},{a['key']}",
         )
         assert cfg.monitored_city_names() == ["Aachen Vaals"]
@@ -97,22 +98,22 @@ class TestDerivedFromLiveConfig:
         经由它构造的实例里那些列表已经是空的，测不到本方法自己的判断。
         """
         cfg = config.Config(
-            check_interval=300, availability_filters=[],
+            check_interval=300,
             db_path="x.db", log_level="INFO",
-            sources=["holland2stay"],
-            cities=[config.CityFilter(name="Eindhoven", id=29)],
+            sources=["codomo"],
+            codomo_cities=[config.TargetFilter(name="Eindhoven", key="29")],
             ourdomain_cities=[config.OurDomainCityFilter(name="Amsterdam Diemen", key="diemen")],
             xior_cities=[config.XiorCityFilter(name="Amsterdam Karspeldreef", key="p0196062")],
         )
         assert cfg.monitored_city_names() == ["Eindhoven"]
 
     def test_sorted_and_unique(self, env):
-        cfg = env(SOURCES="holland2stay", CITIES="Eindhoven,29|Amsterdam,24|Eindhoven,29")
+        cfg = env(SOURCES="codomo", CODOMO_CITIES="Eindhoven,29|Amsterdam,24|Eindhoven,29")
         assert cfg.monitored_city_names() == ["Amsterdam", "Eindhoven"]
 
     def test_empty_when_nothing_configured(self, env):
         """没配城市时返回空——模板据此整块不渲染，而不是显示一句空荡荡的说明。"""
-        assert env(SOURCES="holland2stay", CITIES="").monitored_city_names() == []
+        assert env(SOURCES="codomo", CODOMO_CITIES="").monitored_city_names() == []
 
 
 class TestSupportEmail:
@@ -143,16 +144,16 @@ class TestGroupedByPlatform:
     """并集在七个平台之后读不动了，横幅改成按平台分组。"""
 
     def test_grouping_keeps_each_platform_separate(self, env):
-        cfg = env(SOURCES="holland2stay,magis", CITIES="Amsterdam,24")
+        cfg = env(SOURCES="codomo,magis", CODOMO_CITIES="Amsterdam,24")
         by_src = cfg.monitored_cities_by_source()
-        assert by_src["holland2stay"] == ["Amsterdam"]
+        assert by_src["codomo"] == ["Amsterdam"]
         assert "Eindhoven" in by_src["magis"]
         # 分组不该把别人的城市混进来
-        assert "Eindhoven" not in by_src["holland2stay"]
+        assert "Eindhoven" not in by_src["codomo"]
 
     def test_union_still_agrees_with_the_groups(self, env):
         """``monitored_city_names`` 现在由分组推导，两者不能各说各的。"""
-        cfg = env(SOURCES="holland2stay,magis,plaza", CITIES="Amsterdam,24")
+        cfg = env(SOURCES="codomo,magis,plaza", CODOMO_CITIES="Amsterdam,24")
         merged = set()
         for cities in cfg.monitored_cities_by_source().values():
             merged.update(cities)
@@ -160,8 +161,8 @@ class TestGroupedByPlatform:
 
     def test_disabled_source_is_absent(self, env):
         """平台没开就不能出现——城市列表填着但 source 没启用，一条都不会抓。"""
-        cfg = env(SOURCES="holland2stay", CITIES="Amsterdam,24")
-        assert set(cfg.monitored_cities_by_source()) == {"holland2stay"}
+        cfg = env(SOURCES="codomo", CODOMO_CITIES="Amsterdam,24")
+        assert set(cfg.monitored_cities_by_source()) == {"codomo"}
 
     def test_buildings_are_normalised_within_a_platform(self, env):
         """楼盘名归一到城市：Xior 的两栋 Eindhoven 楼是一个 Eindhoven。"""
@@ -180,6 +181,6 @@ class TestShadowIsVisible:
     def test_shadow_sources_are_still_listed(self, env, monkeypatch):
         """隐藏会让用户在房源列表里看见 Plaza 的房子，却在覆盖说明里找不到那个城市。"""
         monkeypatch.setenv("SHADOW_SOURCES", "plaza")
-        cfg = env(SOURCES="holland2stay,plaza", CITIES="Amsterdam,24")
+        cfg = env(SOURCES="codomo,plaza", CODOMO_CITIES="Amsterdam,24")
         assert "plaza" in cfg.monitored_cities_by_source()
         assert cfg.shadow_sources == ["plaza"]

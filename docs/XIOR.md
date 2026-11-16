@@ -56,7 +56,7 @@ Cloudflare 对该端点按 **IP** 限流，阈值约为每窗口 15–20 次请�
 
 **单轮耗时随楼栋数线性增长**，每栋约为「房型数 × 5 秒」，实测 14 秒量级，比其余
 source 高一个数量级。30 栋楼需约 7 分钟才能扫完，而 `CHECK_INTERVAL` 只有 300 秒；
-Holland2Stay 又排在其余 source **之后**执行，不分片等于每轮都推迟真正产出房源的
+Xior 又排在其余 source **之后**执行，不分片等于每轮都推迟真正产出房源的
 source。因此监控全部楼栋通过分轮抓取实现（默认 `SHARD_SIZES=xior:4`）：每轮抓若干
 栋，游标持久化于 SQLite，重启后继续轮转。实现见 `monitor._apply_task_sharding()`。
 
@@ -163,8 +163,7 @@ WordPress feed 标记「可订」不等于当前能提交申请，存在两类�
 两类都带 `applyOnlineURL`，`availableDate` 分布完全重叠，且都要通过第二道校验。
 
 **Xior 不存在抽签机制。** `Vacant Unrented Not Ready` 曾被映射为 `Available in
-lottery`，这是错误映射："lottery" 是 Holland2Stay 的专有概念（availability filter
-id=336 的摇号池）。该映射会让面板显示橙色 Lottery 徽标，等于提示用户参与一个不存在的
+lottery`，这是错误映射："lottery" 是 Codomo（原 Holland2Stay）的专有概念（登记兴趣、按感兴趣人数排队的 `Available in lottery`）。该映射会让面板显示橙色 Lottery 徽标，等于提示用户参与一个不存在的
 摇号。「尚不可入住」已由 `available_from` 表达，无需借用一个语义不符的状态来编码。
 
 ### 4.2 两道闸
@@ -252,23 +251,23 @@ Listing(
 `student only`——与 OurDomain 不同，后者仅 Diemen 一栋楼内部就分学生与须有收入两档
 （见 [OURDOMAIN.md](OURDOMAIN.md) §5.1）。
 
-取值沿用 Holland2Stay `tenant_profile_restrictions` 的词汇表，Web 端 Tenant 多选过滤
+取值沿用 Codomo 旧版（Holland2Stay）`tenant_profile_restrictions` 的词汇表，Web 端 Tenant 多选过滤
 器因此可跨 source 合并。`tenant` 已在 `_SOURCE_FILTER_DIMS` 中登记——只声明数据而不
 登记能力表时该维度仍走 fail-open。存量房源由 `SOURCE_ASSUMED_FEATURES` 的 backfill
 补齐，无需重新抓取。
 
 ## 6. 与另外两个平台的差异
 
-| | H2S | OurDomain | Xior |
+| | Codomo | OurDomain | Xior |
 |---|---|---|---|
-| 数据格式 | GraphQL JSON | HTML table | AJAX JSON |
-| 传输方式 | 浏览器 | curl_cffi 加指纹轮换 | 浏览器 |
-| Cloudflare 强度 | 托管挑战 | WAF 403（换指纹即可通过） | 托管挑战加 IP 限流 |
-| 出口 IP 策略 | 一段时期内固定，随浏览器重建轮换 | 每次尝试均更换 | 一段时期内固定，随浏览器重建轮换 |
-| 反机器人机制 | Turnstile | reCAPTCHA v3 与 v2 | Turnstile（不校验） |
-| 每轮请求数 | 城市数 × 页数 | 1 + N 个 FP | N 个房型，每栋约 2–5 个 |
+| 数据格式 | HTTP 全国列表，按城市拆分 | HTML table | AJAX JSON |
+| 传输方式 | 纯 HTTP | curl_cffi 加指纹轮换 | 浏览器 |
+| Cloudflare 强度 | 无需浏览器 | WAF 403（换指纹即可通过） | 托管挑战加 IP 限流 |
+| 出口 IP 策略 | 无特殊要求 | 每次尝试均更换 | 一段时期内固定，随浏览器重建轮换 |
+| 反机器人机制 | 无 | reCAPTCHA v3 与 v2 | Turnstile（不校验） |
+| 每轮请求数 | 每批 1 次 | 1 + N 个 FP | N 个房型，每栋约 2–5 个 |
 | 预订链接 | 无 | 无 | `applyOnlineURL` |
-| 自动预订 | 已实现并启用 | 已实现到入口段，未开放 | 已实现到保存草稿，未开放 |
+| 自动预订 | 不支持（新站预订需登录，未摸清） | 已实现到入口段，未开放 | 已实现到保存草稿，未开放 |
 
 OurDomain 与 Xior 使用**同一套 RENTCafe，契约逐字相同**，共用
 [`bookers/rentcafe.py`](../bookers/rentcafe.py)。平台差异只在「如何从一条 listing

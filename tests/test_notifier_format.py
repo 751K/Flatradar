@@ -45,6 +45,7 @@ def _listing(**overrides):
         "sku": "SKU001",
         "contract_id": 1,
         "contract_start_date": None,
+        "source": "codomo",
     }
     defaults.update(overrides)
     return Listing(**defaults)
@@ -55,7 +56,7 @@ def _listing(**overrides):
 class TestFormatNew:
     def test_direct_book_listing(self):
         text = _format_new(_listing())
-        assert "[H2S] New Listing" in text
+        assert "[CD] New Listing" in text
         assert "Teststraat 1-A, Eindhoven" in text
         assert "Status: Available to book" in text
         assert "€950" in text
@@ -90,7 +91,7 @@ class TestFormatStatusChange:
         text = _format_status_change(
             _listing(), "Available in lottery", "Available to book"
         )
-        assert "[H2S] Status Change" in text
+        assert "[CD] Status Change" in text
         assert "Available in lottery → Available to book" in text
 
     def test_book_to_not_available(self):
@@ -98,7 +99,7 @@ class TestFormatStatusChange:
             _listing(status="Not available"),
             "Available to book", "Not available",
         )
-        assert "[H2S] Status Change" in text
+        assert "[CD] Status Change" in text
         assert "Available to book → Not available" in text
 
     def test_contains_listing_url(self):
@@ -111,23 +112,26 @@ class TestFormatStatusChange:
 # ── _format_booking_success ────────────────────────────────
 
 class TestFormatBookingSuccess:
+    """订房 + 付款模板只用于有占房窗口的平台（BOOKING_HOLD_SOURCES），这里取
+    OurDomain；Codomo 不在其中，走「申请已提交」模板。"""
+
     def test_with_pay_url(self):
         text = _format_booking_success(
-            _listing(), "detail fallback",
+            _listing(source="ourdomain"), "detail fallback",
             pay_url="https://account.holland2stay.com/idealcheckout/setup.php?order_id=123",
         )
-        assert "[H2S] Booking Successful!" in text
+        assert "[OD] Booking Successful!" in text
         assert "idealcheckout" in text
 
     def test_no_pay_url_falls_back_to_detail(self):
         text = _format_booking_success(
-            _listing(), "No payment URL available",
+            _listing(source="ourdomain"), "No payment URL available",
         )
         assert "No payment URL available" in text
 
     def test_contract_start_date_used_over_listing_date(self):
         text = _format_booking_success(
-            _listing(available_from="2026-06-15"),
+            _listing(source="ourdomain", available_from="2026-06-15"),
             "ok",
             contract_start_date="2026-07-01",
         )
@@ -149,7 +153,7 @@ class TestFormatBookingFailed:
         text = _format_booking_failed(
             _listing(), "already booked by someone else",
         )
-        assert "[H2S] Booking Failed" in text
+        assert "[CD] Booking Failed" in text
         assert "already booked by someone else" in text
         assert "Manual booking:" in text
         assert "https://www.holland2stay.com/residences/test-1.html" in text
@@ -168,7 +172,7 @@ class TestEmailFormatting:
         assert "Holland2Stay" not in subject
 
     def test_html_template_escapes_dynamic_text(self):
-        html = _format_email_html("[H2S] New Listing\n\n<script>alert(1)</script>")
+        html = _format_email_html("[CD] New Listing\n\n<script>alert(1)</script>")
         assert "FlatRadar" in html
         assert "<script>alert(1)</script>" not in html
         assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
@@ -179,7 +183,7 @@ class TestTelegramFormatting:
         html = _format_telegram_html(_format_new(_listing()))
 
         assert "<b>FlatRadar</b>" in html
-        assert "<b>[H2S] New Listing</b>" in html
+        assert "<b>[CD] New Listing</b>" in html
         assert "Status: Available to book" in html
         assert "✅" not in html
         assert '<a href="https://www.holland2stay.com/residences/test-1.html">' in html
@@ -274,8 +278,9 @@ class TestPlazaApplicationSubmitted:
         wn = WebNotifier.__new__(WebNotifier)
         wn._storage = _St()
         asyncio.run(wn.send_booking_success(self._plaza(), "x", "https://pay.example/ignored"))
-        asyncio.run(wn.send_booking_success(_listing(), "x", "https://pay.example/h2s"))
+        asyncio.run(wn.send_booking_success(_listing(source="ourdomain"), "x",
+                                            "https://pay.example/od"))
         assert rows[0]["title"].startswith("[PZ] Applied: ")
         assert rows[0]["url"] == self._PLAZA_URL
-        assert rows[1]["title"].startswith("[H2S] Booking: ")
-        assert rows[1]["url"] == "https://pay.example/h2s"
+        assert rows[1]["title"].startswith("[OD] Booking: ")
+        assert rows[1]["url"] == "https://pay.example/od"

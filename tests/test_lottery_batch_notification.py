@@ -1,8 +1,8 @@
-"""H2S 整批放出的抽签房源聚成一条通知，不再一套一封。
+"""Codomo 整批放出的抽签（登记意向）房源聚成一条通知，不再一套一封。
 
-起因（2026-08-25 生产）
-----------------------
-H2S 在一轮里一次性放出 9 套 ``Available in lottery``（同一个 first_seen
+起因（2026-08-25 生产，当时还叫 Holland2Stay）
+----------------------------------------------
+它在一轮里一次性放出 9 套 ``Available in lottery``（同一个 first_seen
 15:02:29）。逐条发的结果是同一分钟内 9 封邮件 × 每个匹配用户，当天
 ``fl1p`` 就是这么在 22 秒内被配额拒发 12 次的——他的过滤条件为空，全收。
 
@@ -25,11 +25,11 @@ from models import Listing, is_lottery_status
 from monitor import _BATCH_MIN, _split_batchable
 
 
-def _l(lid: str, status="Available in lottery", source="holland2stay", **kw):
+def _l(lid: str, status="Available in lottery", source="codomo", **kw):
     base = dict(
         id=lid, name=f"House {lid}", status=status, price_raw="€900",
         available_from="2030-01-01", features=["Area: 30 m²", "Type: Studio"],
-        url=f"https://h2s/{lid}", city="Eindhoven", source=source,
+        url=f"https://codomo.test/{lid}", city="Eindhoven", source=source,
     )
     base.update(kw)
     return Listing(**base)
@@ -39,8 +39,8 @@ def _l(lid: str, status="Available in lottery", source="holland2stay", **kw):
 
 class TestIsLotteryStatus:
     @pytest.mark.parametrize("status", ["Available in lottery", "To be in lottery"])
-    def test_both_h2s_lottery_values(self, status):
-        """H2S 的抽签有两个取值（6203 / 6204），漏掉任一个都会让那批房源逃过聚合。"""
+    def test_both_lottery_values(self, status):
+        """抽签有两个状态词，漏掉任一个都会让那批房源逃过聚合。"""
         assert is_lottery_status(status)
 
     @pytest.mark.parametrize("status", [
@@ -56,7 +56,7 @@ class TestIsLotteryStatus:
 # ── 拆分 ──────────────────────────────────────────────────────────────
 
 class TestSplit:
-    def test_batches_h2s_lottery(self):
+    def test_batches_codomo_lottery(self):
         ms = [_l("a"), _l("b"), _l("c")]
         batched, singles = _split_batchable(ms)
         assert [x.id for x in batched] == ["a", "b", "c"]
@@ -70,7 +70,7 @@ class TestSplit:
         assert [x.id for x in singles] == ["hot"]
 
     def test_other_sources_never_batched(self):
-        """聚合只对 H2S 开，别的平台就算状态里带 lottery 也不走这条路。"""
+        """聚合只对 Codomo 开，别的平台就算状态里带 lottery 也不走这条路。"""
         ms = [_l("a"), _l("b"), _l("x", source="xior"), _l("o", source="ourdomain")]
         batched, singles = _split_batchable(ms)
         assert [x.id for x in batched] == ["a", "b"]
@@ -78,7 +78,7 @@ class TestSplit:
 
     def test_ourcampus_lottery_is_sent_one_by_one(self):
         """OurCampus **有**抽签，而且一样快：2026-09-15 #2301（Join Lottery）
-        挂了 48 分钟就没了。「抽签不急、可以聚合」是 H2S 的实测结论，不是抽签
+        挂了 48 分钟就没了。「抽签不急、可以聚合」是 Codomo（原 H2S）的实测结论，不是抽签
         的通性——聚合的闸必须按平台开，不能按状态开。"""
         ms = [_l("o1", source="ourcampus"), _l("o2", source="ourcampus"), _l("o3", source="ourcampus")]
         batched, singles = _split_batchable(ms)
@@ -135,7 +135,7 @@ class TestBatchMessage:
         from notifier import _BATCH_LIST_LIMIT
         ms = [_l(str(i)) for i in range(_BATCH_LIST_LIMIT + 7)]
         txt = self._fmt(ms)
-        assert txt.count("https://h2s/") == _BATCH_LIST_LIMIT
+        assert txt.count("https://codomo.test/") == _BATCH_LIST_LIMIT
         assert f"× {_BATCH_LIST_LIMIT + 7}" in txt   # 抬头仍报真实总数
         # 「余下 7 套」必须整句匹配。写成 `"7" in txt` 是没用的——抬头的
         # 「× 27」里就有个 7，删掉整行余量提示照样绿（变异 M12 就是这么活下来的）。

@@ -80,8 +80,7 @@ _PROXY_COOLDOWN_SEC = 600  # 10 分钟
 #:
 #: 为什么要和 10 分钟分开：账户级故障**不会自己好**，10 分钟一到就把死代理放回
 #: 候选，等于每小时自伤六次。2026-08-26 生产实况——webshare 两个账号同时 402，
-#: 每 10 分钟 Xior 和 OurCampus 就各丢一轮，而 H2S 因为浏览器一建用 2 小时反而
-#: 躲过了（``_BROWSER_MAX_AGE``），同一次故障在三个 source 上表现完全不同。
+#: 每 10 分钟 Xior 和 OurCampus 就各丢一轮。
 #:
 #: 为什么是 1 小时而不是更长：判错的代价是「一个其实已经充上值的代理白等」。
 #: 10 分钟 → 1 小时已经把自伤从每小时 6 次压到 1 次，再往上（比如 4 小时）边际
@@ -125,7 +124,7 @@ def _derive_session_id(source: str, rotating: bool = False) -> str:
     """由 source 名派生 6 位 session id。
 
     ``rotating=False``（默认）——同一个 source 每次都得到同一个 id，出口 IP
-    因此稳定，Cloudflare clearance 才能复用。H2S / Xior 用这个。
+    因此稳定，Cloudflare clearance 才能复用。Xior 用这个。
 
     ``rotating=True``——每次调用都换一个新 id，即每次拿到不同出口 IP。
     给**不依赖 clearance、反而依赖换 IP 来解 403** 的 source 用（OurDomain）。
@@ -222,7 +221,7 @@ def get_proxy_url(source: str = "", *, rotating: bool = False) -> str:
     Parameters
     ----------
     source
-        传入 source 名（``holland2stay`` / ``xior`` / ``ourdomain``）时，为该
+        传入 source 名（``codomo`` / ``xior`` / ``ourdomain``）时，为该
         source 派生**独立的 sticky session**，使各平台拥有各自稳定的出口 IP。
 
         为什么要分开：出口 IP 稳定是 Cloudflare clearance 能复用的前提，但共用

@@ -5,8 +5,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from bookers.h2s_checkout import BookingResult
-from config import AutoBookConfig, AvailabilityFilter, CityFilter, Config
+from bookers.base import BookingResult
+from config import AutoBookConfig, Config, TargetFilter
 from models import Listing
 from monitor import _assign_auto_book_candidates, run_once
 from notifier import BaseNotifier, WebNotifier
@@ -14,7 +14,7 @@ from storage import Storage
 from users import UserConfig
 
 
-def _listing(lid: str = "L-1", source: str = "holland2stay") -> Listing:
+def _listing(lid: str = "L-1", source: str = "plaza") -> Listing:
     return Listing(
         id=lid,
         name=f"Listing {lid}",
@@ -31,17 +31,14 @@ def _listing(lid: str = "L-1", source: str = "holland2stay") -> Listing:
     )
 
 
-def _user(uid: str, name: str, email: str, source: str = "holland2stay") -> UserConfig:
+def _user(uid: str, name: str, username: str) -> UserConfig:
     auto_book = AutoBookConfig(
         enabled=True,
-        email=email,
-        password="pw",
         dry_run=False,
+        plaza_enabled=True,
+        plaza_username=username,
+        plaza_password="pw",
     )
-    if source == "plaza":
-        auto_book.plaza_enabled = True
-        auto_book.plaza_username = "plaza-user"
-        auto_book.plaza_password = "pw"
     return UserConfig(
         id=uid,
         name=name,
@@ -77,26 +74,16 @@ class _Notifier(BaseNotifier):
 def _cfg(tmp_path) -> Config:
     return Config(
         check_interval=300,
-        cities=[CityFilter(name="E", id=29)],
-        availability_filters=[AvailabilityFilter(label="A", id=179)],
+        sources=["plaza"],
+        plaza_cities=[TargetFilter(name="E", key="E")],
         db_path=Path(tmp_path) / "test.db",
         log_level="WARNING",
     )
 
 
-class _BookingWorkerFake:
-    def run(self, action, payload, *, timeout, guard=None, job=None):
-        if action != "book":
-            raise RuntimeError("prewarm disabled in test")
-        from mcore.booking import book_with_fallback
-        from mcore.booking_guard import attempt_context
-        with attempt_context(*guard):
-            return book_with_fallback(payload["candidates"], payload["user"], payload["deadline"])
-
-
 def test_assign_auto_book_candidates_dedupes_same_listing():
-    u1 = _user("u1", "Alice", "a@example.test")
-    u2 = _user("u2", "Bob", "b@example.test")
+    u1 = _user("u1", "Alice", "alice")
+    u2 = _user("u2", "Bob", "bob")
     notifier_pairs = [(u1, _Notifier()), (u2, _Notifier())]
     listing = _listing("same")
 
@@ -111,8 +98,8 @@ def test_assign_auto_book_candidates_dedupes_same_listing():
 
 
 def test_assign_auto_book_candidates_balances_multiple_listings():
-    u1 = _user("u1", "Alice", "a@example.test")
-    u2 = _user("u2", "Bob", "b@example.test")
+    u1 = _user("u1", "Alice", "alice")
+    u2 = _user("u2", "Bob", "bob")
     notifier_pairs = [(u1, _Notifier()), (u2, _Notifier())]
     listings = [_listing("L1"), _listing("L2"), _listing("L3")]
 
@@ -126,17 +113,17 @@ def test_assign_auto_book_candidates_balances_multiple_listings():
 
 
 def test_run_once_books_same_listing_once_for_multiple_matching_users(tmp_path):
-    u1 = _user("u1", "Alice", "a@example.test")
-    u2 = _user("u2", "Bob", "b@example.test")
+    u1 = _user("u1", "Alice", "alice")
+    u2 = _user("u2", "Bob", "bob")
     n1 = _Notifier()
     n2 = _Notifier()
     storage = Storage(tmp_path / "test.db", timezone_str="UTC")
-    called_emails: list[str] = []
+    called_users: list[str] = []
 
-    def fake_try_book(listing, email, *args, **kwargs):
-        called_emails.append(email)
+    def fake_dispatch(request):
+        called_users.append(request.user.auto_book.plaza_username)
         return BookingResult(
-            listing,
+            request.listing,
             success=True,
             message="ok",
             pay_url="https://pay.example.test",
@@ -145,10 +132,7 @@ def test_run_once_books_same_listing_once_for_multiple_matching_users(tmp_path):
 
     async def go():
         with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=[_listing("shared")]), \
-             patch("mcore.booking_round.get_booking_worker", return_value=_BookingWorkerFake()), \
-             patch("mcore.prewarm_round.get_booking_worker", return_value=_BookingWorkerFake()), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None), \
-             patch("bookers.holland2stay.try_book", side_effect=fake_try_book):
+             patch("mcore.booking.dispatch_book", side_effect=fake_dispatch):
             await run_once(_cfg(tmp_path), storage, [(u1, n1), (u2, n2)], dry_run=False)
 
     try:
@@ -156,7 +140,7 @@ def test_run_once_books_same_listing_once_for_multiple_matching_users(tmp_path):
     finally:
         storage.close()
 
-    assert called_emails == ["a@example.test"]
+    assert called_users == ["alice"]
     assert n1.booking_success == ["shared"]
     assert n2.booking_success == []
     assert n1.new_listings == ["shared"]
@@ -164,13 +148,13 @@ def test_run_once_books_same_listing_once_for_multiple_matching_users(tmp_path):
 
 
 def test_run_once_web_booking_notification_is_scoped_to_assigned_user(tmp_path):
-    u1 = _user("u1", "Alice", "a@example.test")
-    u2 = _user("u2", "Bob", "b@example.test")
+    u1 = _user("u1", "Alice", "alice")
+    u2 = _user("u2", "Bob", "bob")
     storage = Storage(tmp_path / "test.db", timezone_str="UTC")
 
-    def fake_try_book(listing, email, *args, **kwargs):
+    def fake_dispatch(request):
         return BookingResult(
-            listing,
+            request.listing,
             success=True,
             message="ok",
             pay_url="https://pay.example.test",
@@ -179,10 +163,7 @@ def test_run_once_web_booking_notification_is_scoped_to_assigned_user(tmp_path):
 
     async def go():
         with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=[_listing("shared")]), \
-             patch("mcore.booking_round.get_booking_worker", return_value=_BookingWorkerFake()), \
-             patch("mcore.prewarm_round.get_booking_worker", return_value=_BookingWorkerFake()), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None), \
-             patch("bookers.holland2stay.try_book", side_effect=fake_try_book):
+             patch("mcore.booking.dispatch_book", side_effect=fake_dispatch):
             await run_once(
                 _cfg(tmp_path),
                 storage,
@@ -203,7 +184,7 @@ def test_run_once_web_booking_notification_is_scoped_to_assigned_user(tmp_path):
 
 
 def test_run_once_plaza_application_does_not_mark_listing_reserved(tmp_path):
-    user = _user("u1", "Alice", "a@example.test", source="plaza")
+    user = _user("u1", "Alice", "alice")
     notifier = _Notifier()
     storage = Storage(tmp_path / "test.db", timezone_str="UTC")
     listing = _listing("plaza-application", source="plaza")
@@ -219,7 +200,6 @@ def test_run_once_plaza_application_does_not_mark_listing_reserved(tmp_path):
 
     async def go():
         with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=[listing]), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None), \
              patch("mcore.booking.dispatch_book", side_effect=fake_dispatch):
             await run_once(_cfg(tmp_path), storage, [(user, notifier)], dry_run=False)
 
@@ -233,8 +213,8 @@ def test_run_once_plaza_application_does_not_mark_listing_reserved(tmp_path):
     assert row["status_is_inferred"] == 0
 
 
-def test_run_once_plaza_applies_to_all_matching_listings_without_h2s_prewarm(tmp_path):
-    user = _user("u1", "Alice", "a@example.test", source="plaza")
+def test_run_once_plaza_applies_to_all_matching_listings(tmp_path):
+    user = _user("u1", "Alice", "alice")
     notifier = _Notifier()
     storage = Storage(tmp_path / "test.db", timezone_str="UTC")
     listings = [
@@ -242,7 +222,6 @@ def test_run_once_plaza_applies_to_all_matching_listings_without_h2s_prewarm(tmp
         _listing("plaza-2", source="plaza"),
     ]
     dispatched: list[str] = []
-    prewarm_calls: list[tuple] = []
 
     def fake_dispatch(request):
         dispatched.append(request.listing.id)
@@ -254,13 +233,8 @@ def test_run_once_plaza_applies_to_all_matching_listings_without_h2s_prewarm(tmp
             phase="success",
         )
 
-    def fake_prewarm(*args, **kwargs):
-        prewarm_calls.append((args, kwargs))
-        return None
-
     async def go():
         with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=listings), \
-             patch("mcore.prewarm.create_prewarmed_session", side_effect=fake_prewarm), \
              patch("mcore.booking.dispatch_book", side_effect=fake_dispatch):
             await run_once(_cfg(tmp_path), storage, [(user, notifier)], dry_run=False)
 
@@ -271,6 +245,5 @@ def test_run_once_plaza_applies_to_all_matching_listings_without_h2s_prewarm(tmp
 
     assert set(dispatched) == {"plaza-1", "plaza-2"}
     assert len(dispatched) == 2
-    assert prewarm_calls == []
     assert set(notifier.booking_success) == {"plaza-1", "plaza-2"}
     assert len(notifier.booking_success) == 2

@@ -6,8 +6,7 @@ mcore/backoff.py — 跨进程重启存活的退避 / 熔断 / 节流状态
 ------------
 这些状态原本全是 ``monitor`` 的模块级全局，重启即清零：
 
-    _h2s_circuit_open_until / _fail_streak    H2S 熔断（最长 6 小时退避）
-    _h2s_login_blocked_until                  登录抑制（1 小时）
+    source 熔断 open_until / fail_streak       整源熔断（最长数小时退避）
     blocked_fail_streak                       403 指数退避（最长 2 小时）
     _last_*_notify_at ×6                      全部告警节流
 
@@ -29,7 +28,7 @@ mcore/backoff.py — 跨进程重启存活的退避 / 熔断 / 节流状态
 
 要跨重启就只能用 ``time.time()``（墙钟），代价是要处理 NTP 跳变。处理方式是
 **把剩余时间钳到配置上限**：永远不会等得比配置的最长退避还久。钳的方向是安全的
-——时钟往回跳一次能让 H2S 停摆到天荒地老，而且没有任何日志说得清为什么。
+——时钟往回跳一次能让一个 source 停摆到天荒地老，而且没有任何日志说得清为什么。
 
 存储
 ----

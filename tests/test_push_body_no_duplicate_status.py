@@ -34,7 +34,7 @@ class _L:
     status: str = "Available to book"
     price_display: str = "€700"
     available_from: str = "2026-06-01"
-    source: str = "holland2stay"
+    source: str = "codomo"
 
     def feature_map(self) -> dict:
         return {"area": "26 m²"}

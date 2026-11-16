@@ -256,7 +256,7 @@ class TestMarkStaleListings:
 
 class TestBookingHoldStatus:
     @pytest.mark.parametrize(
-        "source", ["holland2stay", "xior", "ourcampus", "ourdomain"]
+        "source", ["xior", "ourcampus", "ourdomain"]
     )
     def test_booking_success_marks_listing_reserved(self, temp_db, source):
         temp_db.diff([_l(f"{source}-a", status="Available to book", source=source)])
@@ -269,11 +269,18 @@ class TestBookingHoldStatus:
         assert row["status_is_inferred"] == 1
         assert row["status_hold_until"]
 
+    def test_non_hold_source_is_not_marked_reserved(self, temp_db):
+        """Codomo / Plaza 没有占房窗口（不在 BOOKING_HOLD_SOURCES），不本地改 Reserved。"""
+        for source in ("codomo", "plaza"):
+            temp_db.diff([_l(f"{source}-a", status="Available to book", source=source)])
+            assert temp_db.mark_listing_reserved_after_booking(f"{source}-a") is False
+            assert temp_db.get_listing(f"{source}-a")["status"] == "Available to book"
+
     def test_booking_hold_suppresses_immediate_available_overwrite(self, temp_db):
-        temp_db.diff([_l("a", status="Available to book")])
+        temp_db.diff([_l("a", status="Available to book", source="ourdomain")])
         temp_db.mark_listing_reserved_after_booking("a")
 
-        new, changes = temp_db.diff([_l("a", status="Available to book")])
+        new, changes = temp_db.diff([_l("a", status="Available to book", source="ourdomain")])
 
         assert new == []
         assert changes == []
@@ -282,7 +289,7 @@ class TestBookingHoldStatus:
         assert row["status_is_inferred"] == 1
 
     def test_expired_booking_hold_allows_available_status(self, temp_db):
-        temp_db.diff([_l("a", status="Available to book")])
+        temp_db.diff([_l("a", status="Available to book", source="ourdomain")])
         temp_db.mark_listing_reserved_after_booking("a")
         with temp_db.conn:
             temp_db.conn.execute(
@@ -290,7 +297,7 @@ class TestBookingHoldStatus:
                 (_days_ago_iso(1), "a"),
             )
 
-        new, changes = temp_db.diff([_l("a", status="Available to book")])
+        new, changes = temp_db.diff([_l("a", status="Available to book", source="ourdomain")])
 
         assert new == []
         assert len(changes) == 1

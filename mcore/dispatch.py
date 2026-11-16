@@ -49,12 +49,12 @@ def apply_proxyless_gate(tasks: list) -> list:
     为什么要摘
     ----------
     2026-08-26 生产实况：webshare 两个账号同时 402，五次「降级直连原生 IP」，
-    **一轮都没抓成**——H2S / Xior 在直连下必然失败，而
-    ``dispatch_scrape_tasks`` 的判据是「全员失败就上抛 ProxyError」，于是那两家
+    **一轮都没抓成**——过 Cloudflare 的 source 在直连下必然失败，而
+    ``dispatch_scrape_tasks`` 的判据是「全员失败就上抛 ProxyError」，于是它们
     的必然失败把同一轮里本来能成的 OurDomain / OurCampus 一起掀掉了。
 
     摘掉之后这一轮就只剩打得通的那些，成功数不再是 0，整轮也就不会被上抛的
-    ProxyError 中止。代价是 H2S / Xior 在代理恢复前完全不抓——但它们本来也
+    ProxyError 中止。代价是这些 source 在代理恢复前完全不抓——但它们本来也
     抓不到，区别只是「安静地等」还是「每轮制造一批注定失败的请求」。
 
     这也让遥测说了实话：被摘掉的 source 本轮不写 round_stats，健康判定看到的
@@ -101,8 +101,7 @@ def apply_task_sharding(
 
     为什么必须有这个：Xior 的请求间隔是 5s（限流按速率算，调小会直接撞回
     429），实测每栋楼 13.9 秒。官方注册表 30 栋 ≈ 417 秒/轮，而 CHECK_INTERVAL
-    是 300 秒；更糟的是 H2S 排在其它 source **之后**执行，不分片等于每轮把真正
-    出房源的那个 source 推迟 7 分钟。
+    是 300 秒；不分片等于每轮把排在它后面的 source 推迟 7 分钟。
 
     游标存 meta，重启后接着转——否则每次重启都从第一片开始，后面的楼栋会被
     系统性地少抓。

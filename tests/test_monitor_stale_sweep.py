@@ -12,7 +12,7 @@ def _listing(
     *,
     city: str,
     status: str = "Available to book",
-    source: str = "holland2stay",
+    source: str = "codomo",
 ) -> Listing:
     return Listing(
         id=listing_id,
@@ -75,7 +75,7 @@ class TestMonitorStaleSweep:
 
     def test_source_prefixed_completeness_limits_stale_to_source_city(self, temp_db):
         temp_db.diff([
-            _listing("h2s", city="Amsterdam Diemen", source="holland2stay"),
+            _listing("h2s", city="Amsterdam Diemen", source="codomo"),
             _listing("od", city="Amsterdam Diemen", source="ourdomain"),
         ])
         _set_last_seen(temp_db, "h2s", 8)

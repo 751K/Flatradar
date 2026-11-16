@@ -36,7 +36,7 @@ def seeded(test_app):
         ("id-1", "Studio Centrum", "Available to book", "€700", "2026-06-01",
          json.dumps(["Type: Studio", "Area: 26.0 m²"]),
          "https://h.com/id-1", "Eindhoven", now, now, "Available to book",
-         "holland2stay"),
+         "codomo"),
     )
     st.conn.commit()
     return st

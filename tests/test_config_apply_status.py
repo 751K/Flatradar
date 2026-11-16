@@ -85,27 +85,6 @@ def test_settings_page_displays_status_without_credentials(admin_client, isolate
         st.close()
 
 
-def test_only_changed_accounts_invalidate_prewarm(monkeypatch):
-    from types import SimpleNamespace
-    import monitor
-
-    class Cache:
-        def __init__(self):
-            self.removed = []
-        def keys(self):
-            return ('same', 'changed', 'removed')
-        def invalidate(self, uid):
-            self.removed.append(uid)
-    def user(uid, password):
-        return SimpleNamespace(id=uid, auto_book=SimpleNamespace(enabled=True, email=uid, password=password))
-    cache = Cache()
-    monkeypatch.setattr(monitor, 'prewarm_cache', cache)
-    old = [(user('same', 'p'), None), (user('changed', 'old'), None), (user('removed', 'p'), None)]
-    new = [(user('same', 'p'), None), (user('changed', 'new'), None)]
-    monitor._invalidate_changed_prewarm(old, new)
-    assert set(cache.removed) == {'changed', 'removed'}
-
-
 def test_logging_level_updates_live_without_changing_error_handler():
     import logging
     from mcore.startup import apply_logging_level
@@ -125,21 +104,6 @@ def test_logging_level_updates_live_without_changing_error_handler():
         root.removeHandler(main)
         root.removeHandler(errors)
         root.setLevel(old_level)
-
-
-def test_late_prewarm_cannot_restore_a_changed_account():
-    from mcore.prewarm import PrewarmCache
-
-    class Session:
-        closed = False
-        def close_if_owned(self):
-            self.closed = True
-    cache = PrewarmCache()
-    generation = cache.generation('user')
-    cache.invalidate('user')
-    old_session = Session()
-    assert not cache.set_if_current('user', old_session, generation)
-    assert old_session.closed and cache.get('user') is None
 
 
 def test_fixed_environment_override_is_named_without_values(tmp_path, monkeypatch):

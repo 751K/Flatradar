@@ -4,7 +4,7 @@
 那格显示的却是「2 · 共 3」。
 
 成因是 dashboard_service.py 里另立了一份手写清单
-``SUPPORTED_SOURCES = ("holland2stay", "ourdomain", "xior")``。接入 OurCampus 时
+``SUPPORTED_SOURCES = ("codomo", "ourdomain", "xior")``。接入 OurCampus 时
 没跟上，接入 Magis 时又没跟上。**两个数都错**：分母是这份清单的长度，分子是「已
 启用」与它的交集——被漏掉的平台连分子都进不去。
 
@@ -70,13 +70,13 @@ class TestCounts:
     def test_the_reported_production_case(self, monkeypatch):
         """线上那四个：显示「4 · 共 5」，而不是「2 · 共 3」。"""
         got = self._scope(
-            monkeypatch, ["holland2stay", "ourcampus", "xior", "magis"])
+            monkeypatch, ["codomo", "ourcampus", "xior", "magis"])
         assert got["enabled_platforms"] == 4
         assert got["supported_platforms"] == len(KNOWN_SOURCES)
 
     def test_unknown_source_is_not_counted(self, monkeypatch):
         """SOURCES 里写了个不存在的平台不该把分子撑大。"""
-        got = self._scope(monkeypatch, ["holland2stay", "not-a-platform"])
+        got = self._scope(monkeypatch, ["codomo", "not-a-platform"])
         assert got["enabled_platforms"] == 1
 
     def test_broken_config_degrades_to_zero(self, monkeypatch):

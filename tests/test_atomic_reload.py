@@ -25,10 +25,10 @@ def running(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, '_active_runtime', None)
     monkeypatch.setattr(startup, 'ENV_PATH', env)
     monkeypatch.setattr(config, 'DB_PATH', path)
-    for key in ('CHECK_INTERVAL', 'MIN_INTERVAL', 'H2S_REST_ENABLED'):
+    for key in ('CHECK_INTERVAL', 'MIN_INTERVAL', 'PEAK_WEEKDAYS_ONLY'):
         monkeypatch.delenv(key, raising=False)
     st.set_app_settings({'CHECK_INTERVAL': '60', 'MIN_INTERVAL': '20',
-                         'H2S_REST_ENABLED': 'false'})
+                         'PEAK_WEEKDAYS_ONLY': 'false'})
     settings.hydrate(st, env_path=env, activate=True)
     yield SimpleNamespace(db=st, env=env, path=path, monkeypatch=monkeypatch)
     st.close()
@@ -44,13 +44,13 @@ class Channel:
 def test_invalid_candidate_does_not_change_any_effective_setting(running, monkeypatch):
     old = settings._active_runtime
     old_cfg = config.load_config()
-    running.db.set_app_settings({'CHECK_INTERVAL': 'invalid', 'H2S_REST_ENABLED': 'true'})
+    running.db.set_app_settings({'CHECK_INTERVAL': 'invalid', 'PEAK_WEEKDAYS_ONLY': 'true'})
     monkeypatch.setattr(monitor, 'load_users', lambda: pytest.fail('users should not load'))
     with pytest.raises(ValueError):
         asyncio.run(monitor._prepare_reload())
     assert settings._active_runtime is old
     assert env_get('CHECK_INTERVAL') == os.environ['CHECK_INTERVAL'] == '60'
-    assert env_get('H2S_REST_ENABLED') == os.environ['H2S_REST_ENABLED'] == 'false'
+    assert env_get('PEAK_WEEKDAYS_ONLY') == os.environ['PEAK_WEEKDAYS_ONLY'] == 'false'
     assert old_cfg.check_interval == 60
 
 
@@ -90,32 +90,32 @@ def test_notifier_failure_closes_new_channels_and_keeps_old_settings(running, mo
 def test_success_publishes_after_preparation_and_removes_deleted_key(running, monkeypatch):
     new_channel = Channel()
     users = [SimpleNamespace(id='1', enabled=True)]
-    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'H2S_REST_ENABLED': 'true'})
+    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'PEAK_WEEKDAYS_ONLY': 'true'})
     running.db.delete_app_setting('MIN_INTERVAL')
     monkeypatch.setattr(monitor, 'load_users', lambda: users)
     def create(user, *, created_channels):
         assert env_get('CHECK_INTERVAL') == os.environ['CHECK_INTERVAL'] == '60'
-        assert env_get('H2S_REST_ENABLED') == 'false'
+        assert env_get('PEAK_WEEKDAYS_ONLY') == 'false'
         return new_channel
     monkeypatch.setattr(monitor, 'create_user_notifier', create)
     cfg, channels = asyncio.run(monitor._prepare_reload())
     assert cfg.check_interval == 80 and channels == [(users[0], new_channel)]
     assert env_get('CHECK_INTERVAL') == os.environ['CHECK_INTERVAL'] == '80'
-    assert env_get('H2S_REST_ENABLED') == 'true'
+    assert env_get('PEAK_WEEKDAYS_ONLY') == 'true'
     assert env_get('MIN_INTERVAL') is None and 'MIN_INTERVAL' not in os.environ
 
 
 def test_commit_error_rolls_back_environment_and_disposes_new_notifier(running, monkeypatch):
     old = settings._active_runtime
     new_channel = Channel()
-    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'H2S_REST_ENABLED': 'bad\x00value'})
+    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'PEAK_WEEKDAYS_ONLY': 'bad\x00value'})
     monkeypatch.setattr(monitor, 'load_users', lambda: [SimpleNamespace(enabled=True)])
     monkeypatch.setattr(monitor, 'create_user_notifier', lambda user, **kw: new_channel)
     with pytest.raises(ValueError):
         asyncio.run(monitor._prepare_reload())
     assert new_channel.closed and settings._active_runtime is old
     assert os.environ['CHECK_INTERVAL'] == env_get('CHECK_INTERVAL') == '60'
-    assert os.environ['H2S_REST_ENABLED'] == env_get('H2S_REST_ENABLED') == 'false'
+    assert os.environ['PEAK_WEEKDAYS_ONLY'] == env_get('PEAK_WEEKDAYS_ONLY') == 'false'
 
 
 def test_runtime_readers_do_not_see_partial_commit(running, monkeypatch):
@@ -132,7 +132,7 @@ def test_runtime_readers_do_not_see_partial_commit(running, monkeypatch):
             return super().__setitem__(key, value)
     fake = SlowEnvironment(os.environ)
     monkeypatch.setattr(os, 'environ', fake)
-    values = {'CHECK_INTERVAL': '80', 'H2S_REST_ENABLED': 'true'}
+    values = {'CHECK_INTERVAL': '80', 'PEAK_WEEKDAYS_ONLY': 'true'}
     candidate = settings.RuntimeCandidate(MappingProxyType(values), MappingProxyType({}))
     errors = []
     def commit():
@@ -145,12 +145,12 @@ def test_runtime_readers_do_not_see_partial_commit(running, monkeypatch):
     try:
         assert started.wait(2)
         assert env_get('CHECK_INTERVAL') == '60'
-        assert env_get('H2S_REST_ENABLED') == 'false'
+        assert env_get('PEAK_WEEKDAYS_ONLY') == 'false'
     finally:
         release.set()
         thread.join(5)
     assert not thread.is_alive() and not errors
-    assert env_get('CHECK_INTERVAL') == '80' and env_get('H2S_REST_ENABLED') == 'true'
+    assert env_get('CHECK_INTERVAL') == '80' and env_get('PEAK_WEEKDAYS_ONLY') == 'true'
 
 
 def test_partial_channels_inside_a_user_are_closed_on_constructor_failure(running, monkeypatch):
@@ -197,7 +197,7 @@ def test_real_settings_database_failure_keeps_active_snapshot(running, monkeypat
 
 
 def test_invalid_inactive_platform_configuration_is_rejected(running, monkeypatch):
-    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'SOURCES': 'holland2stay',
+    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'SOURCES': 'codomo',
                                  'XIOR_CITIES': 'missing_separator'})
     monkeypatch.setattr(monitor, 'load_users', lambda: pytest.fail('invalid settings must be rejected'))
     with pytest.raises(ValueError):
@@ -211,53 +211,35 @@ def _source_config_probe(conn, source):
     conn.send(('ready',))
     while True:
         try:
-            _, _, _, env, _ = conn.recv()
+            _, _, _, env = conn.recv()
         except EOFError:
             break
-        conn.send(('result', (env.get('CHECK_INTERVAL'), env.get('H2S_REST_ENABLED')), None))
+        conn.send(('result', (env.get('CHECK_INTERVAL'), env.get('PEAK_WEEKDAYS_ONLY'))))
 
 
-def _booking_config_probe(conn, source):
-    if os.name == 'posix':
-        os.setsid()
-    conn.send(('ready',))
-    while True:
-        try:
-            _, _, env = conn.recv()
-        except EOFError:
-            break
-        conn.send(('result', (env.get('CHECK_INTERVAL'), env.get('H2S_REST_ENABLED')), None))
-
-
-def test_both_worker_types_receive_only_published_runtime_configuration(running):
+def test_source_worker_receives_only_published_runtime_configuration(running):
     from mcore.browser_worker import BrowserWorker
-    from mcore.booking_worker import BookingWorker
     source = BrowserWorker('xior', entrypoint=_source_config_probe)
-    booking = BookingWorker('u1', entrypoint=_booking_config_probe)
     try:
         assert source.execute([], multi_source=False, timeout=10) == ('60', 'false')
-        assert booking.run('book', {}, timeout=10) == ('60', 'false')
-        running.db.set_app_settings({'CHECK_INTERVAL': '80', 'H2S_REST_ENABLED': 'true'})
+        running.db.set_app_settings({'CHECK_INTERVAL': '80', 'PEAK_WEEKDAYS_ONLY': 'true'})
         candidate = startup.reload_settings()
         assert source.execute([], multi_source=False, timeout=10) == ('60', 'false')
-        assert booking.run('book', {}, timeout=10) == ('60', 'false')
         settings.commit_runtime(candidate)
         assert source.execute([], multi_source=False, timeout=10) == ('80', 'true')
-        assert booking.run('book', {}, timeout=10) == ('80', 'true')
     finally:
         source.close()
-        booking.close()
 
 
 def test_reload_freezes_current_values_if_startup_hydration_was_unavailable(running, monkeypatch):
     monkeypatch.setattr(settings, '_active_runtime', None)
-    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'H2S_REST_ENABLED': 'bad\x00value'})
+    running.db.set_app_settings({'CHECK_INTERVAL': '80', 'PEAK_WEEKDAYS_ONLY': 'bad\x00value'})
     monkeypatch.setattr(monitor, 'load_users', lambda: [])
     with pytest.raises(ValueError):
         asyncio.run(monitor._prepare_reload())
     assert settings._active_runtime is not None
     assert env_get('CHECK_INTERVAL') == os.environ['CHECK_INTERVAL'] == '60'
-    assert env_get('H2S_REST_ENABLED') == os.environ['H2S_REST_ENABLED'] == 'false'
+    assert env_get('PEAK_WEEKDAYS_ONLY') == os.environ['PEAK_WEEKDAYS_ONLY'] == 'false'
 
 
 @pytest.mark.parametrize('valid', [False, True])
@@ -267,24 +249,16 @@ def test_main_loop_switches_config_and_notifiers_only_on_success(running, monkey
     old_channel, new_channel = Channel(), Channel()
     old_cfg = config.load_config()
     seen = []
-    real_trigger = monitor.RestTrigger
-    def make_trigger(wake):
-        trigger = real_trigger(wake)
-        async def idle(get_cfg):
-            await asyncio.Event().wait()
-        trigger.run = idle
-        return trigger
     async def run_once(cfg, storage, notifiers, **kwargs):
-        seen.append((cfg.check_interval, env_get('H2S_REST_ENABLED'), notifiers[0][1]))
+        seen.append((cfg.check_interval, env_get('PEAK_WEEKDAYS_ONLY'), notifiers[0][1]))
         if len(seen) == 1:
             running.db.set_app_settings({'CHECK_INTERVAL': '80' if valid else 'invalid',
-                                         'H2S_REST_ENABLED': 'true'})
+                                         'PEAK_WEEKDAYS_ONLY': 'true'})
             return {}
         raise asyncio.CancelledError
     async def no_alerts(*args, **kwargs):
         return None
     calls = iter([True])
-    monkeypatch.setattr(monitor, 'RestTrigger', make_trigger)
     monkeypatch.setattr(monitor, 'run_once', run_once)
     monkeypatch.setattr(monitor, 'get_interval', lambda cfg: (10, False))
     monkeypatch.setattr(monitor, '_consume_reload_request_file', lambda: next(calls, False))

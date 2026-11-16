@@ -26,8 +26,11 @@ def _make_listing(**overrides):
         available_from="2030-01-01",
         features=["Type: Studio", "Area: 26.0 m²", "Floor: 3",
                   "Occupancy: Single", "Neighborhood: Strijp-S"],
-        url="https://h2s/test-1",
+        url="https://codomo/test-1",
         city="Eindhoven",
+        # floor / type / occupancy 在 codomo 上登记，严格过滤才生效；
+        # 不给 source 的房源只认通用维度，这些断言会被 fail-open 放行。
+        source="codomo",
     )
     base.update(overrides)
     return Listing(**base)
@@ -210,10 +213,10 @@ class TestListingFilterWhitelist:
         assert f.passes(l2) is False
 
     def test_allowed_sources_exact_match(self):
-        """平台是精确匹配，支持用户只订阅 OD 或 H2S。"""
+        """平台是精确匹配，支持用户只订阅 OD 或 Codomo。"""
         f = ListingFilter(allowed_sources=["ourdomain"])
         assert f.passes(_make_listing(source="ourdomain")) is True
-        assert f.passes(_make_listing(source="holland2stay")) is False
+        assert f.passes(_make_listing(source="codomo")) is False
 
     def test_empty_whitelist_passes_all(self):
         """白名单是空列表 = 不生效（全部放行）。"""
@@ -262,7 +265,7 @@ class TestListingFilterCompound:
         assert f.passes(l) is False
 
 
-# ─── 多平台维度能力（一套过滤条件作用于 H2S / Xior / OurDomain）─────────
+# ─── 多平台维度能力（一套过滤条件作用于 Codomo / Xior / OurDomain）─────────
 
 class TestCrossPlatformDims:
     """平台抓不到的维度 → 对该平台跳过该条件（fail-open，避免误杀）；
@@ -315,13 +318,21 @@ class TestCrossPlatformDims:
         # OD 无 neighborhood → 跳过
         assert ListingFilter(allowed_neighborhoods=["Strijp"]).passes(self._od()) is True
 
-    def test_h2s_strictness_preserved(self):
-        # H2S 支持全部维度 → 严格匹配不被削弱
-        h2s = _make_listing(source="holland2stay",
-                            features=["Type: Studio", "Area: 26 m²", "Floor: 2",
-                                      "Neighborhood: Centrum", "Energy: A"])
-        assert ListingFilter(allowed_neighborhoods=["Strijp"]).passes(h2s) is False
-        assert ListingFilter(allowed_neighborhoods=["Centrum"]).passes(h2s) is True
+    def test_codomo_strictness_preserved(self):
+        # Codomo 登记了 floor/type/occupancy → 严格匹配不被削弱
+        cd = _make_listing(source="codomo",
+                           features=["Type: Studio", "Area: 26 m²", "Floor: 2",
+                                     "Occupancy: Single"])
+        assert ListingFilter(min_floor=5).passes(cd) is False
+        assert ListingFilter(min_floor=2).passes(cd) is True
+        assert ListingFilter(allowed_types=["Loft"]).passes(cd) is False
+        assert ListingFilter(allowed_types=["Studio"]).passes(cd) is True
+
+    def test_neighborhood_is_fail_open_everywhere(self):
+        # 眼下没有平台登记 neighborhood → 对任何平台都整体跳过
+        cd = _make_listing(source="codomo",
+                           features=["Area: 26 m²", "Neighborhood: Centrum"])
+        assert ListingFilter(allowed_neighborhoods=["Strijp"]).passes(cd) is True
 
     def test_unknown_source_only_universal_dims(self):
         unknown = Listing(id="z1", name="Z", status="Available to book", price_raw="€800",

@@ -4,8 +4,8 @@
 全局。现在收进 ``RuntimeState``：需要状态的地方拿同一个 ``runtime``，绑定
 持久化句柄只需要调用一次 ``bind_storage``。
 
-注意：``reload_event`` / ``h2s_wake_event`` 仍在 monitor.main_loop 里赋值，
-等事件循环那一步再收进来；直接改成导入别名会让 ``global`` 赋值悄悄失效。
+注意：``reload_event`` 仍在 monitor.main_loop 里赋值，等事件循环那一步再收进来；
+直接改成导入别名会让 ``global`` 赋值悄悄失效。
 """
 from __future__ import annotations
 
@@ -14,15 +14,9 @@ from mcore.booking import RetryQueue
 from mcore.circuit import SourceCircuits
 from mcore.outage import outage as _outage
 from mcore.pacing import AdaptivePacing
-from mcore.prewarm import PrewarmCache
-
-#: H2S 登录/预订 403 后 1 小时内不碰登录链路。
-H2S_LOGIN_BLOCKED_SUPPRESS_SEC = 3600
 
 # 通知节流间隔（秒）。
 BLOCK_NOTIFY_INTERVAL = 1800
-OPERATION_REJECTED_NOTIFY_INTERVAL = 21600
-H2S_LONG_BLOCK_NOTIFY_INTERVAL = 21600
 MAINTENANCE_NOTIFY_INTERVAL = 3600
 PROXY_NOTIFY_INTERVAL = 1800
 INTERNAL_NOTIFY_INTERVAL = 1800
@@ -37,21 +31,11 @@ class RuntimeState:
 
     def __init__(self) -> None:
         self.retry_queue = RetryQueue()
-        self.prewarm_cache = PrewarmCache()
         self.source_circuits = SourceCircuits()
         self.source_pacing = AdaptivePacing()
-        self.h2s_login_block = PersistedBackoff(
-            "h2s_login_block", max_seconds=H2S_LOGIN_BLOCKED_SUPPRESS_SEC,
-        )
         self.throttles = {
             "block": PersistedBackoff(
                 "throttle_notify_block", max_seconds=BLOCK_NOTIFY_INTERVAL),
-            "operation_rejected": PersistedBackoff(
-                "throttle_notify_operation_rejected",
-                max_seconds=OPERATION_REJECTED_NOTIFY_INTERVAL),
-            "h2s_long_block": PersistedBackoff(
-                "throttle_h2s_long_block",
-                max_seconds=H2S_LONG_BLOCK_NOTIFY_INTERVAL),
             "maintenance": PersistedBackoff(
                 "throttle_notify_maintenance",
                 max_seconds=MAINTENANCE_NOTIFY_INTERVAL),
@@ -73,15 +57,7 @@ class RuntimeState:
         self.throttle_storage = storage
         self.source_circuits.load(storage)
         self.source_pacing.load(storage)
-        for b in (
-            self.h2s_login_block,
-            self.throttles["block"],
-            self.throttles["operation_rejected"],
-            self.throttles["h2s_long_block"],
-            self.throttles["maintenance"],
-            self.throttles["proxy"],
-            self.throttles["internal"],
-        ):
+        for b in self.throttles.values():
             try:
                 b.load(storage)
             except Exception:

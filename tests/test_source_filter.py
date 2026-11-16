@@ -34,7 +34,7 @@ class TestMatching:
     def test_only_listed_platforms_pass(self):
         f = ListingFilter(allowed_sources=["xior"])
         assert f.passes(_listing("xior")) is True
-        assert f.passes(_listing("holland2stay")) is False
+        assert f.passes(_listing("codomo")) is False
 
     def test_match_is_case_insensitive(self):
         assert ListingFilter(allowed_sources=["XIOR"]).passes(_listing("xior"))
@@ -55,17 +55,17 @@ class TestFormRoundTrip:
         assert u.listing_filter.allowed_sources == ["xior", "ourcampus"]
 
     def test_auto_book_filter_keeps_platforms(self):
-        u = build_user_from_form(self._form(AUTO_BOOK_ALLOWED_SOURCES=["holland2stay"]))
-        assert u.auto_book.listing_filter.allowed_sources == ["holland2stay"]
+        u = build_user_from_form(self._form(AUTO_BOOK_ALLOWED_SOURCES=["codomo"]))
+        assert u.auto_book.listing_filter.allowed_sources == ["codomo"]
 
     def test_the_two_filters_are_independent(self):
         """只想被通知全部平台、但只自动预订 H2S，是完全合理的组合。"""
         u = build_user_from_form(self._form(
-            ALLOWED_SOURCES=["xior", "holland2stay"],
-            AUTO_BOOK_ALLOWED_SOURCES=["holland2stay"],
+            ALLOWED_SOURCES=["xior", "codomo"],
+            AUTO_BOOK_ALLOWED_SOURCES=["codomo"],
         ))
-        assert u.listing_filter.allowed_sources == ["xior", "holland2stay"]
-        assert u.auto_book.listing_filter.allowed_sources == ["holland2stay"]
+        assert u.listing_filter.allowed_sources == ["xior", "codomo"]
+        assert u.auto_book.listing_filter.allowed_sources == ["codomo"]
 
     def test_not_submitting_it_means_no_restriction(self):
         u = build_user_from_form(self._form())

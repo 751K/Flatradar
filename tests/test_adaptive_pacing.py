@@ -236,7 +236,7 @@ def _seeded(st):
 class TestMonitorWiring:
     """判定逻辑对了，接线断了照样等于没做——项目在这上面栽过两次。"""
 
-    # 不需要自己复位：conftest 的 _reset_monitor_h2s_guards 是 autouse 的，
+    # 不需要自己复位：conftest 里 autouse 的复位 fixture
     # 每个用例前后都会把 _source_pacing 连同熔断器一起复位。
 
     def _cfg(self, **kw):
@@ -334,7 +334,7 @@ class TestMonitorWiring:
 
         body = ast.dump(ast.parse(inspect.getsource(scrape_round._dispatch_source)))
         assert "SourceDispatchResult" in body and "source_pacing" in body and "relax" in body
-        assert "_dispatch_source" in inspect.getsource(scrape_round.dispatch_with_h2s_circuit)
+        assert "_dispatch_source" in inspect.getsource(scrape_round.dispatch_with_circuits)
 
     # ── 逐处检查，不是「有一处就算过」 ───────────────────────────────
     #
@@ -342,7 +342,7 @@ class TestMonitorWiring:
     # 命中第一个含 relax 的就 return；test_only_rate_limit_penalizes 只检查已有的
     # penalize 守卫对不对，不管有没有漏掉某个分支。
     #
-    # 历史上 H2S 使用另一条分支，遗漏了两种节奏调整。现在共用一处处理；
+    # 历史上有平台走另一条分支，遗漏了两种节奏调整。现在共用一处处理；
     # 同时由 test_unified_source_dispatch 验证不同平台的实际行为。
 
     @staticmethod

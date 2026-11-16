@@ -20,11 +20,11 @@ def map_user(test_app):
             status=status, price_raw=price, features=['Area: 30 m²', 'Address: '+address],
             available_from=f'{SENTINEL_AVAILABLE_FROM_YEAR}-01-01', url='https://example.com/'+key)
             for key, name, price, address, source, status in [
-                ('map-a', 'First unit', '€900', 'Shared building', 'holland2stay', 'Available to book'),
+                ('map-a', 'First unit', '€900', 'Shared building', 'codomo', 'Available to book'),
                 ('map-b', 'Second unit', '€950', 'Shared building', 'plaza', 'Reserved'),
                 ('map-missing', 'Unlocated home', '€800', 'Unknown address', 'plaza', 'Available to book'),
                 ('map-invalid', 'Invalid coordinates', '€800', 'Invalid address', 'plaza', 'Available to book'),
-                ('map-old', 'Older home', '€850', 'Older address', 'holland2stay', 'Occupied'),
+                ('map-old', 'Older home', '€850', 'Older address', 'codomo', 'Occupied'),
                 ('map-outside', 'Outside budget', '€1800', 'Private scope', 'plaza', 'Available to book'),
             ]])
         for key, lat, lng in [('map-a',51.4,5.4),('map-invalid',100,5.4),('map-old',52,5),('map-outside',52.5,5.5)]:

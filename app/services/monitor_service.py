@@ -66,7 +66,7 @@ def get_monitor_status() -> dict[str, Any]:
         "pid": pid,
         "last_scrape": last_scrape,
         "last_count": last_count,
-        # 非空 = H2S 正在维护；前端显示一个温和 banner
+        # 非空 = 上游平台正在维护；前端显示一个温和 banner
         "upstream_maintenance_since": maintenance_seen,
     }
 

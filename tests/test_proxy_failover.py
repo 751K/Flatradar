@@ -68,7 +68,7 @@ REAL_CURL_402 = (
 )
 REAL_BROWSER_TUNNEL = (
     "Holland2Stay 主站加载失败（CF 挑战可能未通过）: Page.goto: "
-    "net::ERR_TUNNEL_CONNECTION_FAILED at https://www.holland2stay.com/residences"
+    "net::ERR_TUNNEL_CONNECTION_FAILED at https://www.xiorstudenthousing.eu/netherlands/"
 )
 
 
@@ -163,7 +163,7 @@ class TestProbeProxyOutputIsRecognised:
 
     def test_402_verdict_flows_all_the_way_through(self):
         url, t = self._fake_proxy(b"HTTP/1.1 402 Payment Required")
-        reason = config.probe_proxy(url, "www.holland2stay.com")
+        reason = config.probe_proxy(url, "www.xiorstudenthousing.eu")
         t.join(timeout=5)
 
         assert reason and "402" in reason
@@ -179,7 +179,7 @@ class TestProbeProxyOutputIsRecognised:
 
     def test_healthy_proxy_returns_no_reason(self):
         url, t = self._fake_proxy(b"HTTP/1.1 200 Connection established")
-        reason = config.probe_proxy(url, "www.holland2stay.com")
+        reason = config.probe_proxy(url, "www.xiorstudenthousing.eu")
         t.join(timeout=5)
         assert reason is None
 
@@ -227,7 +227,7 @@ class TestDispatcherRaisesProxyError:
             _run(monkeypatch, ScrapeNetworkError(REAL_CURL_402))
 
     def test_batch_session_failure(self, monkeypatch):
-        """浏览器系 source（H2S / Xior）走这条——代理连不上时连第一个 task 都进不去。
+        """浏览器系 source（Xior）走这条——代理连不上时连第一个 task 都进不去。
 
         这一半此前完全没有分类：批次异常直接进 hard_failures，原样上抛。
         """
@@ -498,7 +498,7 @@ class TestProxyErrorIsNetworkSubclass:
 
 
 class _ProxyDownScraper(scrapers.AbstractScraper):
-    source = "holland2stay"
+    source = "codomo"
 
     def scrape(self, task):
         raise ProxyError("curl: (56) CONNECT tunnel failed, response 502")
@@ -506,10 +506,10 @@ class _ProxyDownScraper(scrapers.AbstractScraper):
 
 class TestDispatchRaisesProxyError:
     def test_all_proxy_fail_raises_proxy_error(self, monkeypatch):
-        monkeypatch.setitem(scrapers.SCRAPER_REGISTRY, "holland2stay", _ProxyDownScraper)
+        monkeypatch.setitem(scrapers.SCRAPER_REGISTRY, "codomo", _ProxyDownScraper)
         tasks = [
-            ScrapeTask(source="holland2stay", city_key="29", city_display="Eindhoven"),
-            ScrapeTask(source="holland2stay", city_key="24", city_display="Amsterdam"),
+            ScrapeTask(source="codomo", city_key="29", city_display="Eindhoven"),
+            ScrapeTask(source="codomo", city_key="24", city_display="Amsterdam"),
         ]
         with pytest.raises(ProxyError) as ei:
             scrapers.dispatch_scrape_tasks(tasks)
@@ -517,8 +517,8 @@ class TestDispatchRaisesProxyError:
 
     def test_proxy_error_caught_as_network_error(self, monkeypatch):
         """旧的 except ScrapeNetworkError 仍能兜住 ProxyError（控制流不破）。"""
-        monkeypatch.setitem(scrapers.SCRAPER_REGISTRY, "holland2stay", _ProxyDownScraper)
-        tasks = [ScrapeTask(source="holland2stay", city_key="29", city_display="Eindhoven")]
+        monkeypatch.setitem(scrapers.SCRAPER_REGISTRY, "codomo", _ProxyDownScraper)
+        tasks = [ScrapeTask(source="codomo", city_key="29", city_display="Eindhoven")]
         with pytest.raises(ScrapeNetworkError):  # ProxyError 是子类
             scrapers.dispatch_scrape_tasks(tasks)
 

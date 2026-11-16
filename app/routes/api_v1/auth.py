@@ -10,8 +10,7 @@ API v1 鉴权端点
 ------------------
 - "__admin__" → 用 WEB_PASSWORD 匹配，签发 role="admin" 的 token
 - 其他        → 在 SQLite user_configs 里按 name 找 UserConfig，校验：
-                （1）优先 bcrypt app_password_hash
-                （2）未设置或失败时回退到 H2S GraphQL customer token
+                bcrypt app_password_hash
                 要求 app_login_enabled=True，签发 role="user" 的 token
 
 guest 身份**不调** /auth/login——客户端本地标记，访问公开端点即可。

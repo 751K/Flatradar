@@ -170,7 +170,7 @@ def build_inbox_scope(user, args, *, zh):
     visible = filter_view_rows(rows,view,query,read_ids)
     options = get_filter_options()
     return dict(inbox_user=user,account_user=account,scope=scope,match_ids=match_ids,inbox_filter=filters,filter_summary=filter_summary(filters,zh),
-        source_specs=SPECS,source_counts=Counter(row.get('source') or 'holland2stay' for row in rows),
+        source_specs=SPECS,source_counts=Counter(row.get('source') or '' for row in rows),
         total=len(rows),available_count=sum(status_rank(row.get('status')) == 0 for row in rows),
         # While browsing all listings, the sidebar still shows the unread count of
         # the user's own matches (that entry links back to them), so it never jumps

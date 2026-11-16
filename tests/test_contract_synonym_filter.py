@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 
-from config import ListingFilter
+from config import ListingFilter, whitelist_matches
 from models import Listing, canonical_feature
 
 
@@ -22,7 +22,7 @@ def _listing(contract: str) -> Listing:
     return Listing(
         id="x1", name="n", status="Available to book", price_raw="€1",
         available_from="2026-09-01", features=[f"Contract: {contract}"],
-        url="u", city="Eindhoven", source="holland2stay",
+        url="u", city="Eindhoven", source="codomo",
     )
 
 
@@ -42,20 +42,30 @@ class TestCanonicalFeature:
 
 
 class TestFilterMatching:
+    """匹配本身仍要跨语言归一。
+
+    眼下没有平台登记 contract 维度（Codomo 的列表页不给合同类型，见
+    mcore/sources._SOURCE_FILTER_DIMS），ListingFilter 对它整体 fail-open，
+    所以匹配语义直接钉在 ``whitelist_matches`` 上——将来某个平台重新登记
+    contract 时，走的就是这条路径。
+    """
+
     def test_english_selection_matches_dutch_listing(self):
         """这就是线上少推送的那条路径。"""
-        f = ListingFilter(allowed_contract=["Indefinite"])
-        assert f.passes(_listing("Onbepaalde tijd")) is True
+        assert whitelist_matches("Indefinite", "Onbepaalde tijd", "contract") is True
 
     def test_dutch_selection_still_matches_english_listing(self):
         """老用户库里存的可能是荷兰语原文，不能因为改归一就失效。"""
-        f = ListingFilter(allowed_contract=["Onbepaalde tijd"])
-        assert f.passes(_listing("Indefinite")) is True
+        assert whitelist_matches("Onbepaalde tijd", "Indefinite", "contract") is True
 
     def test_unrelated_contract_still_filtered_out(self):
         """归一不是"什么都放行"。"""
+        assert whitelist_matches("Indefinite", "6 months max", "contract") is False
+
+    def test_no_platform_supports_contract_so_filter_is_fail_open(self):
+        """没有平台登记 contract：设了条件也不能把房源误杀。"""
         f = ListingFilter(allowed_contract=["Indefinite"])
-        assert f.passes(_listing("6 months max")) is False
+        assert f.passes(_listing("6 months max")) is True
 
     def test_empty_filter_lets_everything_through(self):
         assert ListingFilter().passes(_listing("Onbepaalde tijd")) is True
@@ -108,7 +118,7 @@ class TestFilterOptions:
                     (str(i), "n", "Available to book", "\u20ac1", "",
                      json.dumps([f"Contract: {contract}"]), f"u{i}",
                      "Eindhoven", "", "", 0, "Available to book",
-                     "holland2stay"),
+                     "codomo"),
                 )
             st.conn.commit()
             values = st.get_feature_values("Contract")

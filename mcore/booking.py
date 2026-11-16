@@ -2,7 +2,7 @@
 自动预订逻辑 + 竞争失败重试队列。
 
 book_with_fallback
-    按面积降序对候选房源依次调用 try_book()，race_lost 时自动尝试备选。
+    按面积降序对候选房源依次调用对应平台的 booker，race_lost 时自动尝试备选。
 
 RetryQueue
     竞争失败时存储候选 listing_id，下轮恢复并重试。
@@ -19,7 +19,6 @@ from bookers import BookingRequest, dispatch_book, supports_booking
 from models import parse_float
 
 if TYPE_CHECKING:
-    from bookers.base import PrewarmedSession
     from users import UserConfig
 
 logger = logging.getLogger("monitor")
@@ -52,7 +51,6 @@ def book_with_fallback(
     sorted_candidates: list,
     user: "UserConfig",
     deadline: float,
-    prewarmed: "PrewarmedSession | None" = None,
 ):
     """
     按面积降序依次对 sorted_candidates 中的房源尝试自动下单。
@@ -67,8 +65,7 @@ def book_with_fallback(
     路由
     ----
     每个候选通过 ``bookers.dispatch_book(BookingRequest)`` 按 ``listing.source``
-    路由到对应 Booker。当前注册：
-        holland2stay → HollandStayBooker（封装 booker.try_book）
+    路由到对应 Booker（注册表见 ``bookers.BOOKER_REGISTRY``）。
 
     重试条件
     --------
@@ -78,9 +75,9 @@ def book_with_fallback(
 
     blocked 特殊说明
     ----------------
-    phase="blocked" 是 Cloudflare 403 屏蔽，IP/指纹级问题。换房毫无意义，
+    phase="blocked" 是平台 403 屏蔽，IP/指纹级问题。换房毫无意义，
     且每次重试都会再触发 403 → 同 IP 风控加重。
-    直接返回让上层（monitor.run_once）聚合通知 + 失效 prewarm 缓存。
+    直接返回让上层（``mcore.booking_round``）聚合通知。
 
     截止时间
     --------
@@ -88,12 +85,12 @@ def book_with_fallback(
     从第二套起，仅在 deadline 之前继续，避免占用下一轮扫描的时间窗口。
     deadline = float('inf') 表示无限制（--once / --test 模式）。
     """
-    bookable = [l for l in sorted_candidates if supports_booking(getattr(l, "source", "holland2stay"))]
+    bookable = [l for l in sorted_candidates if supports_booking(getattr(l, "source", ""))]
     skipped = len(sorted_candidates) - len(bookable)
     if skipped:
         sources_skipped = sorted({
             getattr(l, "source", "?") for l in sorted_candidates
-            if not supports_booking(getattr(l, "source", "holland2stay"))
+            if not supports_booking(getattr(l, "source", ""))
         })
         logger.info(
             "[%s] 跳过 %d 个不支持自动下单的候选 (source=%s)——用户应从通知 deep link 手动申请",
@@ -124,7 +121,6 @@ def book_with_fallback(
                 listing=listing,
                 user=user,
                 dry_run=user.auto_book.dry_run,
-                prewarmed=prewarmed,
             )
         )
         last_result = result

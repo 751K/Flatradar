@@ -233,18 +233,16 @@ def _ab_from_dict(d: dict) -> AutoBookConfig:
 
     现在缺失一律取空串 = 未配置。存量数据由 v2.1 及以前的一次性清理处理过，
     见 :func:`check_legacy_migrations`。
-    """
-    old_email = d.get("email", "")
-    old_password = decrypt(d.get("password", ""))
 
+    旧的 ``email``/``password``/``payment_method`` 三个键（Holland2Stay 下单凭据）
+    在这里**直接忽略**：该平台改名 Codomo 后已不支持自动下单。存量
+    ``auto_book_json`` 里仍可能带着它们，加载不报错；下次保存时 ``asdict`` 不再
+    包含这三个键，旧密码随之从库里消失。
+    """
     return AutoBookConfig(
         enabled=d.get("enabled", False),
         dry_run=d.get("dry_run", True),
         listing_filter=_lf_from_dict(d.get("listing_filter", {})),
-        # H2S
-        email=old_email,
-        password=old_password,
-        payment_method=d.get("payment_method", "idealcheckout_ideal"),
         # Xior：按楼栋一套账号（每栋楼是独立的 RENTCafe 门户）
         xior_accounts=_xior_accounts_from_dict(d.get("xior_accounts")),
         applicant_profile=_profile_from_dict(d.get("applicant_profile")),
@@ -353,7 +351,7 @@ def _user_to_row(u: UserConfig) -> dict:
         if d.get(field_name):
             d[field_name] = encrypt(d[field_name])
     ab = d.get("auto_book") or {}
-    for _pw_key in ("password", "xior_password", "ourdomain_password",
+    for _pw_key in ("xior_password", "ourdomain_password",
                     "ourcampus_password", "plaza_password"):
         if ab.get(_pw_key):
             ab[_pw_key] = encrypt(ab[_pw_key])

@@ -42,7 +42,16 @@ def _user(uid="u1", **kw):
     return u
 
 
-def _listing(lid="l1", source="holland2stay"):
+def _plaza_user(uid="u1", **kw):
+    """凭据和显式开关都齐的 Plaza 用户——目前唯一开放自动预订的平台。"""
+    u = _user(uid, **kw)
+    u.auto_book.plaza_username = "zoeker"
+    u.auto_book.plaza_password = "pw"
+    u.auto_book.plaza_enabled = True
+    return u
+
+
+def _listing(lid="l1", source="plaza"):
     return Listing(id=lid, name="n", status="Available to book", price_raw="€ 900,00",
                    available_from=None, features=[], url="u", city="Eindhoven",
                    source=source)
@@ -86,32 +95,32 @@ class TestCandidateCollection:
 
     def test_a_push_only_user_gets_candidates(self):
         """回归：这正是线上那个用户的配置，此前一条候选都产生不了。"""
-        u, l = _user(), _listing()
+        u, l = _plaza_user(), _listing()
         st = FakeStorage({"u1": [{"id": 1, "platform": "ios"}]})
         cands, _ = self._collect(u, FakeNotifier(False), st, l)
         assert cands["u1"] == [l], "只用 App 的用户也该能自动预订"
 
     def test_an_unreachable_user_gets_none(self):
-        u, l = _user(), _listing()
+        u, l = _plaza_user(), _listing()
         cands, _ = self._collect(u, FakeNotifier(False), FakeStorage({}), l)
         assert cands["u1"] == [], "通知不到就不该替他下单——他不知道要去付款或取消"
 
     def test_notifications_off_still_blocks(self):
         """总开关关着仍然挡住，这道闸没被放松。"""
-        u = _user(notifications_enabled=False)
+        u = _plaza_user(notifications_enabled=False)
         st = FakeStorage({"u1": [{"id": 1}]})
         cands, _ = self._collect(u, FakeNotifier(True), st, _listing())
         assert cands["u1"] == []
 
     def test_auto_book_off_still_blocks(self):
-        u = _user(ab_enabled=False)
+        u = _plaza_user(ab_enabled=False)
         st = FakeStorage({"u1": [{"id": 1}]})
         cands, _ = self._collect(u, FakeNotifier(True), st, _listing())
         assert cands["u1"] == []
 
     def test_reachability_is_computed_once_per_user_per_round(self):
         """不能放进逐条房源的循环——那是 用户数 × 房源数 次查询。"""
-        u = _user()
+        u = _plaza_user()
         st = FakeStorage({"u1": [{"id": 1}]})
         listings = [_listing(f"l{i}") for i in range(5)]
         monitor._collect_booking_candidates(
@@ -120,7 +129,7 @@ class TestCandidateCollection:
 
     def test_a_source_without_a_booker_is_not_a_candidate(self):
         """source 级的闸仍在最前面，可达性翻不过它。"""
-        u = _user()
+        u = _plaza_user()
         st = FakeStorage({"u1": [{"id": 1}]})
         cands, _ = self._collect(u, FakeNotifier(True), st, _listing(source="ourcampus"))
         assert cands["u1"] == []
@@ -133,9 +142,9 @@ class TestStartupSummary:
     警告」，而是「该不该有」。
     """
 
-    def test_a_plaza_only_user_is_not_nagged_about_h2s(self):
+    def test_a_plaza_only_user_with_credentials_has_no_gaps(self):
         """线上真实案例：allowed_sources=['plaza'] 的用户每次启动吃两条
-        「未填写 H2S 账号」——他根本不抓 H2S。"""
+        别的平台「未填写账号」的警告——他根本不抓那些平台。"""
         u = _user()
         u.auto_book.listing_filter.allowed_sources = ["plaza"]
         u.auto_book.plaza_username = "zoeker"
@@ -171,12 +180,6 @@ class TestStartupSummary:
         u.auto_book.listing_filter.allowed_sources = ["ourcampus"]
         assert monitor._autobook_targets(u) == []
         assert monitor._autobook_credential_gaps(u) == []
-
-    def test_h2s_gap_is_reported_when_it_is_targeted(self):
-        u = _user()
-        u.auto_book.listing_filter.allowed_sources = ["holland2stay"]
-        gaps = monitor._autobook_credential_gaps(u)
-        assert len(gaps) == 1 and "H2S" in gaps[0]
 
     def test_the_channel_warning_uses_the_same_criterion_as_the_gate(self):
         """摘要里那条「没有通知渠道」必须和真正的闸同一判据。

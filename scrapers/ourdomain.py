@@ -10,7 +10,7 @@ JSON API. The scraper uses a two-step flow:
 
 Floor-plan level availability is deliberately ignored because it can disagree
 with unit-level rows. Listings are keyed by physical unit ID and prefixed with
-``od_`` so they cannot collide with Holland2Stay URL slugs.
+``od_`` so they cannot collide with Codomo URL slugs.
 """
 from __future__ import annotations
 
@@ -227,7 +227,7 @@ class OurDomainScraper(AbstractScraper):
             # 轮完仍然全是 403（2026-08-02 实测）。此前它跑在每请求换 IP 的
             # 代理上，是搭了那个便车；改成按 source 固定 sticky IP 后便车没了。
             #
-            # 与 H2S / Xior 相反：它们需要出口 IP 稳定才能复用 clearance，
+            # 与 Xior 相反：它需要出口 IP 稳定才能复用 clearance，
             # OurDomain 没有 clearance 可复用，换 IP 才是它的恢复手段。
             proxy = curl_scrape_proxy(get_proxy_url(self.source, rotating=True))
             # 代理全在冷却时 get_proxy_url 返回空串 = 降级直连原生 IP。
@@ -524,10 +524,9 @@ def _get_text(
         if resp.status_code == 404:
             # 404 = 这个路径在上游不存在了，几乎只有一个成因：端点或标识被改了。
             #
-            # 单独拎出来是因为 H2S 那边为这件事花过三天：2026-08-11 端点迁移后
-            # 旧路径 404，落进通用分支报成「请检查代理/网络」，日志连刷三天，
-            # 而代理一直是好的。``browser_fetcher.fetch()`` 因此有了专门的 404
-            # 分支——但那条教训一直只落地在 H2S 一家。
+            # 单独拎出来是因为这件事踩过坑：2026-08-11 某平台端点迁移后旧路径
+            # 404，落进通用分支报成「请检查代理/网络」，日志连刷三天，而代理
+            # 一直是好的。``browser_fetcher.fetch()`` 因此有了专门的 404 分支。
             #
             # RentCafe 尤其容易撞上：URL 里嵌着 slug 与 myolePropertyID，两者
             # 都是上游可改的标识，而它们就写死在本文件的 BUILDINGS 表里。
@@ -623,7 +622,7 @@ def _extract_floorplan_names(html: str) -> dict[str, str]:
 
 
 # ────────────────────────────────────────────────────────────────────
-# Occupancy 反推：用 H2S 同样的词汇表，filter 跨 source 才能合并
+# Occupancy 反推：用 Codomo 同样的词汇表，filter 跨 source 才能合并
 # ────────────────────────────────────────────────────────────────────
 #
 # OD SecureRC 单元表没有 Beds / Occupancy 列。线索全在 Floor Plan 名字里：
@@ -689,7 +688,7 @@ def _infer_tenant(policy: Optional[dict], sqft: str = "") -> Optional[str]:
     """按楼栋的资格规则推断 ``Tenant`` 取值。
 
     取值用 ``models.FEATURE_SYNONYMS`` 的 Tenant 词汇（``student only`` /
-    ``employed only`` / ``student and employed``），与 H2S 的
+    ``employed only`` / ``student and employed``），与 Codomo 的
     ``tenant_profile_restrictions`` 同一套——Web 的 Tenant 多选筛选跨 source
     才能自然合并，而不是给 OD 单独造一个维度。
 
@@ -721,7 +720,7 @@ def _infer_occupancy(
     """
     OurDomain unit → Occupancy 启发式。
 
-    用 H2S 词汇表（"One" / "Two (only couples)" / "Family (parents with children)"），
+    用 Codomo 词汇表（"One" / "Two (only couples)" / "Family (parents with children)"），
     保证 Web `Occupancy` 多选 filter 跨 source 自然合并。
 
     主信号：unit 自己的物理面积 ``sqft``
@@ -738,7 +737,7 @@ def _infer_occupancy(
     - >= 60 m²      → "Family (parents with children)"（2+ BR）
 
     阈值取自荷兰租赁市场常规：单身 studio 18-28 m²，couple 30+ m²，
-    家庭 60+ m²（与 H2S Eindhoven Kastanjelaan 59 m² Loft "Two (only couples)"
+    家庭 60+ m²（与 Codomo Eindhoven Kastanjelaan 59 m² Loft "Two (only couples)"
     一致）。
 
     兜底：fp_names
@@ -901,12 +900,12 @@ def _to_listing(
     if sqft:
         features.append(f"Area: {sqft} m²")
     if occupancy:
-        # 用 H2S 同样的 "Occupancy: ..." 前缀写进 features，Web filter
+        # 用 Codomo 同样的 "Occupancy: ..." 前缀写进 features，Web filter
         # `get_feature_values("Occupancy")` 会自动 distinct 出来
         features.append(f"Occupancy: {occupancy}")
     tenant = _infer_tenant(tenant_policy, sqft)
     if tenant:
-        # 同理走 H2S 的 "Tenant: ..." 前缀，共用一个多选筛选。
+        # 同理走 Codomo 的 "Tenant: ..." 前缀，共用一个多选筛选。
         # 学生 / 要收入的区分只存在于平台官网 Criteria 页，RentCafe 门户
         # 不带——判据与来源见 _infer_tenant。
         features.append(f"Tenant: {tenant}")

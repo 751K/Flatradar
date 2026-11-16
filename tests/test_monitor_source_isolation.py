@@ -8,7 +8,7 @@
 
 实测后果：Xior 四栋楼连续 429 → RateLimitError 逃出整个 dispatch →
   1. 同轮 OurDomain 已抓到的结果被丢弃
-  2. H2S 排在最后，根本没被执行
+  2. 排在后面的 source 根本没被执行
   3. 每个用户都收到「监控将暂停 5 分钟」
   4. 全局冷却 + 自适应间隔翻倍
 24 小时内发生 3 次。
@@ -25,10 +25,9 @@ from unittest.mock import patch
 import pytest
 
 from config import (
-    AvailabilityFilter,
-    CityFilter,
     Config,
     OurDomainCityFilter,
+    TargetFilter,
     XiorCityFilter,
 )
 from models import Listing
@@ -99,11 +98,10 @@ def _ok(source: str, tasks: list, multi_source: bool):
 def _cfg(tmp_path) -> Config:
     return Config(
         check_interval=300,
-        cities=[CityFilter(name="Eindhoven", id=29)],
-        availability_filters=[AvailabilityFilter(label="A", id=179)],
+        codomo_cities=[TargetFilter(name="Eindhoven", key="29")],
         db_path=Path(tmp_path) / "test.db",
         log_level="WARNING",
-        sources=["holland2stay", "ourdomain", "xior"],
+        sources=["codomo", "ourdomain", "xior"],
         ourdomain_cities=[OurDomainCityFilter(name="Amsterdam Diemen", key="diemen")],
         xior_cities=[XiorCityFilter(name="Amsterdam Naritaweg", key="p0196102")],
     )
@@ -124,8 +122,7 @@ def _run(tmp_path, dispatch_side_effect):
     result: dict = {}
 
     async def go():
-        with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+        with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch):
             try:
                 result["completeness"] = await run_once(
                     _cfg(tmp_path), storage, [], dry_run=False,
@@ -144,7 +141,7 @@ def _run(tmp_path, dispatch_side_effect):
 
 class TestSourceIsolation:
     def test_xior_429_does_not_kill_other_sources(self, tmp_path):
-        """复现 2026-08-03：Xior 全员 429，H2S / OurDomain 结果必须保住。"""
+        """复现 2026-08-03：Xior 全员 429，其余 source 结果必须保住。"""
         def side_effect(source, tasks, multi_source):
             if source == "xior":
                 raise RateLimitError("Xior 返回 429 Too Many Requests")
@@ -153,10 +150,10 @@ class TestSourceIsolation:
         completeness, _, exc = _run(tmp_path, side_effect)
 
         assert exc is None, f"Xior 的 429 不该逃逸整轮，实际抛出 {exc!r}"
-        # H2S + OurDomain 完整；Xior 标 ✗ 而不是从统计里消失。
+        # Codomo + OurDomain 完整；Xior 标 ✗ 而不是从统计里消失。
         # 三个 source 同轮 → key 必须带 source 前缀（防同名城市互相覆盖）
         assert completeness == {
-            "holland2stay:Eindhoven": True,
+            "codomo:Eindhoven": True,
             "ourdomain:Amsterdam Diemen": True,
             "xior:Amsterdam Naritaweg": False,
         }
@@ -171,7 +168,7 @@ class TestSourceIsolation:
         completeness, _, exc = _run(tmp_path, side_effect)
 
         assert exc is None
-        assert completeness["holland2stay:Eindhoven"] is True
+        assert completeness["codomo:Eindhoven"] is True
         assert completeness["ourdomain:Amsterdam Diemen"] is False
 
     def test_failed_source_listings_are_not_stored(self, tmp_path):
@@ -187,14 +184,13 @@ class TestSourceIsolation:
             return side_effect(tasks[0].source, tasks, multi_source)
 
         async def go():
-            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-                 patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch):
                 await run_once(_cfg(tmp_path), storage, [], dry_run=False)
 
         try:
             asyncio.run(go())
             sources = sorted(storage.get_distinct_sources())
-            assert sources == ["holland2stay", "ourdomain"]
+            assert sources == ["codomo", "ourdomain"]
         finally:
             storage.close()
 
@@ -210,14 +206,14 @@ class TestSourceIsolation:
     def test_partial_success_suppresses_raise(self, tmp_path):
         """只要有一个 source 成功，就不该走冷却路径。"""
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
+            if source == "codomo":
                 return _ok(source, tasks, multi_source)
             raise BlockedError(f"{source} blocked")
 
         completeness, _, exc = _run(tmp_path, side_effect)
 
         assert exc is None
-        assert completeness["holland2stay:Eindhoven"] is True
+        assert completeness["codomo:Eindhoven"] is True
 
 
 # ── 全失败时挑哪个异常上抛 ──────────────────────────────────────────
@@ -229,15 +225,15 @@ class TestPickRoundFailure:
         chosen = _pick_round_failure([
             ("xior", RateLimitError("429")),
             ("ourdomain", proxy),
-            ("holland2stay", BlockedError("403")),
+            ("codomo", BlockedError("403")),
         ])
         assert chosen is proxy
 
     def test_maintenance_beats_blocked(self):
-        maint = UpstreamMaintenanceError("H2S 平台维护中")
+        maint = UpstreamMaintenanceError("平台维护中")
         chosen = _pick_round_failure([
             ("ourdomain", BlockedError("403")),
-            ("holland2stay", maint),
+            ("codomo", maint),
         ])
         assert chosen is maint
 
@@ -289,7 +285,7 @@ class TestCompletenessKeyPrefix:
         assert exc is None
         # 显式列全，避免「completeness 是空 dict」时 all() 空真通过
         assert completeness == {
-            "holland2stay:Eindhoven": True,
+            "codomo:Eindhoven": True,
             "ourdomain:Amsterdam Diemen": True,
             "xior:Amsterdam Naritaweg": True,
         }
@@ -297,7 +293,7 @@ class TestCompletenessKeyPrefix:
     def test_single_source_round_keeps_bare_city(self, tmp_path):
         """单源部署保持裸城市名——日志更干净，也兼容旧行为。"""
         cfg = _cfg(tmp_path)
-        cfg.sources = ["holland2stay"]
+        cfg.sources = ["codomo"]
         cfg.ourdomain_cities = []
         cfg.xior_cities = []
 
@@ -309,8 +305,7 @@ class TestCompletenessKeyPrefix:
             return _ok(tasks[0].source, tasks, multi_source)
 
         async def go():
-            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-                 patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch):
                 return await run_once(cfg, storage, [], dry_run=False)
 
         try:
@@ -334,47 +329,39 @@ class TestCompletenessKeyPrefix:
         assert completeness["xior:Amsterdam Naritaweg"] is False
 
 
-# ── H2S 也必须被隔离 ────────────────────────────────────────────────
+# ── 每个 source 都必须被隔离，包括排在最前的 ────────────────────────
 
-class TestH2SIsolation:
-    """H2S 曾是唯一能一票否决整轮的 source。
+class TestCodomoIsolation:
+    """任何一个 source 都不能一票否决整轮。
 
-    2026-08-03 加跨源隔离时，H2S 被漏在了外面：它走的是独立的
-    ``if selected_h2s:`` 分支，非 Blocked 异常直接 ``raise``，注释写着
-    「按旧契约」——那个契约来自它还是唯一 source 的年代。
-
-    2026-08-17 实测代价：H2S 端点迁移后返回 404，**13.7 小时内 118 轮无一轮
-    走完**。而同期 Xior 抓了 464 次、OurDomain 119 次、OurCampus 118 次，
-    全部成功、全部被丢弃——不入库、不通知、不做状态变更。
-
-    上面 TestSourceIsolation 覆盖了 Xior 与 OurDomain，唯独没有 H2S 失败的
-    用例；``test_partial_success_suppresses_raise`` 恰好是反过来的（H2S 成功、
-    其余失败）。这个缺口正是它活下来的原因。
+    曾经有一个 source 走独立分支、非 Blocked 异常直接 ``raise``。2026-08-17 它的
+    端点迁移后返回 404，**13.7 小时内 118 轮无一轮走完**，同期其它 source 抓到的
+    结果全部被丢弃——不入库、不通知、不做状态变更。现在所有 source 走同一条路径。
     """
 
-    def test_h2s_404_does_not_kill_other_sources(self, tmp_path):
-        """复现 2026-08-17：H2S 端点 404，其余 source 结果必须保住。"""
+    def test_404_does_not_kill_other_sources(self, tmp_path):
+        """复现 2026-08-17：一个 source 端点 404，其余 source 结果必须保住。"""
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
+            if source == "codomo":
                 raise ScrapeNetworkError(
-                    "Holland2Stay HTTP 404 —— 端点 /api/service/residences 不存在"
+                    "Codomo HTTP 404 —— 端点 /homes/nl/en 不存在"
                 )
             return _ok(source, tasks, multi_source)
 
         completeness, _, exc = _run(tmp_path, side_effect)
 
-        assert exc is None, f"H2S 的 404 不该逃逸整轮，实际抛出 {exc!r}"
+        assert exc is None, f"404 不该逃逸整轮，实际抛出 {exc!r}"
         assert completeness == {
-            "holland2stay:Eindhoven": False,
+            "codomo:Eindhoven": False,
             "ourdomain:Amsterdam Diemen": True,
             "xior:Amsterdam Naritaweg": True,
         }
 
     def test_other_sources_still_reach_storage(self, tmp_path):
-        """真正的代价是这个：H2S 一抛，别人抓到的东西根本没走到入库。"""
+        """真正的代价是这个：一个 source 一抛，别人抓到的东西根本没走到入库。"""
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
-                raise ScrapeNetworkError("Holland2Stay HTTP 404")
+            if source == "codomo":
+                raise ScrapeNetworkError("Codomo HTTP 404")
             return _ok(source, tasks, multi_source)
 
         storage = Storage(Path(tmp_path) / "test.db", timezone_str="UTC")
@@ -383,8 +370,7 @@ class TestH2SIsolation:
             return side_effect(tasks[0].source, tasks, multi_source)
 
         async def go():
-            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch), \
-                 patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+            with patch("mcore.scrape_round.dispatch_scrape_tasks", side_effect=fake_dispatch):
                 await run_once(_cfg(tmp_path), storage, [], dry_run=False)
 
         try:
@@ -405,7 +391,7 @@ class TestH2SIsolation:
         原代码是裸 ``except Exception: ... raise``，所以这一整类都会一票否决。
         """
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
+            if source == "codomo":
                 raise exc
             return _ok(source, tasks, multi_source)
 
@@ -414,19 +400,19 @@ class TestH2SIsolation:
         assert raised is None, f"{type(exc).__name__} 不该逃逸整轮"
         assert completeness["ourdomain:Amsterdam Diemen"] is True
 
-    def test_h2s_marked_incomplete_not_missing(self, tmp_path):
+    def test_failed_source_marked_incomplete_not_missing(self, tmp_path):
         """标 ✗ 而不是从 completeness 里消失——留空会让 stale 收敛误判。"""
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
+            if source == "codomo":
                 raise ScrapeNetworkError("boom")
             return _ok(source, tasks, multi_source)
 
         completeness, _, _ = _run(tmp_path, side_effect)
 
-        assert "holland2stay:Eindhoven" in completeness
-        assert completeness["holland2stay:Eindhoven"] is False
+        assert "codomo:Eindhoven" in completeness
+        assert completeness["codomo:Eindhoven"] is False
 
-    def test_all_down_including_h2s_still_raises(self, tmp_path):
+    def test_all_down_still_raises(self, tmp_path):
         """隔离不能把「全塌了」也一起吞掉，否则 main_loop 不冷却会空转刷站。"""
         def side_effect(source, tasks, multi_source):
             raise ScrapeNetworkError(f"{source} down")
@@ -435,20 +421,17 @@ class TestH2SIsolation:
 
         assert isinstance(exc, ScrapeNetworkError)
 
-    def test_h2s_403_still_takes_the_circuit_breaker_path(self, tmp_path):
-        """BlockedError 仍走熔断分支，不该被这次改动顺手改掉语义。
+    def test_403_trips_the_sources_circuit(self, tmp_path):
+        """BlockedError 走通用熔断：被挡的 source 下一轮暂停，其余照常。"""
+        import monitor
 
-        403 的处置（``_mark_h2s_scrape_blocked`` + canary 恢复）与本次隔离是
-        两件事；把它一起塞进 source_failures 会让熔断失效。
-        """
         def side_effect(source, tasks, multi_source):
-            if source == "holland2stay":
-                raise BlockedError("Holland2Stay 持续返回 403")
+            if source == "codomo":
+                raise BlockedError("Codomo 返回 403")
             return _ok(source, tasks, multi_source)
 
-        with patch("mcore.scrape_round.mark_h2s_scrape_blocked") as marked:
-            completeness, _, exc = _run(tmp_path, side_effect)
+        completeness, _, exc = _run(tmp_path, side_effect)
 
         assert exc is None
-        assert marked.called, "403 没有走到熔断标记"
+        assert monitor._source_circuits.remaining("codomo") > 0, "403 没有打开熔断"
         assert completeness["ourdomain:Amsterdam Diemen"] is True

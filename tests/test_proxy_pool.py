@@ -115,7 +115,7 @@ class TestPerSourceStickySession:
     def test_each_source_gets_a_distinct_session(self, monkeypatch):
         monkeypatch.setenv("HTTPS_PROXY", self.STICKY)
         urls = {s: config.get_proxy_url(s)
-                for s in ("holland2stay", "xior", "ourdomain")}
+                for s in ("codomo", "xior", "ourdomain")}
         assert len(set(urls.values())) == 3, urls
         for u in urls.values():
             assert u.startswith("http://acct-nl-")
@@ -174,7 +174,7 @@ class TestRotatingSession:
     def test_non_rotating_stays_stable(self, monkeypatch):
         """默认仍是稳定的——H2S / Xior 靠它复用 clearance。"""
         monkeypatch.setenv("HTTPS_PROXY", self.STICKY)
-        seen = {config.get_proxy_url("holland2stay") for _ in range(5)}
+        seen = {config.get_proxy_url("codomo") for _ in range(5)}
         assert len(seen) == 1
 
     def test_rotating_preserves_account_and_country(self, monkeypatch):
@@ -411,7 +411,7 @@ class TestHomeProxyUrlSurvivesRewriting:
     被改坏了就连不上，而症状只是「连接被拒绝」，不好一眼看出根因。
     """
 
-    @pytest.mark.parametrize("source", ["holland2stay", "xior", "ourdomain"])
+    @pytest.mark.parametrize("source", ["codomo", "xior", "ourdomain"])
     def test_unchanged_for_every_source(self, source):
         assert config._with_source_session(HOME, source) == HOME
 
@@ -425,7 +425,7 @@ class TestHomeProxyUrlSurvivesRewriting:
 
     def test_each_source_gets_a_distinct_session(self):
         a = config._with_source_session(P1, "xior")
-        b = config._with_source_session(P1, "holland2stay")
+        b = config._with_source_session(P1, "codomo")
         assert a != b
 
 

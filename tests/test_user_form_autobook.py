@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parent.parent
 #: 注册了 booker 的 source → 自动预订分组里对应条目的 key（account_view._autobook_rows）。
 #: 注册了 booker 却没有填凭据的入口，那个 booker 就是够不着的。
 BOOKER_ROWS = {
-    "holland2stay": "h2s",
     "xior": "xior",
     "ourdomain": "ourdomain",
     "ourcampus": "ourcampus",

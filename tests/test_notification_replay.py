@@ -57,7 +57,7 @@ def _ago(**kw) -> str:
 def _l(lid="L1", status="Available to book", features=None):
     return Listing(
         id=lid, name=lid, status=status, price_raw="€1000",
-        available_from="", url="", city="Eindhoven", source="holland2stay",
+        available_from="", url="", city="Eindhoven", source="codomo",
         features=list(features or []),
     )
 
@@ -91,7 +91,7 @@ class TestPendingIsReadable:
         assert got.id == "L1"
         assert got.status == "Available to book"
         assert got.city == "Eindhoven"
-        assert got.source == "holland2stay"
+        assert got.source == "codomo"
         assert "Building: The Wall" in got.features
 
     def test_status_change_is_pending_until_marked(self, st):

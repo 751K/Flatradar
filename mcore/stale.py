@@ -42,7 +42,7 @@ def monitored_pairs(cfg) -> list[tuple[str, str]]:
 #: 会产生一次状态变更，用户收到一条假的重新上架。中间那站 Reserved 就是为此
 #: 存在的——2 小时内回来只是 ``Reserved → 可订``，是最常见的正常迁移。
 STALE_RESERVED_HOURS = 0.5
-#: 2 小时对齐 **H2S 官方的付款限时**：消失超过它，预留必然已经落定。
+#: 2 小时对齐常见的预留付款限时：消失超过它，预留必然已经落定。
 STALE_OCCUPIED_HOURS = 2.0
 
 
@@ -158,7 +158,7 @@ def stale_sweep_decision(
     """本轮该不该跑 stale 收敛。返回 ``"run"`` / ``"wait"`` / ``"defer"``。
 
     ``defer`` = 到点了、但本轮一个完整扫描城市都没有。这时**不能重置计时器**：
-    run_once 的兜底路径（未分类错误 / 管线错误）和 H2S 熔断期都会返回空
+    run_once 的兜底路径（未分类错误 / 管线错误）和全部 source 熔断期都会返回空
     completeness，24 小时那一次刚好撞上就会白白跳过，鬼影 listing 再多挂一天。
     """
     if now - last_sweep_at < interval_sec:

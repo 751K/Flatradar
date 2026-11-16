@@ -9,7 +9,7 @@
 **「数据还对吗」**。两者必须分开：
 
 - 心跳正常但解析器被上游改版打坏 → ``/health`` 绿，数据全错
-- H2S 熔断冷却最长 6 小时 → 数据停更，但这是**按设计退避**，不是故障
+- source 熔断冷却可达数小时 → 数据停更，但这是**按设计退避**，不是故障
 
 所以本模块的产出只用于告警和面板，**不参与 ``/health`` 的状态码**。
 容器重启治不好解析器对不上，只会打断正在进行的抓取。
@@ -42,20 +42,11 @@ FAIL_STREAK_DOWN = _env_int("HEALTH_FAIL_STREAK_DOWN", 3)
 ZERO_STREAK_WARN = _env_int("HEALTH_ZERO_STREAK_WARN", 3)
 # 距上次完整扫描超过多少秒算 warn
 #
-# 这条规则取代了原先的「完整扫描率低于 80%」。**分层抓取让那个阈值永久为真**：
-# H2S 每轮只查 _FRESH_STATUSES，一律 complete=False，只有每 30 分钟一次的全量
-# 轮才可能为 True，于是完整率结构性地停在 10% 上下。它每天都在告警，唯一的效果
-# 是训练人忽略告警。
+# 量的是**后果**而不是比率：stale 收敛只在完整轮里发生，多久没有完整轮，下架
+# 判定就滞后多久。完整率对分片的 source（Xior 每轮只抓几栋）天然偏低，拿比率
+# 设阈值会天天误报。
 #
-# 换成「距上次完整扫描多久」之后，一条规则同时适用于两类 source，因为它量的
-# 是**后果**而不是比率——stale 收敛只在完整轮里发生，多久没有完整轮，下架判定
-# 就滞后多久：
-#
-#   H2S（每 30 分钟一次全量）   连着漏掉 3 次全量才报
-#   其余（每轮都是全量）        连续 90 分钟没有任何完整轮才报
-#
-# 默认 5400 秒 = H2S 全量间隔的 3 倍。实测其间隔中位 31.2 分、最大 36.9 分，
-# 留足余量。
+# 默认 5400 秒：连续 90 分钟没有任何完整轮才报。
 STALE_FULL_SCAN_SECONDS = _env_int("HEALTH_STALE_FULL_SCAN_SECONDS", 5400)
 
 # 全站静默多少秒算故障（库里仍有房源的前提下）。
@@ -64,8 +55,7 @@ STALE_FULL_SCAN_SECONDS = _env_int("HEALTH_STALE_FULL_SCAN_SECONDS", 5400)
 # 高峰期一轮 60 秒、峰外 390 秒，同样 6 轮可以是 6 分钟也可以是 39 分钟。
 # 而现在「全站 0 条」本来就是常态——
 #
-#   H2S 高频轮只查可订/抽签，平台上没有可订房源时正确地返回 0
-#     （2026-08-25 实测：库里 345 Occupied + 42 Reserved，可订 0）
+#   各平台 feed 只列可订/登记中的房源，平台上没有可订房源时正确地返回 0
 #   OurCampus 官网自述排队 16–18 个月，三个月抓到 1 条
 #   Xior 常态零可订
 #
@@ -75,8 +65,7 @@ STALE_FULL_SCAN_SECONDS = _env_int("HEALTH_STALE_FULL_SCAN_SECONDS", 5400)
 # 换成时间之后判据回到它本来的含义：**库里有房源，却已经很久没有任何 source
 # 抓到过任何东西**——2026-06-13 那次七周静默停摆正是这个形状。
 #
-# 默认 3 小时：正常运行下 H2S 每 30 分钟一次全量轮必然非零，3 小时等于连着
-# 漏掉 6 次全量，留足余量而又远早于「七周」。
+# 默认 3 小时：留足余量而又远早于「七周」。
 SILENT_SECONDS = _env_int("HEALTH_SILENT_SECONDS", 10800)
 
 #: 熔断跳过的那一轮在遥测里的 error_type 标记。它**不是抓取失败**——是按设计
@@ -133,8 +122,8 @@ class SourceHealth:
     zero_streak: int = 0            # 从最新往回数，连续 0 条几轮（失败轮打断计数）
     completeness_rate: float = -1.0  # sum(complete)/sum(targets)；无数据为 -1
     # 最近一次「至少有一个 target 抓全了」的轮次。**跨窗口**取自库里，不能只看
-    # 窗口内——H2S 的窗口（24 轮 ≈ 36 分钟）比它的全量间隔（30 分钟）还短，
-    # 窗口里常常一次全量都不含，据此判定必然误报。
+    # 窗口内——高峰期 24 轮只有半小时上下，分片 source 的窗口里可能一次全量都不含，
+    # 据此判定必然误报。
     last_complete_at: str = ""
     # 距上次完整扫描多少秒；算不出（无数据）为 -1
     stale_full_scan_seconds: float = -1.0
@@ -231,10 +220,8 @@ def _judge(h: SourceHealth) -> None:
             f"though this window had up to {h.max_listings}"
         )
 
-    # 完整扫描率**不再**作为告警判据，只作为面板指标保留。分层抓取让它对 H2S
-    # 结构性地停在 10% 上下，阈值永久为真。判据换成「多久没有完整轮」——量的是
-    # stale 收敛滞后了多久，对分层与非分层 source 同样成立。见
-    # STALE_FULL_SCAN_SECONDS 的注释。
+    # 完整扫描率不作为告警判据，只作为面板指标保留。判据是「多久没有完整轮」
+    # ——量的是 stale 收敛滞后了多久，见 STALE_FULL_SCAN_SECONDS 的注释。
     if h.stale_full_scan_seconds > STALE_FULL_SCAN_SECONDS:
         mins = h.stale_full_scan_seconds / 60
         reasons.append(
@@ -273,8 +260,8 @@ def source_health_from_rows(
     拆成纯函数是为了能脱离 DB 测试判级规则——规则本身才是容易写错的部分。
 
     ``last_complete_at`` 由调用方从库里查，**不能从 rows 里推**：窗口是按轮数
-    截的（默认 24 轮），而 H2S 的全量间隔是 30 分钟、每轮约 90 秒，窗口时间跨度
-    比全量间隔还短，里面常常一次全量都不含。据窗口判定必然误报。
+    截的（默认 24 轮），时间跨度可能比完整轮的间隔还短，里面常常一次完整轮都
+    不含。据窗口判定必然误报。
     """
     h = SourceHealth(source=source, rounds=len(rows), enabled=enabled)
     if not rows:
@@ -326,16 +313,10 @@ def source_health_from_rows(
     # zero_streak，任何一次失败都会顺带触发「零房源」告警，两条规则就重了。
     #
     # ⚠️ 只在 complete > 0 的轮次之间累积。complete == 0 意味着这一轮没有任何
-    # target 被抓全，H2S 的分层抓取每轮都是如此（只查 _FRESH_STATUSES，代码里
-    # 强制 complete=False），拿它的 0 去和全量轮的 43 相比，比的是两批不同的
-    # 东西——和上面 sharded 那条是同一个坑，只是切的维度是「状态」而非「楼栋」，
-    # 而 sharded 的判据（total_targets > targets）在分层时恒为假，漏掉了它。
+    # target 被抓全，拿它的 0 去和完整轮的条数相比，比的是两批不同的东西——和
+    # 上面 sharded 那条是同一个坑。
     #
-    # 2026-08-24 实测后果：H2S 每 30 分钟一次全量轮，中间约 5 个高频轮全是 0
-    # （当时平台上确实一套可订的都没有，43 套全是 Reserved），凑够 3 轮报
-    # 「抓取成功但零房源」，下一次全量轮一到又「已恢复」——24 小时 7 报 7 恢复。
-    #
-    # 漏报的兜底是 stale_full_scan：真到了连全量轮都不再产出的地步，那条会响。
+    # 漏报的兜底是 stale_full_scan：真到了连完整轮都不再产出的地步，那条会响。
     for r in rows:
         err = r["error_type"] or ""
         if err == CIRCUIT_OPEN_ERROR:

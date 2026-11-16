@@ -17,7 +17,6 @@
 - 数值字段（_fv / _iv）做范围校验，超界静默丢弃 + WARNING 日志
 - 列表字段（_lv）兼容 checkbox 多选与逗号分隔旧格式
 - 密码/令牌字段（_secret）：空提交保留旧值，避免误清空已存凭据
-- payment_method 用白名单 {idealcheckout_ideal/visa/mastercard} 兜底
 """
 from __future__ import annotations
 
@@ -35,13 +34,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Magento setPaymentMethodOnCart 支持的支付方式代码（来自浏览器抓包）
-VALID_PAYMENT_METHODS: set[str] = {
-    "idealcheckout_ideal",
-    "idealcheckout_visa",
-    "idealcheckout_mastercard",
-}
-DEFAULT_PAYMENT_METHOD = "idealcheckout_ideal"
 _SHARED_EMAIL_TO_RE = re.compile(r"^[^@\s,;]+@[^@\s,;.]+\.[^@\s,;]+$")
 
 
@@ -304,16 +296,10 @@ def build_user_from_form(
     )
 
     ex_ab = existing.auto_book if existing else None
-    raw_pm = form.get("AUTO_BOOK_PAYMENT_METHOD", DEFAULT_PAYMENT_METHOD)
-    payment_method = raw_pm if raw_pm in VALID_PAYMENT_METHODS else DEFAULT_PAYMENT_METHOD
 
     ab = AutoBookConfig(
         enabled=form.get("AUTO_BOOK_ENABLED") == "true",
         dry_run=form.get("AUTO_BOOK_DRY_RUN", "true") != "false",
-        # ── H2S ──
-        email=form.get("AUTO_BOOK_EMAIL", ""),
-        password=_secret("AUTO_BOOK_PASSWORD", ex_ab.password if ex_ab else ""),
-        payment_method=payment_method,
         # ── Xior：一栋楼一个账号 ──
         xior_accounts=parse_xior_accounts(form, ex_ab),
         applicant_profile=parse_applicant_profile(form, ex_ab),

@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import uuid
 
-from mcore.booking_guard import BookingGuard, account_key, process_alive
+from mcore.booking_guard import GuardStore, account_key, process_alive
 
 
 def _listing_key(listing_id):
@@ -12,7 +12,7 @@ def _listing_key(listing_id):
     return value[3:] if value.startswith('pz_') else value
 
 
-class PlazaGuard(BookingGuard):
+class PlazaGuard(GuardStore):
     def __init__(self, storage):
         super().__init__(storage)
         with self.connect() as db:

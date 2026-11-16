@@ -37,7 +37,7 @@ def _add(st: Storage, id: str, **kw):
             kw.get("first_seen", _now_iso(hours=-1)),
             kw.get("last_seen", _now_iso(minutes=-30)),
             kw.get("notified", 0), kw.get("last_status", kw.get("status", "Available to book")),
-            kw.get("source", "holland2stay"),
+            kw.get("source", "codomo"),
         ),
     )
     st.conn.commit()
@@ -64,15 +64,15 @@ class TestGetAllListings:
         assert len(items) == 1
 
     def test_filter_by_source(self, store):
-        _add(store, "L1", source="holland2stay")
+        _add(store, "L1", source="codomo")
         _add(store, "L2", source="ourdomain")
         items = store.get_all_listings(source="ourdomain")
         assert [i["id"] for i in items] == ["L2"]
 
     def test_get_distinct_sources(self, store):
-        _add(store, "L1", source="holland2stay")
+        _add(store, "L1", source="codomo")
         _add(store, "L2", source="ourdomain")
-        assert store.get_distinct_sources() == ["holland2stay", "ourdomain"]
+        assert store.get_distinct_sources() == ["codomo", "ourdomain"]
 
     def test_search_by_name(self, store):
         _add(store, "L1", name="Sunny Studio")
@@ -222,7 +222,7 @@ class TestDetailFeatureSnapshot:
             "Neighborhood: Strijp", "MinIncome: 3x",
             "Area: 25 m²", "Energy: A",           # 每轮都拿得到，不该进快照
         ]))
-        snap = store.detail_feature_snapshot("holland2stay")
+        snap = store.detail_feature_snapshot("codomo")
         assert snap["a"] == {
             "Building": "The Wall", "Tenant": "student only",
             "Neighborhood": "Strijp", "MinIncome": "3x",
@@ -231,24 +231,24 @@ class TestDetailFeatureSnapshot:
     def test_listings_without_sticky_keys_are_absent(self, store):
         """一条都没有的不进快照——进了就等于宣布「查过了，没有」，永不再问。"""
         _add(store, "a", features=json.dumps(["Area: 25 m²"]))
-        assert store.detail_feature_snapshot("holland2stay") == {}
+        assert store.detail_feature_snapshot("codomo") == {}
 
     def test_partial_values_survive(self, store):
         _add(store, "a", features=json.dumps(["Building: The Wall", "Area: 25 m²"]))
-        assert store.detail_feature_snapshot("holland2stay") == {
+        assert store.detail_feature_snapshot("codomo") == {
             "a": {"Building": "The Wall"}}
 
     def test_other_sources_are_not_mixed_in(self, store):
         _add(store, "a", features=json.dumps(["Building: The Wall"]))
         _add(store, "b", source="xior", features=json.dumps(["Building: 别人的"]))
-        assert list(store.detail_feature_snapshot("holland2stay")) == ["a"]
+        assert list(store.detail_feature_snapshot("codomo")) == ["a"]
 
     def test_empty_value_is_dropped(self, store):
         _add(store, "a", features=json.dumps(["Building: ", "Tenant: student only"]))
-        assert store.detail_feature_snapshot("holland2stay") == {
+        assert store.detail_feature_snapshot("codomo") == {
             "a": {"Tenant": "student only"}}
 
     @pytest.mark.parametrize("bad", ["not json", "{}", '"a string"', "", "[123, null]"])
     def test_junk_features_do_not_blow_up(self, store, bad):
         _add(store, "a", features=bad)
-        assert store.detail_feature_snapshot("holland2stay") == {}
+        assert store.detail_feature_snapshot("codomo") == {}

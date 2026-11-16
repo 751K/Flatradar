@@ -107,7 +107,7 @@ class TestChartDateWindows:
         old = (now - timedelta(days=45)).isoformat()
         rows = [
             ("recent", "Recent", "Available to book", "€950", ["Type: Studio", "Area: 25.0 m²"], "Eindhoven", "ourdomain", recent),
-            ("old", "Old", "Reserved", "€1500", ["Type: 2", "Area: 65.0 m²"], "Rotterdam", "holland2stay", old),
+            ("old", "Old", "Reserved", "€1500", ["Type: 2", "Area: 65.0 m²"], "Rotterdam", "codomo", old),
         ]
         for listing_id, name, status, price, features, city, source, first_seen in rows:
             temp_db.conn.execute(

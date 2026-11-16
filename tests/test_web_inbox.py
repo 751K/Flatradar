@@ -22,13 +22,13 @@ def inbox_users(test_app):
     st = storage()
     try:
         st.diff([
-            Listing(available_from='2026-12-01',id='match',name='Matching home',city='Eindhoven',source='holland2stay',
+            Listing(available_from='2026-12-01',id='match',name='Matching home',city='Eindhoven',source='codomo',
                 status='Available to book',price_raw='€950',features=['Area: 30 m²'],url='https://example.com/match'),
             Listing(available_from='2026-12-01',id='expensive',name='Outside budget',city='Eindhoven',source='plaza',
                 status='Available to book',price_raw='€1800',features=['Area: 35 m²'],url='https://example.com/expensive'),
             Listing(available_from='2026-12-01',id='city',name='Different city',city='Delft',source='plaza',
                 status='Available to book',price_raw='€900',features=['Area: 30 m²'],url='https://example.com/city'),
-            Listing(available_from='2026-12-01',id='small',name='Too small',city='Eindhoven',source='holland2stay',
+            Listing(available_from='2026-12-01',id='small',name='Too small',city='Eindhoven',source='codomo',
                 status='Reserved',price_raw='€800',features=['Area: 20 m²'],url='javascript:alert(1)'),
         ])
     finally:
@@ -217,7 +217,7 @@ def test_mark_all_read_respects_current_search_and_platform(inbox_client,inbox_u
     assert response.status_code == 302 and _unread(inbox_client) == 1
     inbox_client.post('/inbox/read-all',data={'csrf_token':'test_csrf','q':'not present'})
     assert _unread(inbox_client) == 1
-    inbox_client.post('/inbox/read-all',data={'csrf_token':'test_csrf','view':'holland2stay','q':'Matching'})
+    inbox_client.post('/inbox/read-all',data={'csrf_token':'test_csrf','view':'codomo','q':'Matching'})
     assert _unread(inbox_client) == 0
 
 

@@ -53,19 +53,19 @@ class _Meta:
 
 
 def _tasks():
-    return [_Task("xior", "A"), _Task("xior", "B"), _Task("holland2stay", "E")]
+    return [_Task("xior", "A"), _Task("xior", "B"), _Task("codomo", "E")]
 
 
 class TestThrottling:
     def test_skips_a_source_scraped_too_recently(self):
         st = _Meta({_SOURCE_LAST_SCRAPE_PREFIX + "xior": "1000"})
         out = _apply_source_intervals(_tasks(), _Cfg({"xior": 600}), st, now=1100)
-        assert [t.source for t in out] == ["holland2stay"], "xior 应被整体跳过"
+        assert [t.source for t in out] == ["codomo"], "xior 应被整体跳过"
 
     def test_runs_once_the_gap_has_passed(self):
         st = _Meta({_SOURCE_LAST_SCRAPE_PREFIX + "xior": "1000"})
         out = _apply_source_intervals(_tasks(), _Cfg({"xior": 600}), st, now=1700)
-        assert sorted({t.source for t in out}) == ["holland2stay", "xior"]
+        assert sorted({t.source for t in out}) == ["codomo", "xior"]
 
     def test_other_sources_are_untouched(self):
         """节流是逐 source 的——H2S 靠高频轮次出房源，不能被 Xior 拖累。"""
@@ -142,10 +142,10 @@ class TestDefaults:
         assert _DEFAULT_SOURCE_MIN_INTERVALS.get("xior", 0) >= 180
 
     def test_other_sources_have_no_default_throttle(self):
-        """H2S 是真正出房源的那个，高峰高频轮询是有意为之。"""
+        """H2S（今 Codomo）是真正出房源的那个，高峰高频轮询是有意为之。"""
         from config import _DEFAULT_SOURCE_MIN_INTERVALS
 
-        assert "holland2stay" not in _DEFAULT_SOURCE_MIN_INTERVALS
+        assert "codomo" not in _DEFAULT_SOURCE_MIN_INTERVALS
 
 
 # ── 高峰期专用的 source 最小间隔（原 test_source_peak_intervals.py） ──

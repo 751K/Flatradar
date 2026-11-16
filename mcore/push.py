@@ -305,7 +305,7 @@ def _trim(text: str, n: int) -> str:
 
 
 def _source_short(source: str | None) -> str:
-    # 与文本通知同一张缩写表；这里曾手写一份只认 H2S / OD，其余平台在推送
+    # 与文本通知同一张缩写表；这里曾手写一份只认两个平台，其余平台在推送
     # 标题里显示成大写原名（XIOR、STUDENTEXPERIENCE）。
     return source_short_name(source)
 
@@ -315,7 +315,7 @@ def _source_short(source: str | None) -> str:
 
 
 def _listing_source(listing) -> str:
-    return getattr(listing, "source", "") or "holland2stay"
+    return getattr(listing, "source", "") or ""
 
 
 def _deep_link(listing) -> str:

@@ -5,7 +5,7 @@
 一张城市表绕回 config（以前 config ↔ target_config / scrapers 的环就是这么来的）。
 config 保留这些名字的 re-export。
 
-非 H2S 平台的「配置键 / 注册表 / 留空含义」统一登记在 :data:`TARGET_SPECS`，
+各平台的「配置键 / 注册表 / 留空含义」统一登记在 :data:`TARGET_SPECS`，
 config 的任务展开、target_config 的校验、设置页的回显都从它派生。
 """
 from __future__ import annotations
@@ -15,40 +15,49 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-# 所有已知城市及其 GraphQL filter ID。
-# ID 来自 Holland2Stay GraphQL aggregations 接口，city filter 使用字符串形式。
-# 新增城市需同时在此处添加，并在 Web 面板城市列表中选择。
-KNOWN_CITIES: list[dict] = [
-    {"name": "Amersfoort",              "id": "6249"},
-    {"name": "Amsterdam",               "id": "24"},
-    {"name": "Arnhem",                  "id": "320"},
-    {"name": "Capelle aan den IJssel",  "id": "619"},
-    {"name": "Delft",                   "id": "26"},
-    {"name": "Den Bosch",               "id": "28"},
-    {"name": "Diemen",                  "id": "110"},
-    {"name": "Dordrecht",               "id": "620"},
-    {"name": "Eindhoven",               "id": "29"},
-    {"name": "Groningen",               "id": "545"},
-    {"name": "Haarlem",                 "id": "616"},
-    {"name": "Helmond",                 "id": "6099"},
-    {"name": "Leiden",                  "id": "6293"},
-    {"name": "Maarssen",                "id": "6209"},
-    {"name": "Maastricht",              "id": "6090"},
-    {"name": "Nieuwegein",              "id": "6051"},
-    {"name": "Nijmegen",                "id": "6217"},
-    {"name": "Rijswijk",                "id": "6224"},
-    {"name": "Rotterdam",               "id": "25"},
-    {"name": "Sittard",                 "id": "6211"},
-    {"name": "The Hague",               "id": "90"},
-    {"name": "Tilburg",                 "id": "6093"},
-    {"name": "Utrecht",                 "id": "27"},
-    {"name": "Velp",                    "id": "6265"},
-    {"name": "Zeist",                   "id": "6145"},
-    {"name": "Zoetermeer",              "id": "6088"},
+#: Codomo（原 Holland2Stay）覆盖的荷兰城市。
+#:
+#: 与 Magis / Plaza 同一形态：一轮抓全国列表页，登记城市只为让用户按城市订阅并在
+#: 各 ScrapeTask 之间切分（见 scrapers/codomo.py 的 batch_session）。
+#:
+#: - ``key``：订阅串里的 key。沿用旧 H2S GraphQL 的数字 city ID，这样已有的
+#:   ``CITIES="Eindhoven,29"``（现 ``CODOMO_CITIES``）配置迁过来不用改值（见 mstorage/_codomo_rename.py）。
+#: - ``slug``：Codomo 房源 URL 里的城市段（``/homes/nl/en/{slug}/…``），卡片按它归城。
+#:   The Hague 的 slug 是 ``den-haag``。
+#:
+#: 2026-11-16 站点城市清单与旧表的 26 个完全一致。站点上新城市时 scraper 会按
+#: WARNING 报出未登记的 slug。
+KNOWN_CODOMO_CITIES: list[dict] = [
+    {"name": "Amersfoort", "key": "6249", "slug": "amersfoort", "city": "Amersfoort"},
+    {"name": "Amsterdam", "key": "24", "slug": "amsterdam", "city": "Amsterdam"},
+    {"name": "Arnhem", "key": "320", "slug": "arnhem", "city": "Arnhem"},
+    {"name": "Capelle aan den IJssel", "key": "619", "slug": "capelle-aan-den-ijssel", "city": "Capelle aan den IJssel"},
+    {"name": "Delft", "key": "26", "slug": "delft", "city": "Delft"},
+    {"name": "Den Bosch", "key": "28", "slug": "den-bosch", "city": "Den Bosch"},
+    {"name": "Diemen", "key": "110", "slug": "diemen", "city": "Diemen"},
+    {"name": "Dordrecht", "key": "620", "slug": "dordrecht", "city": "Dordrecht"},
+    {"name": "Eindhoven", "key": "29", "slug": "eindhoven", "city": "Eindhoven"},
+    {"name": "Groningen", "key": "545", "slug": "groningen", "city": "Groningen"},
+    {"name": "Haarlem", "key": "616", "slug": "haarlem", "city": "Haarlem"},
+    {"name": "Helmond", "key": "6099", "slug": "helmond", "city": "Helmond"},
+    {"name": "Leiden", "key": "6293", "slug": "leiden", "city": "Leiden"},
+    {"name": "Maarssen", "key": "6209", "slug": "maarssen", "city": "Maarssen"},
+    {"name": "Maastricht", "key": "6090", "slug": "maastricht", "city": "Maastricht"},
+    {"name": "Nieuwegein", "key": "6051", "slug": "nieuwegein", "city": "Nieuwegein"},
+    {"name": "Nijmegen", "key": "6217", "slug": "nijmegen", "city": "Nijmegen"},
+    {"name": "Rijswijk", "key": "6224", "slug": "rijswijk", "city": "Rijswijk"},
+    {"name": "Rotterdam", "key": "25", "slug": "rotterdam", "city": "Rotterdam"},
+    {"name": "Sittard", "key": "6211", "slug": "sittard", "city": "Sittard"},
+    {"name": "The Hague", "key": "90", "slug": "den-haag", "city": "The Hague"},
+    {"name": "Tilburg", "key": "6093", "slug": "tilburg", "city": "Tilburg"},
+    {"name": "Utrecht", "key": "27", "slug": "utrecht", "city": "Utrecht"},
+    {"name": "Velp", "key": "6265", "slug": "velp", "city": "Velp"},
+    {"name": "Zeist", "key": "6145", "slug": "zeist", "city": "Zeist"},
+    {"name": "Zoetermeer", "key": "6088", "slug": "zoetermeer", "city": "Zoetermeer"},
 ]
 
 # ``city`` 是该地点所属的城市，与 ``name``（平台自己的楼盘叫法）分开。
-# 两者混用过：`city` 列里 H2S 存的是真城市，Xior / OurDomain / OurCampus 存的
+# 两者混用过：`city` 列里 Codomo 存的是真城市，Xior / OurDomain / OurCampus 存的
 # 是楼盘名，而筛选是精确匹配——勾「Amsterdam」收不到「Amsterdam Diemen」，
 # 2026-08-05 查出线上 14 个用户因此长期漏收通知。见 canonical_city()。
 #
@@ -165,7 +174,7 @@ KNOWN_XIOR_CITIES: list[dict] = [
 
 @dataclass(frozen=True)
 class TargetSpec:
-    """一个按楼盘 / 城市订阅的平台（H2S 之外）的配置约定。"""
+    """一个按楼盘 / 城市订阅的平台的配置约定。"""
     source: str
     #: .env 里的订阅串键名，格式 ``显示名,key|显示名,key``。
     env_key: str
@@ -180,9 +189,15 @@ class TargetSpec:
     #: 一次请求就拿到全站的平台（Magis / Student Experience / Plaza）多订几个城市
     #: 不产生额外请求，留空全收是合理默认；Xior 是历史约定。
     all_when_empty: bool = False
+    #: 改名前用过的订阅键（只有 Codomo：旧 Holland2Stay 叫 ``CITIES``）。``.env``
+    #: 里还写着旧键时照样认，见 config._load_targets。
+    legacy_env_key: str = ""
 
 
 TARGET_SPECS: dict[str, TargetSpec] = {
+    "codomo": TargetSpec(
+        "codomo", "CODOMO_CITIES", KNOWN_CODOMO_CITIES, "codomo_cities",
+        default_raw="Eindhoven,29", legacy_env_key="CITIES"),
     "ourdomain": TargetSpec(
         "ourdomain", "OURDOMAIN_CITIES", KNOWN_OURDOMAIN_CITIES, "ourdomain_cities",
         default_raw="Amsterdam Diemen,diemen"),
@@ -239,7 +254,7 @@ _CITY_ALIAS_MAP = _build_city_alias_map()
 def canonical_city(value: str) -> str:
     """把 `city` 字段归一到真正的城市名。
 
-    存在的理由：`city` 这一列在四个平台上存的不是同一种东西——H2S 存真城市
+    存在的理由：`city` 这一列在四个平台上存的不是同一种东西——Codomo 存真城市
     （Eindhoven），Xior / OurDomain / OurCampus 存楼盘名（Utrecht Willem
     Dreeslaan、Amsterdam Diemen）。而 `allowed_cities` 是精确匹配，于是勾了
     「Utrecht」的用户永远收不到 Xior 在 Utrecht 那 25 套房的通知，面板上也
@@ -259,14 +274,14 @@ def known_city_names(sources=None) -> list[str]:
     用户能勾的清单里——勾了也永远不会有房源。``None`` 保持旧的全集行为。
     """
     if sources is None:
-        names = {c["name"] for c in KNOWN_CITIES}
+        names = {c.get("city") or c["name"] for spec in TARGET_SPECS.values()
+                 for c in spec.registry}
         names.update(_CITY_ALIAS_MAP.values())
+        names.discard("")
         return sorted(names)
 
     enabled = {str(s).strip().lower() for s in sources}
     names: set[str] = set()
-    if "holland2stay" in enabled:
-        names.update(c["name"] for c in KNOWN_CITIES)
     for spec in TARGET_SPECS.values():
         if spec.source in enabled:
             names.update(c.get("city") or c["name"] for c in spec.registry)

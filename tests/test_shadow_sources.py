@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from config import AvailabilityFilter, CityFilter, Config, load_config
+from config import Config, TargetFilter, load_config
 from models import Listing
 from monitor import _drop_shadow_sources, run_once
 from notifier import BaseNotifier
@@ -45,7 +45,7 @@ class TestDropShadowSources:
         assert kn is new and ks is sc, "未配置影子时应零开销直接返回原对象"
 
     def test_filters_only_shadow_source(self):
-        new = [_listing("a", source="ourcampus"), _listing("b", source="holland2stay")]
+        new = [_listing("a", source="ourcampus"), _listing("b", source="codomo")]
         sc = [
             (_listing("c", source="ourcampus"), "Occupied", "Available to book"),
             (_listing("d", source="ourdomain"), "Occupied", "Available to book"),
@@ -60,9 +60,9 @@ class TestDropShadowSources:
         assert kn == []
 
     def test_multiple_shadow_sources(self):
-        new = [_listing(s, source=s) for s in ("ourcampus", "xior", "holland2stay")]
+        new = [_listing(s, source=s) for s in ("ourcampus", "xior", "codomo")]
         kn, _ = _drop_shadow_sources(_Cfg(["ourcampus", "xior"]), new, [])
-        assert [l.id for l in kn] == ["holland2stay"]
+        assert [l.id for l in kn] == ["codomo"]
 
     def test_missing_attr_is_tolerated(self):
         """cfg 没有 shadow_sources 属性时不能炸（旧配置对象 / 测试桩）。"""
@@ -77,21 +77,21 @@ class TestDropShadowSources:
 
 class TestShadowConfig:
     def test_parsed_from_env(self, monkeypatch):
-        monkeypatch.setenv("SOURCES", "holland2stay,ourcampus")
+        monkeypatch.setenv("SOURCES", "codomo,ourcampus")
         monkeypatch.setenv("SHADOW_SOURCES", "ourcampus")
         import config
         assert config.load_config().shadow_sources == ["ourcampus"]
 
     def test_entries_not_in_sources_are_dropped(self, monkeypatch):
         """影子列表必须是 SOURCES 的子集——不在里面就压根不会抓，写了是笔误。"""
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         monkeypatch.setenv("SHADOW_SOURCES", "ourcampus,typo")
         import config
         assert config.load_config().shadow_sources == []
 
     def test_default_is_empty(self, monkeypatch):
         monkeypatch.delenv("SHADOW_SOURCES", raising=False)
-        monkeypatch.setenv("SOURCES", "holland2stay")
+        monkeypatch.setenv("SOURCES", "codomo")
         import config
         assert config.load_config().shadow_sources == []
 
@@ -99,7 +99,7 @@ class TestShadowConfig:
         """拆出 _parse_sources_raw 后，SOURCES 的默认值行为不能变。"""
         monkeypatch.setenv("SOURCES", "")
         import config
-        assert config.load_config().sources == ["holland2stay"]
+        assert config.load_config().sources == ["codomo"]
 
 
 # ── run_once 端到端：入库但不通知 ───────────────────────────────────
@@ -129,11 +129,10 @@ class _Notifier(BaseNotifier):
 def _cfg(tmp_path, shadow) -> Config:
     return Config(
         check_interval=300,
-        cities=[CityFilter(name="C", id=29)],
-        availability_filters=[AvailabilityFilter(label="A", id=179)],
+        codomo_cities=[TargetFilter(name="C", key="29")],
         db_path=Path(tmp_path) / "t.db",
         log_level="WARNING",
-        sources=["holland2stay", "ourcampus"],
+        sources=["codomo", "ourcampus"],
         shadow_sources=shadow,
     )
 
@@ -142,8 +141,7 @@ def _round(tmp_path, storage, shadow, fresh):
     notifier = _Notifier()
 
     async def go():
-        with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=(fresh, {"C": True})), \
-             patch("mcore.prewarm.create_prewarmed_session", return_value=None):
+        with patch("mcore.scrape_round.dispatch_scrape_tasks", return_value=(fresh, {"C": True})):
             await run_once(_cfg(tmp_path, shadow), storage, [], dry_run=False,
                            web_notifier=notifier)
     asyncio.run(go())
@@ -156,14 +154,14 @@ class TestRunOnceShadow:
         try:
             n = _round(tmp_path, storage, ["ourcampus"], [
                 _listing("oc_1", source="ourcampus"),
-                _listing("h2s_1", source="holland2stay"),
+                _listing("cd_1", source="codomo"),
             ])
             # 通知只发了非影子的那条
-            assert n.new_listings == ["h2s_1"]
+            assert n.new_listings == ["cd_1"]
             # 但两条都进了库
             assert storage.get_listing("oc_1") is not None
-            assert storage.get_listing("h2s_1") is not None
-            assert sorted(storage.get_distinct_sources()) == ["holland2stay", "ourcampus"]
+            assert storage.get_listing("cd_1") is not None
+            assert sorted(storage.get_distinct_sources()) == ["codomo", "ourcampus"]
         finally:
             storage.close()
 
@@ -217,9 +215,9 @@ class TestRunOnceShadow:
         try:
             n = _round(tmp_path, storage, [], [
                 _listing("oc_1", source="ourcampus"),
-                _listing("h2s_1", source="holland2stay"),
+                _listing("cd_1", source="codomo"),
             ])
-            assert sorted(n.new_listings) == ["h2s_1", "oc_1"]
+            assert sorted(n.new_listings) == ["cd_1", "oc_1"]
         finally:
             storage.close()
 
@@ -229,7 +227,7 @@ class TestRunOnceShadow:
         try:
             _round(tmp_path, storage, ["ourcampus"], [
                 _listing("oc_1", source="ourcampus"),
-                _listing("h2s_1", source="holland2stay"),
+                _listing("cd_1", source="codomo"),
             ])
             assert storage.get_meta("last_scrape_count") == "2"
         finally:
@@ -240,7 +238,7 @@ class TestRunOnceShadow:
 #
 # 2026-08-04 线上实况：
 #
-#     SOURCES=holland2stay,ourdomain,xior
+#     SOURCES=codomo,ourdomain,xior
 #     SHADOW_SOURCES=ourcampus,xior
 #
 # 看上去像「ourcampus 在影子模式下跑着」。实际上 ``load_config`` 会把不在
@@ -263,7 +261,7 @@ def _shadow_env(monkeypatch):
 
 class TestDanglingShadowSource:
     def test_warns_when_shadow_source_is_not_in_sources(self, _shadow_env, caplog):
-        _shadow_env.setenv("SOURCES", "holland2stay,ourdomain")
+        _shadow_env.setenv("SOURCES", "codomo,ourdomain")
         _shadow_env.setenv("SHADOW_SOURCES", "ourcampus")
 
         with caplog.at_level(logging.WARNING, logger="config"):
@@ -274,7 +272,7 @@ class TestDanglingShadowSource:
             "配置读起来像开着、实际关着，必须有 WARNING"
 
     def test_message_names_every_dangling_source(self, _shadow_env, caplog):
-        _shadow_env.setenv("SOURCES", "holland2stay")
+        _shadow_env.setenv("SOURCES", "codomo")
         _shadow_env.setenv("SHADOW_SOURCES", "ourcampus,xior")
 
         with caplog.at_level(logging.WARNING, logger="config"):
@@ -285,7 +283,7 @@ class TestDanglingShadowSource:
 
     def test_silent_when_shadow_sources_are_all_enabled(self, _shadow_env, caplog):
         """正常配置不该刷警告——否则日志里全是噪音，真出事时看不见。"""
-        _shadow_env.setenv("SOURCES", "holland2stay,xior")
+        _shadow_env.setenv("SOURCES", "codomo,xior")
         _shadow_env.setenv("SHADOW_SOURCES", "xior")
 
         with caplog.at_level(logging.WARNING, logger="config"):
@@ -295,7 +293,7 @@ class TestDanglingShadowSource:
         assert not [r for r in caplog.records if "SHADOW_SOURCES" in r.getMessage()]
 
     def test_silent_when_shadow_sources_is_empty(self, _shadow_env, caplog):
-        _shadow_env.setenv("SOURCES", "holland2stay")
+        _shadow_env.setenv("SOURCES", "codomo")
         _shadow_env.delenv("SHADOW_SOURCES", raising=False)
 
         with caplog.at_level(logging.WARNING, logger="config"):
@@ -308,7 +306,7 @@ class TestDanglingShadowSource:
 class TestShadowStillFiltersProperly:
     def test_dangling_entry_never_enables_the_source(self, _shadow_env):
         """警告归警告，影子名单不能反过来把一个没启用的平台打开。"""
-        _shadow_env.setenv("SOURCES", "holland2stay")
+        _shadow_env.setenv("SOURCES", "codomo")
         _shadow_env.setenv("SHADOW_SOURCES", "ourcampus")
 
         cfg = load_config()

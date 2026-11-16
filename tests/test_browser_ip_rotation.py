@@ -16,7 +16,7 @@ from types import MethodType
 
 import pytest
 
-from browser_fetcher import H2S_PROFILE, SiteProfile, BrowserFetcher
+from browser_fetcher import XIOR_PROFILE, SiteProfile, BrowserFetcher
 from scrapers.base import BlockedError
 
 
@@ -49,7 +49,7 @@ def _stub_launch(fetcher: BrowserFetcher) -> list[str]:
 
 class TestRebuildRotatesExit:
     def test_rebuild_closes_old_and_launches_new(self):
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         proxies = _stub_launch(f)
         f._launch()
         old_browser = f._browser
@@ -76,7 +76,7 @@ class TestRebuildRotatesExit:
 
     def test_rebuild_without_browser_is_a_noop(self):
         """没 __enter__ 就调用时，凭空 launch 一个不叫「重建」。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         proxies = _stub_launch(f)
 
         assert f._rebuild_browser() is False
@@ -85,7 +85,7 @@ class TestRebuildRotatesExit:
 
 class TestInitRetriesOnFreshExit:
     def test_each_failed_attempt_gets_a_new_exit(self, monkeypatch):
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         _stub_launch(f)
         f._launch()
 
@@ -105,7 +105,7 @@ class TestInitRetriesOnFreshExit:
 
     def test_no_rebuild_after_the_last_attempt(self):
         """最后一次失败后就要抛错了，再建一个浏览器纯属浪费。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         proxies = _stub_launch(f)
         f._launch()
         f._navigate_and_verify = MethodType(
@@ -119,7 +119,7 @@ class TestInitRetriesOnFreshExit:
         assert len(proxies) == 3
 
     def test_success_on_second_exit_is_not_reported_as_failure(self):
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         _stub_launch(f)
         f._launch()
         calls = {"n": 0}
@@ -139,7 +139,7 @@ class TestInitRetriesOnFreshExit:
 class TestFetch403RotatesExit:
     def test_403_rebuilds_browser_before_re_challenging(self):
         """403 不是 clearance 过期时，原地重跑挑战换不掉被挡的那个 IP。"""
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         _stub_launch(f)
         f._launch()
         f._initialized = True
@@ -164,16 +164,15 @@ class TestFetch403RotatesExit:
             lambda self, *a, **kw: responses.pop(0), f
         )
 
-        result = f.fetch("/api/graphql")
+        result = f.fetch("/wp-admin/admin-ajax.php")
 
         assert result["status"] == 200
         assert rebuilds["n"] == 1, "403 之后没换 IP"
 
     def test_clearance_expiry_does_not_rotate(self):
         """clearance 过期是瞬时的，重新导航就好；换 IP 反而丢掉已有会话。"""
-        import json
 
-        f = BrowserFetcher(profile=H2S_PROFILE)
+        f = BrowserFetcher(profile=XIOR_PROFILE)
         _stub_launch(f)
         f._launch()
         f._initialized = True
@@ -189,14 +188,14 @@ class TestFetch403RotatesExit:
         responses = [
             {
                 "status": 403, "ok": False,
-                "text": json.dumps({"code": "clearance_required"}),
+                "text": "<html><script>window._cf_chl_opt = {};</script></html>",
                 "headers": {},
             },
             {"status": 200, "ok": True, "text": "{}", "headers": {}},
         ]
         f._raw_fetch = MethodType(lambda self, *a, **kw: responses.pop(0), f)
 
-        f.fetch("/api/graphql")
+        f.fetch("/wp-admin/admin-ajax.php")
         assert rebuilds["n"] == 0, "clearance 过期被当成了 IP 被封"
 
 
@@ -209,7 +208,7 @@ class TestRebuildRefusalIsVisible:
     带过。于是「重试 3 次，每次换一个出口 IP」会静默退化成「在同一个 IP 上原样
     重试 3 次」——日志上完全看不出区别，而这正是 2026-08-03 那次熔断的成因描述。
 
-    两个 profile 现在都是 ``rotating_proxy=True``，所以这是**陷阱不是 bug**。
+    浏览器 profile 现在都是 ``rotating_proxy=True``，所以这是**陷阱不是 bug**。
     修法也只是让它可见：真到了那天，日志得说得出「我没换 IP，因为这个 profile
     不轮换」，而不是让人对着三条一模一样的失败猜。
     """
@@ -236,10 +235,10 @@ class TestRebuildRefusalIsVisible:
         """还没 __enter__ 就调重建 = 调用方绕过了正常生命周期，同样要可见。"""
         import logging
 
-        from browser_fetcher import H2S_PROFILE, BrowserFetcher
+        from browser_fetcher import XIOR_PROFILE, BrowserFetcher
 
         f = BrowserFetcher.__new__(BrowserFetcher)
-        f._profile = H2S_PROFILE
+        f._profile = XIOR_PROFILE
         f._browser = None
         f._proxy_url = ""
 

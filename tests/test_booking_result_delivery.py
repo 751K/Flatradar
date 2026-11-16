@@ -10,7 +10,7 @@ Laurentina_18101 / Lan 两个用户只用 App（``notification_channels_json = [
 2. 送达判断只看 ``notifier.send_booking_success``（用户自己配的渠道），渠道
    为空就恒为 False——每次成功都报假 CRITICAL，真送不到时反而被淹掉。
 
-``_process_booking_results`` 此前只有一条 grep 源码的测试，这里补行为测试。
+``process_booking_results`` 此前只有一条 grep 源码的测试，这里补行为测试。
 """
 from __future__ import annotations
 
@@ -19,12 +19,14 @@ import logging
 
 import pytest
 
-import monitor
-from bookers.h2s_checkout import BookingResult
+from bookers.base import BookingResult
+from mcore import booking_round
+from mcore.state import runtime
 from models import Listing
 
 
-def _listing(source="holland2stay", lid="L1"):
+# 默认用一个有占房窗口的平台（BOOKING_HOLD_SOURCES），「成功」= 要去付款。
+def _listing(source="xior", lid="L1"):
     return Listing(id=lid, name="Teststraat 1", status="Available to book",
                    price_raw="€900", available_from="2026-11-01", features=[],
                    url="https://example/l", city="Eindhoven", source=source)
@@ -82,8 +84,8 @@ def _run(listing, *, channel_ok, push, success=True, phase=None):
         notifier = _Notifier(channel_ok)
 
         async def _go():
-            tasks = await monitor._process_booking_results(
-                [(user, notifier, [listing], fut, None)], None, _Storage(), push,
+            tasks = await booking_round.process_booking_results(
+                [booking_round.BookingJob(user, notifier, [listing], fut)], None, _Storage(), push,
             )
             # run_once 末尾会 gather 这些；这里照做，否则失败推送根本没跑
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -96,9 +98,9 @@ def _run(listing, *, channel_ok, push, success=True, phase=None):
 
 @pytest.fixture(autouse=True)
 def _clean_retry_queue():
-    monitor.retry_queue.discard("u1", "L1")
+    runtime.retry_queue.discard("u1", "L1")
     yield
-    monitor.retry_queue.discard("u1", "L1")
+    runtime.retry_queue.discard("u1", "L1")
 
 
 def _criticals(caplog):
@@ -123,40 +125,28 @@ class TestBookedPushIsSent:
             fut = loop.create_future()
             fut.set_result(BookingResult(listing=_listing(), success=True, message="m",
                                          dry_run=True, phase="dry_run"))
-            loop.run_until_complete(monitor._process_booking_results(
-                [(_User(), _Notifier(True), [_listing()], fut, None)], None, _Storage(), push))
+            loop.run_until_complete(booking_round.process_booking_results(
+                [booking_round.BookingJob(_User(), _Notifier(True), [_listing()], fut)], None, _Storage(), push))
         finally:
             loop.close()
         assert push.calls == []
 
 
 class TestFailurePushOnEveryUserFacingPath:
-    """用户侧「没订上」的文本通知有三处发出点，推送得跟着每一处。"""
+    """用户侧「没订上」的文本通知有两处发出点，推送得跟着每一处。"""
 
     def test_blocked(self, monkeypatch):
-        from mcore import booking_round
         monkeypatch.setattr(booking_round, "should_notify_block", lambda: True)
-        monkeypatch.setattr(booking_round, "mark_h2s_login_blocked", lambda *_: None)
         push = _Push()
         _run(_listing(), channel_ok=False, push=push, success=False, phase="blocked")
         assert ("u1", "L1", "booking_failed") in push.calls
 
     def test_blocked_inside_throttle_window_stays_silent(self, monkeypatch):
         """节流期内文本通知不发，推送也不该单独发。"""
-        from mcore import booking_round
         monkeypatch.setattr(booking_round, "should_notify_block", lambda: False)
-        monkeypatch.setattr(booking_round, "mark_h2s_login_blocked", lambda *_: None)
         push = _Push()
         _run(_listing(), channel_ok=False, push=push, success=False, phase="blocked")
         assert push.calls == []
-
-    def test_operation_rejected(self, monkeypatch):
-        from mcore import booking_round
-        monkeypatch.setattr(booking_round, "should_notify_operation_rejected", lambda: False)
-        push = _Push()
-        _run(_listing(), channel_ok=False, push=push, success=False,
-             phase="operation_rejected")
-        assert push.calls == [("u1", "L1", "booking_failed")]
 
 
 class TestDeliveredCountsPush:
@@ -202,7 +192,6 @@ class TestHungBookingDoesNotBlockTheRound:
     def test_later_users_still_processed_and_hung_user_not_reported(
         self, monkeypatch, caplog,
     ):
-        from mcore import booking_round
 
         monkeypatch.setattr(booking_round, "_BOOKING_RESULT_TIMEOUT_SEC", 0.05)
         caplog.set_level(logging.ERROR)
@@ -220,11 +209,11 @@ class TestHungBookingDoesNotBlockTheRound:
             push = _Push()
 
             async def _go():
-                tasks = await monitor._process_booking_results([
-                    (_User("u-hung", "Hung"), hung_notifier,
-                     [_listing(lid="L1")], hung, None),
-                    (_User("u2", "Second"), ok_notifier,
-                     [_listing(lid="L2")], done, None),
+                tasks = await booking_round.process_booking_results([
+                    booking_round.BookingJob(_User("u-hung", "Hung"), hung_notifier,
+                                             [_listing(lid="L1")], hung),
+                    booking_round.BookingJob(_User("u2", "Second"), ok_notifier,
+                                             [_listing(lid="L2")], done),
                 ], None, _Storage(), push)
                 await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -265,8 +254,8 @@ class TestBookingFailedPayload:
     def test_wording_by_platform_and_no_reason_leak(self):
         from mcore.push import _fcm_payload_booking_failed, _payload_booking_failed
 
-        cases = [("holland2stay", "en", "Booking failed", "book manually"),
-                 ("holland2stay", "zh", "预订失败", "手动预订"),
+        cases = [("xior", "en", "Booking failed", "book manually"),
+                 ("xior", "zh", "预订失败", "手动预订"),
                  ("plaza", "en", "Registration failed", "register manually"),
                  ("plaza", "zh", "注册失败", "手动注册")]
         for src, lang, title, body in cases:

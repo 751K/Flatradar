@@ -143,7 +143,7 @@ class ChartOps:
     def chart_source_dist(self, days: int | None = None) -> list[dict]:
         where, params = self._listing_where(days)
         rows = self._conn.execute(
-            """SELECT COALESCE(NULLIF(source,''), 'holland2stay') AS source, COUNT(*) AS cnt
+            """SELECT source, COUNT(*) AS cnt
                FROM listings{where} GROUP BY source ORDER BY cnt DESC""".format(where=where),
             params,
         ).fetchall()

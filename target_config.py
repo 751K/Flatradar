@@ -4,8 +4,7 @@
 ----
 监控范围本质是表格数据，却被压成了带分隔符的字符串：
 
-    CITIES="Eindhoven,29|Amsterdam,24"
-    AVAILABILITY_FILTERS="Available to book,179|Reserved,6203"
+    CODOMO_CITIES="Eindhoven,29|Amsterdam,24"
     SHARD_SIZES="xior:4"
 
 2026-08-06 实测，同一类输入错误的后果毫无一致性：
@@ -13,8 +12,7 @@
     CITIES=Eindhoven          漏 ID     → 静默丢弃，**0 个城市，monitor 照常跑**
     CITIES=Eindhoven;29       分隔符错   → 同上，静默 0 个城市
     CITIES=Eindhoven,abc      ID 非数字  → ValueError，monitor 起不来
-    AVAILABILITY_FILTERS=…,999999       → 照单全收，抓一个不存在的状态
-    SOURCES=holland2stay,xiorr          → 照单全收，一个不存在的平台
+    SOURCES=codomo,xiorr                → 照单全收，一个不存在的平台
 
 最糟的是第一种：解析不出来就得到空列表，而空列表是**合法配置**（「不监控任何
 城市」），于是监控正常启动、正常跑轮次、一条房源都不抓，直到几小时后 watchdog
@@ -28,8 +26,8 @@
 
 校验分两层，分开报：
 
-- **格式**：分隔符对不对、字段数够不够、该是数字的是不是数字
-- **实体**：平台名 / 城市 ID / 状态 ID 是否真的存在
+- **格式**：分隔符对不对、字段数够不够
+- **实体**：平台名 / 城市或楼盘 key 是否真的存在
 
 后者单独分开是因为它可以是**警告而非错误**：官方注册表会变，写死拒绝会让一个
 新上线的城市变成启动失败。
@@ -39,20 +37,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mcore.registry import KNOWN_CITIES, TARGET_SPECS, target_name
+from mcore.registry import TARGET_SPECS, target_name
 from mcore.sources import KNOWN_SOURCES
-
-#: 已知的 Holland2Stay 可用状态 ID → 荷兰语标签。取自 AVAILABILITY_FILTERS 的
-#: 六个取值（见 ARCHITECTURE 的房源状态与完整性）。用于校验，不用于产生默认值。
-KNOWN_AVAILABILITY_IDS: dict[int, str] = {
-    179: "Direct te boeken",
-    336: "Beschikbaar in loterij",
-    6203: "Reserved",
-    6204: "To be in lottery",
-    180: "Niet beschikbaar",
-    6253: "Coming soon",
-}
-
 
 @dataclass(frozen=True)
 class Problem:
@@ -78,7 +64,7 @@ def _entries(raw: str) -> list[str]:
 
 
 def parse_sources(raw: str) -> tuple[list[str], list[Problem]]:
-    """``holland2stay,ourdomain`` → 平台名列表。逗号或 ``|`` 都接受。"""
+    """``codomo,ourdomain`` → 平台名列表。逗号或 ``|`` 都接受。"""
     problems: list[Problem] = []
     out: list[str] = []
     for name in (raw or "").replace("|", ",").split(","):
@@ -97,49 +83,6 @@ def parse_sources(raw: str) -> tuple[list[str], list[Problem]]:
     return out, problems
 
 
-def parse_cities(raw: str) -> tuple[list[tuple[str, int]], list[Problem]]:
-    """``名称,ID|名称,ID`` → ``[(名称, ID)]``，用于 Holland2Stay。
-
-    ID 必须是整数：H2S 的 GraphQL 按数字 city id 过滤，写错了不会报错，只会
-    返回空结果——那正是「抓到 0 条」和「真的没房」分不开的来源。
-    """
-    known_ids = {int(c["id"]) for c in KNOWN_CITIES}
-    known_by_id = {int(c["id"]): c["name"] for c in KNOWN_CITIES}
-    problems: list[Problem] = []
-    out: list[tuple[str, int]] = []
-
-    for entry in _entries(raw):
-        parts = entry.rsplit(",", 1)
-        if len(parts) != 2:
-            problems.append(Problem(
-                "CITIES", entry, "格式应为「城市名,ID」，缺少逗号或 ID",
-            ))
-            continue
-        name, raw_id = parts[0].strip(), parts[1].strip()
-        if not name:
-            problems.append(Problem("CITIES", entry, "城市名为空"))
-            continue
-        try:
-            city_id = int(raw_id)
-        except ValueError:
-            problems.append(Problem("CITIES", entry, f"ID {raw_id!r} 不是整数"))
-            continue
-        if city_id not in known_ids:
-            problems.append(Problem(
-                "CITIES", entry,
-                f"ID {city_id} 不在已知城市表里（mcore.registry.KNOWN_CITIES）",
-                fatal=False,
-            ))
-        elif known_by_id[city_id] != name:
-            problems.append(Problem(
-                "CITIES", entry,
-                f"ID {city_id} 对应的是 {known_by_id[city_id]!r}，写的却是 {name!r}",
-                fatal=False,
-            ))
-        out.append((name, city_id))
-    return out, problems
-
-
 #: 各平台的 target 注册表：key → 显示名。
 _KNOWN_TARGETS: dict[str, dict[str, str]] = {
     source: {c["key"]: target_name(c) for c in spec.registry}
@@ -153,10 +96,10 @@ TARGET_KEYS: dict[str, str] = {
 
 
 def parse_targets(env_key: str, raw: str) -> tuple[list[tuple[str, str]], list[Problem]]:
-    """``显示名,key|显示名,key`` → ``[(显示名, key)]``，用于非 H2S 的三个平台。
+    """``显示名,key|显示名,key`` → ``[(显示名, key)]``。
 
-    与 ``parse_cities`` 的区别只有 key 不是整数；单独一个函数是为了让错误信息
-    说得出「这是哪个平台的哪个楼盘」。
+    写错的 key 不会在抓取时报错，只会让那个目标永远是 0 条——所以未登记的 key
+    要在这里说出来（不致命：注册表可能还没跟上平台新开的城市）。
     """
     source = TARGET_KEYS.get(env_key, "")
     known = _KNOWN_TARGETS.get(source, {})
@@ -180,41 +123,6 @@ def parse_targets(env_key: str, raw: str) -> tuple[list[tuple[str, str]], list[P
                 fatal=False,
             ))
         out.append((name, key))
-    return out, problems
-
-
-def parse_availability(raw: str) -> tuple[list[tuple[str, int]], list[Problem]]:
-    """``标签,ID|标签,ID`` → ``[(标签, ID)]``。
-
-    ID 会被原样发给 H2S 的 GraphQL。写一个不存在的值不会报错，只会让该过滤器
-    什么都匹配不到——又是一个「抓到 0 条」说不清来源的坑。
-    """
-    problems: list[Problem] = []
-    out: list[tuple[str, int]] = []
-
-    for entry in _entries(raw):
-        parts = entry.rsplit(",", 1)
-        if len(parts) != 2:
-            problems.append(Problem(
-                "AVAILABILITY_FILTERS", entry, "格式应为「标签,ID」，缺少逗号或 ID",
-            ))
-            continue
-        label, raw_id = parts[0].strip(), parts[1].strip()
-        try:
-            fid = int(raw_id)
-        except ValueError:
-            problems.append(Problem(
-                "AVAILABILITY_FILTERS", entry, f"ID {raw_id!r} 不是整数",
-            ))
-            continue
-        if fid not in KNOWN_AVAILABILITY_IDS:
-            problems.append(Problem(
-                "AVAILABILITY_FILTERS", entry,
-                f"ID {fid} 不是 H2S 的已知状态"
-                f"（可选：{', '.join(str(i) for i in sorted(KNOWN_AVAILABILITY_IDS))}）",
-                fatal=False,
-            ))
-        out.append((label or KNOWN_AVAILABILITY_IDS.get(fid, str(fid)), fid))
     return out, problems
 
 
@@ -273,14 +181,7 @@ def format_source_map(mapping: dict[str, int]) -> str:
 _PARSERS = {
     "SOURCES": lambda v: parse_sources(v),
     "SHADOW_SOURCES": lambda v: parse_sources(v),
-    "CITIES": lambda v: parse_cities(v),
-    "OURDOMAIN_CITIES": lambda v: parse_targets("OURDOMAIN_CITIES", v),
-    "OURCAMPUS_CITIES": lambda v: parse_targets("OURCAMPUS_CITIES", v),
-    "XIOR_CITIES": lambda v: parse_targets("XIOR_CITIES", v),
-    "MAGIS_CITIES": lambda v: parse_targets("MAGIS_CITIES", v),
-    "STUDENTEXPERIENCE_CITIES": lambda v: parse_targets("STUDENTEXPERIENCE_CITIES", v),
-    "PLAZA_CITIES": lambda v: parse_targets("PLAZA_CITIES", v),
-    "AVAILABILITY_FILTERS": lambda v: parse_availability(v),
+    **{key: (lambda v, _k=key: parse_targets(_k, v)) for key in TARGET_KEYS},
     "SHARD_SIZES": lambda v: parse_source_map("SHARD_SIZES", v),
     "SOURCE_MIN_INTERVALS": lambda v: parse_source_map("SOURCE_MIN_INTERVALS", v),
 }
@@ -302,7 +203,7 @@ STRUCTURED_KEYS = frozenset(_PARSERS)
 # 订阅串没有它而照旧不抓。唯一的痕迹被加城市这个动作本身抹掉了。
 #
 # 为什么不能直接判「注册表有、订阅没有」：那不是缺陷，多数时候是本意。实测生效
-# 配置——holland2stay 26 城订 2 个、Xior 30 栋订 4 栋，全是明确的选择。照这个判据
+# 配置——H2S（今 Codomo）26 城订 2 个、Xior 30 栋订 4 栋，全是明确的选择。照这个判据
 # 首轮就会报 50 条，而其中 0 条是真的。
 #
 # 所以判的是**增量**：与上次看到的注册表相比新出现、且没进订阅的那些。第一次运行
@@ -315,7 +216,7 @@ _ALL_WHEN_EMPTY = frozenset(
 )
 
 #: 参与漂移检查的键：形如「一张注册表 + 一条订阅串」的那些。
-DRIFT_KEYS: tuple[str, ...] = ("CITIES", *TARGET_KEYS)
+DRIFT_KEYS: tuple[str, ...] = tuple(TARGET_KEYS)
 
 #: 快照存在 ``meta`` 表的这个键下。monitor 写、设置页也写，所以名字只能有一份。
 #: 放 meta 而不是 app_settings：后者只装 runtime 配置，混进别的键会让 hydrate()
@@ -325,8 +226,6 @@ REGISTRY_SEEN_META_KEY = "registry_targets_seen"
 
 def registry_of(env_key: str) -> dict[str, str]:
     """这个配置键背后的注册表：key → 显示名。不认识的键返回空表。"""
-    if env_key == "CITIES":
-        return {str(c["id"]): c["name"] for c in KNOWN_CITIES}
     return dict(_KNOWN_TARGETS.get(TARGET_KEYS.get(env_key, ""), {}))
 
 
@@ -410,8 +309,8 @@ def validate(values: dict[str, str]) -> list[Problem]:
 def validate_effective(env: dict[str, str] | None = None) -> list[Problem]:
     """校验当前**生效中**的配置。启动自检用。
 
-    额外补一条只有在这里才判得出的：``CITIES`` 解析后为空。空列表是合法配置
-    （「不监控任何城市」），但如果原始字符串非空却解析出 0 项，那就是解析全军
+    额外补一条只有在这里才判得出的：订阅串解析后为空。空列表是合法配置
+    （「不监控任何目标」），但如果原始字符串非空却解析出 0 项，那就是解析全军
     覆没——监控会正常启动、正常跑轮次、一条都不抓。这种情况必须吼出来。
     """
     import os
@@ -420,13 +319,14 @@ def validate_effective(env: dict[str, str] | None = None) -> list[Problem]:
     values = {k: src.get(k, "") for k in STRUCTURED_KEYS if src.get(k, "")}
     problems = validate(values)
 
-    raw_cities = src.get("CITIES", "")
-    if raw_cities.strip():
-        parsed, _ = parse_cities(raw_cities)
-        if not parsed:
-            problems.append(Problem(
-                "CITIES", raw_cities,
-                "整条都没解析出城市——Holland2Stay 本轮什么都不会抓，"
-                "而空列表本身是合法配置，不会有别的地方报错",
-            ))
+    for key, source in TARGET_KEYS.items():
+        raw = src.get(key, "")
+        if raw.strip():
+            parsed, _ = parse_targets(key, raw)
+            if not parsed:
+                problems.append(Problem(
+                    key, raw,
+                    f"整条都没解析出目标——{source} 本轮什么都不会抓，"
+                    "而空列表本身是合法配置，不会有别的地方报错",
+                ))
     return problems

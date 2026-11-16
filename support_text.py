@@ -26,7 +26,7 @@ SECTIONS_EN: list[tuple[str, str]] = [
     (
         "About FlatRadar",
         "FlatRadar is an independent, unofficial monitoring tool for rental "
-        "housing listings across supported platforms, including Holland2Stay, "
+        "housing listings across supported platforms, including Codomo, "
         "OurDomain, and Xior. We help users save filters, receive alerts when "
         "matching homes appear, and view listings on a map, calendar, and "
         "dashboard. FlatRadar is not affiliated with, endorsed by, sponsored by, "
@@ -83,7 +83,7 @@ SECTIONS_ZH: list[tuple[str, str]] = [
     (
         "关于 FlatRadar",
         "FlatRadar 是一款独立的、非官方的多平台租房监控工具，当前覆盖 "
-        "Holland2Stay、OurDomain、Xior 等支持的平台。可以保存搜索筛选、有匹配"
+        "Codomo、OurDomain、Xior 等支持的平台。可以保存搜索筛选、有匹配"
         "房源时发送提醒，并提供地图、日历和仪表盘视图。FlatRadar 与其监控的任何"
         "房源平台均不存在关联、授权、赞助或运营关系。",
     ),

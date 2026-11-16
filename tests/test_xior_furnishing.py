@@ -259,7 +259,7 @@ class TestResyncExistingRows:
                    last_status, source)
                VALUES ('h1','h','Occupied','1000','',
                        '["Finishing: Kaal"]','','Eindhoven',
-                       '2026-01-01','2026-01-01',1,'Occupied','holland2stay')"""
+                       '2026-01-01','2026-01-01',1,'Occupied','codomo')"""
         )
         st.conn.commit(); st.close()
         StorageBase._migrated_paths.clear()

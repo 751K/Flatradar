@@ -10,7 +10,7 @@ API v1 房源端点
 - status        房源状态精确匹配（"Available to book" 等）
 - city          单城市 SQL 过滤（兼容旧版；优先用 cities）
 - cities        多城市，逗号分隔（如 "Eindhoven,Amsterdam"）
-- source        单平台 SQL 过滤（如 "holland2stay" / "ourdomain"）
+- source        单平台 SQL 过滤（如 "codomo" / "ourdomain"）
 - sources       多平台，逗号分隔
 - q             名称模糊搜索
 - types         房型过滤，逗号分隔（如 "Studio,Apartment"）

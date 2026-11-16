@@ -93,19 +93,19 @@ def test_timeout_blocks_only_same_listing_until_thread_ends(db, monkeypatch):
     room = listing('pz_1')
     async def run():
         loop = asyncio.get_running_loop()
-        futures = booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, {}, {}, float('inf'), db)
+        futures = booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, float('inf'), db)
         assert started.wait(2)
         await booking_round.process_booking_results(futures, None, db, Push())
         guard = PlazaGuard(db)
         row = guard.get_listing('shared', '1')
         assert row['mutated'] and row['timed_out'] and row['state'] == 'running'
         assert notifier.uncertain and not notifier.failed
-        assert booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, {}, {}, float('inf'), db) == []
+        assert booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, float('inf'), db) == []
         shared = user('u2')
-        assert booking_round.submit_bookings(loop, {'u2': [room]}, [(shared, Notifier())], {}, {}, {}, float('inf'), db) == []
+        assert booking_round.submit_bookings(loop, {'u2': [room]}, [(shared, Notifier())], {}, float('inf'), db) == []
         other_room = listing('pz_2')
         other_futures = booking_round.submit_bookings(loop, {'u1': [other_room]},
-                           [(owner, notifier)], {}, {}, {}, float('inf'), db)
+                           [(owner, notifier)], {}, float('inf'), db)
         assert len(other_futures) == 1
         assert (await other_futures[0][3]).success
         other_tasks = await booking_round.process_booking_results(other_futures, None, db, Push())
@@ -136,7 +136,7 @@ def test_submit_rejection_vs_unknown_response(db, monkeypatch, response, expecte
     owner, notifier, room = user(), Notifier(), listing('pz_1')
     async def run():
         loop = asyncio.get_running_loop()
-        futures = booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, {}, {}, float('inf'), db)
+        futures = booking_round.submit_bookings(loop, {'u1': [room]}, [(owner, notifier)], {}, float('inf'), db)
         tasks = await booking_round.process_booking_results(futures, None, db, Push())
         await asyncio.gather(*tasks)
     asyncio.run(run())
@@ -156,7 +156,7 @@ def test_unavailable_journal_never_submits(db, monkeypatch):
     owner = user()
     async def run():
         return booking_round.submit_bookings(asyncio.get_running_loop(),
-                    {'u1': [listing('pz_1')]}, [(owner, Notifier())], {}, {}, {}, float('inf'), db)
+                    {'u1': [listing('pz_1')]}, [(owner, Notifier())], {}, float('inf'), db)
     assert asyncio.run(run()) == []
     assert calls == []
 
@@ -197,7 +197,7 @@ def test_record_failure_prevents_react_request(db, monkeypatch):
     owner, notifier, room = user(), Notifier(), listing('pz_1')
     async def run():
         futures = booking_round.submit_bookings(asyncio.get_running_loop(), {'u1': [room]},
-                                               [(owner, notifier)], {}, {}, {}, float('inf'), db)
+                                               [(owner, notifier)], {}, float('inf'), db)
         tasks = await booking_round.process_booking_results(futures, None, db, Push())
         await asyncio.gather(*tasks)
     asyncio.run(run())
@@ -214,7 +214,7 @@ def test_after_monitor_death_attempt_stays_blocked_and_is_reported(db):
         conn.execute('UPDATE plaza_attempts SET pid=? WHERE attempt=?', (99999999, attempt))
     async def run():
         futures = booking_round.submit_bookings(asyncio.get_running_loop(), {'u1': [room]},
-                                               [(owner, notifier)], {}, {}, {}, float('inf'), db)
+                                               [(owner, notifier)], {}, float('inf'), db)
         assert futures == []
         for _ in range(10):
             if notifier.uncertain:
@@ -291,7 +291,7 @@ def test_success_response_with_unconfirmed_reaction_requires_review(db, monkeypa
     owner, notifier, room = user(), Notifier(), listing('pz_1')
     async def run():
         futures = booking_round.submit_bookings(asyncio.get_running_loop(), {'u1': [room]},
-                                               [(owner, notifier)], {}, {}, {}, float('inf'), db)
+                                               [(owner, notifier)], {}, float('inf'), db)
         await booking_round.process_booking_results(futures, None, db, Push())
     asyncio.run(run())
     row = PlazaGuard(db).get_listing('shared', room.id)
@@ -307,7 +307,7 @@ def test_unreadable_guard_is_reported_and_not_cleared(db, monkeypatch):
         raise OSError('disk read failure')
     async def run():
         futures = booking_round.submit_bookings(asyncio.get_running_loop(), {'u1': [room]},
-                                               [(owner, notifier)], {}, {}, {}, float('inf'), db)
+                                               [(owner, notifier)], {}, float('inf'), db)
         assert (await futures[0][3]).success
         monkeypatch.setattr(PlazaGuard, 'get_attempt', unreadable)
         await booking_round.process_booking_results(futures, None, db, Push())

@@ -32,7 +32,7 @@ def seeded(test_app):
     from app.db import storage as _storage
     with test_app.app_context():
         st = _storage()
-        _seed(st, "holland2stay", [(284, 6, 6, "")] * 10)
+        _seed(st, "codomo", [(284, 6, 6, "")] * 10)
         _seed(st, "ourdomain", [(12, 2, 2, "")] * 7 + [(0, 2, 0, "RateLimitError")] * 3)
         _seed(st, "xior", [(0, 4, 4, "")] * 10)
     return True
@@ -64,7 +64,7 @@ class TestApiShape:
     def test_reports_per_source_status(self, admin_client, seeded):
         body = admin_client.get("/api/monitoring").get_json()
         by_src = {s["source"]: s for s in body["sources"]}
-        assert by_src["holland2stay"]["status"] == "ok"
+        assert by_src["codomo"]["status"] == "ok"
         assert by_src["ourdomain"]["status"] == "down"
         # 常态零可订不该被钉在告警上
         assert by_src["xior"]["status"] == "ok"
@@ -90,7 +90,7 @@ class TestApiShape:
         body = admin_client.get("/api/monitoring?rounds=3").get_json()
         assert len(body["rounds"]) == 3
         assert {s["source"] for s in body["rounds"][0]["sources"]} == {
-            "holland2stay", "ourdomain", "xior",
+            "codomo", "ourdomain", "xior",
         }
 
     def test_params_are_clamped(self, admin_client, seeded):
@@ -167,7 +167,7 @@ def test_inbox_renders_upstream_maintenance_banner(admin_client, isolated_data_d
     html = r.data.decode()
     banner = html[html.index('id="upstream-maintenance-banner"') - 40:]
     assert 'class="maintenance-banner"' in banner[:120], "维护中却把横幅渲染成了 hidden"
-    assert "Holland2Stay 平台维护中" in html or "Holland2Stay under maintenance" in html
+    assert "Codomo 平台维护中" in html or "Codomo under maintenance" in html
 
 
 def test_system_info_has_admin_monitor_controls(admin_client, monkeypatch):

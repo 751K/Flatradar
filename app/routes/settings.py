@@ -14,7 +14,7 @@ from flask import Flask, flash, redirect, render_template, request, url_for
 import config
 
 from config import KNOWN_SOURCES, source_display_name
-from mcore.registry import (KNOWN_CITIES, KNOWN_MAGIS_CITIES, KNOWN_OURDOMAIN_CITIES,
+from mcore.registry import (KNOWN_CODOMO_CITIES, KNOWN_MAGIS_CITIES, KNOWN_OURDOMAIN_CITIES,
                             KNOWN_PLAZA_CITIES, KNOWN_STUDENTEXPERIENCE_CITIES,
                             KNOWN_XIOR_CITIES, TARGET_SPECS)
 
@@ -48,30 +48,14 @@ SETTINGS_KEYS: list[str] = [
     "HEARTBEAT_INTERVAL_MINUTES",
     # 地图显示范围
     "MAP_MAX_AGE_DAYS",
-    # H2S REST 快速通道（mcore/h2s_rest.py）。monitor 每个 tick 现读，热重载即生效
-    "H2S_REST_ENABLED", "H2S_REST_INTERVAL",
-    "H2S_REST_START", "H2S_REST_END", "H2S_REST_WEEKDAYS_ONLY", "H2S_REST_HOME_INTERVAL",
 ]
 
 # 数值型 key：空值或非法值跳过写入，避免 load_config() 中 int("") / int("abc") 抛错
 _NUMERIC_KEYS = frozenset({
     "CHECK_INTERVAL", "PEAK_INTERVAL", "MIN_INTERVAL", "JITTER_RATIO",
-    "HEARTBEAT_INTERVAL_MINUTES", "MAP_MAX_AGE_DAYS", "H2S_REST_INTERVAL",
-    "H2S_REST_HOME_INTERVAL",
+    "HEARTBEAT_INTERVAL_MINUTES", "MAP_MAX_AGE_DAYS",
 })
-_FLOAT_KEYS = frozenset({"JITTER_RATIO", "H2S_REST_INTERVAL", "H2S_REST_HOME_INTERVAL"})
-
-# HH:MM 型 key：空值或格式不对不写入。monitor 那边读到坏值会回落默认窗口，
-# 但面板上看着是自己填的值、实际跑的是默认值，这种不一致不该进库。
-_TIME_KEYS = frozenset({"H2S_REST_START", "H2S_REST_END"})
-
-
-def _valid_hhmm(text: str) -> bool:
-    try:
-        h, m = (int(x) for x in text.split(":"))
-    except ValueError:
-        return False
-    return 0 <= h <= 23 and 0 <= m <= 59
+_FLOAT_KEYS = frozenset({"JITTER_RATIO"})
 
 
 @admin_required
@@ -91,12 +75,12 @@ def settings() -> Any:
         # 保存一次就会把它从 SOURCES 里悄悄删掉。
         sources = [s for s in selected_sources if s in KNOWN_SOURCES]
         if not sources:
-            sources = ["holland2stay"]
+            sources = [KNOWN_SOURCES[0]]
             flash(tr("settings_no_source", lang), "warning")
         sources_val = ",".join(sources)
         pending["SOURCES"] = sanitize_dotenv(sources_val)
 
-        # 城市：复选框提交 "CityName,ID" 格式，用 | 拼接。
+        # 城市：复选框提交 "显示名,key" 格式，用 | 拼接。
         #
         # **全部取消勾选就是空**，不回落到硬编码的默认城市。原先 CITIES 和
         # OURDOMAIN_CITIES 在空选时会写回 "Eindhoven,29" / "Amsterdam Diemen,
@@ -108,7 +92,7 @@ def settings() -> Any:
         # 只跳过本轮并 WARNING，不会出错。真要整个停掉某平台，取消勾选平台
         # 本身更直接——所以下面只提示，不代劳。
         city_lists = {
-            "CITIES": request.form.getlist("city_selected"),
+            "CODOMO_CITIES": request.form.getlist("codomo_city_selected"),
             "OURDOMAIN_CITIES": request.form.getlist("ourdomain_city_selected"),
             "XIOR_CITIES": request.form.getlist("xior_city_selected"),
             "MAGIS_CITIES": request.form.getlist("magis_city_selected"),
@@ -125,7 +109,7 @@ def settings() -> Any:
         #
         # ⚠️ 三个列表的「空」含义**并不相同**，别把它们一视同仁：
         #
-        #     CITIES            空 → 0 个城市，该平台不抓
+        #     CODOMO_CITIES     空 → 0 个城市，该平台不抓
         #     OURDOMAIN_CITIES  空 → 0 个楼盘，该平台不抓
         #     XIOR_CITIES       空 → **注册表里的全部楼盘**（config.py 的既有约定）
         #     MAGIS_CITIES      空 → **注册表里的全部城市**（同上）
@@ -140,9 +124,8 @@ def settings() -> Any:
         # 所以 xior / magis / studentexperience / plaza 不在下面这张表里：它们
         # 空着不是「没目标」，恰恰是「全都要」，对它们报「不会抓取」是错的。
         _no_target_when_empty = {
-            "CITIES": "holland2stay",
-            **{spec.env_key: src for src, spec in TARGET_SPECS.items()
-               if not spec.all_when_empty and spec.env_key in city_lists},
+            spec.env_key: src for src, spec in TARGET_SPECS.items()
+            if not spec.all_when_empty and spec.env_key in city_lists
         }
         empty_enabled = sorted(
             source_display_name(src)
@@ -171,14 +154,11 @@ def settings() -> Any:
                 except ValueError:
                     new_values[key] = f"(非法值: {sanitized!r})"
                     continue
-            if key in _TIME_KEYS and not _valid_hhmm(sanitized):
-                new_values[key] = f"(非法值: {sanitized!r})"
-                continue
             new_values[key] = sanitized
             pending[key] = sanitized
 
         logger.info(
-            "全局配置已保存 — sources=%s 间隔=%s 高峰=%s–%s(%s–%s/%s–%s) 仅工作日=%s 抖动=%s 心跳=%smin 日志=%s H2S城市=%s OD楼盘=%s",
+            "全局配置已保存 — sources=%s 间隔=%s 高峰=%s–%s(%s–%s/%s–%s) 仅工作日=%s 抖动=%s 心跳=%smin 日志=%s Codomo城市=%s OD楼盘=%s",
             sources_val,
             new_values.get("CHECK_INTERVAL", "?"),
             new_values.get("MIN_INTERVAL", "?"), new_values.get("PEAK_INTERVAL", "?"),
@@ -188,12 +168,12 @@ def settings() -> Any:
             new_values.get("JITTER_RATIO", "?"),
             new_values.get("HEARTBEAT_INTERVAL_MINUTES", "?"),
             new_values.get("LOG_LEVEL", "?"),
-            pending["CITIES"],
+            pending["CODOMO_CITIES"],
             pending["OURDOMAIN_CITIES"],
         )
 
         # 写之前先校验结构化的那几项。它们是分隔符拼出来的字符串，坏掉的后果
-        # 不一致：有的静默丢弃（CITIES 解析失败 → 0 个城市，监控照跑但什么都不
+        # 不一致：有的静默丢弃（订阅串解析失败 → 0 个城市，监控照跑但什么都不
         # 抓），有的直接让 load_config() 抛 ValueError，monitor 起不来。
         # 挡在写入之前，坏值就进不了库。
         problems = validate_structured(pending)
@@ -256,20 +236,15 @@ def settings() -> Any:
 
     selected_sources = {
         s.strip().lower()
-        for s in (env.get("SOURCES") or "holland2stay").replace("|", ",").split(",")
+        for s in (env.get("SOURCES") or KNOWN_SOURCES[0]).replace("|", ",").split(",")
         if s.strip()
     }
     if not selected_sources:
-        selected_sources = {"holland2stay"}
-
-    selected_city_ids: set[str] = set()
-    for entry in env.get("CITIES", "Eindhoven,29").split("|"):
-        parts = entry.strip().split(",")
-        if len(parts) >= 2:
-            selected_city_ids.add(parts[-1].strip())
+        selected_sources = {KNOWN_SOURCES[0]}
 
     # 空串对 all_when_empty 的平台是「全部」，所以未配置时全部勾上，
     # 而不是一个都不勾——后者会让用户以为默认什么都不抓。
+    selected_codomo_keys = _selected_target_keys(env, "codomo")
     selected_ourdomain_keys = _selected_target_keys(env, "ourdomain")
     selected_magis_keys = _selected_target_keys(env, "magis")
     selected_se_keys = _selected_target_keys(env, "studentexperience")
@@ -288,7 +263,7 @@ def settings() -> Any:
         env_overridden=env_overridden,
         config_status=config_status,
         setting_meta=setting_meta,
-        known_cities=KNOWN_CITIES,
+        known_codomo_cities=KNOWN_CODOMO_CITIES,
         known_ourdomain_cities=KNOWN_OURDOMAIN_CITIES,
         known_magis_cities=KNOWN_MAGIS_CITIES,
         known_se_cities=KNOWN_STUDENTEXPERIENCE_CITIES,
@@ -298,7 +273,7 @@ def settings() -> Any:
         xior_city_all_checked=xior_city_all_checked,
         selected_sources=selected_sources,
         source_options=[(k, source_display_name(k)) for k in KNOWN_SOURCES],
-        selected_city_ids=selected_city_ids,
+        selected_codomo_keys=selected_codomo_keys,
         selected_ourdomain_keys=selected_ourdomain_keys,
         selected_magis_keys=selected_magis_keys,
         selected_se_keys=selected_se_keys,
@@ -317,7 +292,11 @@ def settings() -> Any:
 def _selected_target_keys(env, source: str) -> set[str]:
     """设置页回显：某平台订阅串里勾中的 key。留空的含义见 ``TargetSpec``。"""
     spec = TARGET_SPECS[source]
-    raw = env.get(spec.env_key, spec.default_raw)
+    raw = env.get(spec.env_key)
+    if raw is None and spec.legacy_env_key:
+        raw = env.get(spec.legacy_env_key)
+    if raw is None:
+        raw = spec.default_raw
     if not raw and spec.all_when_empty:
         return {c["key"] for c in spec.registry}
     keys: set[str] = set()

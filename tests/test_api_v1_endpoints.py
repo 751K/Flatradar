@@ -58,11 +58,11 @@ def seeded(api_app):
         rows = [
             # id, name, status, price_raw, avail, features, city, source
             ("id-1", "Studio Centrum", "Available to book", "€700", "2026-06-01",
-             ["Type: Studio", "Area: 26.0 m²"], "Eindhoven", "holland2stay"),
+             ["Type: Studio", "Area: 26.0 m²"], "Eindhoven", "codomo"),
             ("id-2", "1BR West", "Available in lottery", "€950", "2026-07-01",
              ["Type: 1", "Area: 45.0 m²"], "Amsterdam", "ourdomain"),
             ("id-3", "2BR South", "Not available", "€1200", "2026-08-01",
-             ["Type: 2", "Area: 70.0 m²"], "Eindhoven", "holland2stay"),
+             ["Type: 2", "Area: 70.0 m²"], "Eindhoven", "codomo"),
         ]
         for lid, name, status, price, avail, feats, city, source in rows:
             st.conn.execute(
@@ -216,7 +216,7 @@ class TestListings:
                   "feature_map", "first_seen", "last_seen"):
             assert k in item
         assert item["price_value"] == 700.0
-        assert item["source"] == "holland2stay"
+        assert item["source"] == "codomo"
 
 
 class TestListingDetail:
@@ -428,7 +428,7 @@ class TestMe:
         r = api_client.get("/api/v1/filter/options")
         assert r.status_code == 200
         sources = set(r.get_json()["data"]["sources"])
-        assert {"holland2stay", "ourdomain"} <= sources
+        assert {"codomo", "ourdomain"} <= sources
 
     def test_filter_options_include_dim_sources(self, api_client, seeded):
         """客户端靠这张表标注"这条维度只对某几个平台生效"。"""
@@ -436,8 +436,10 @@ class TestMe:
         r = api_client.get("/api/v1/filter/options")
         table = r.get_json()["data"]["dim_sources"]
         assert table == config.filter_dim_sources()
-        # 抽一格实质核对：合同期限七个平台里只对 Holland2Stay 生效。
-        assert table["contract"] == ["holland2stay"]
+        # 抽一格实质核对：优惠徽标七个平台里只对 Codomo 生效；
+        # 合同期限眼下没有平台登记，表里不出现这个键。
+        assert table["offer"] == ["codomo"]
+        assert "contract" not in table
 
     def test_dim_sources_keys_are_real_source_keys(self, api_client, seeded):
         import config

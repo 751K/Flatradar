@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 
 from models import Listing
 
-from mcore.booking_candidates import collect_booking_candidates, listing_source
+from mcore.booking_candidates import collect_booking_candidates
 from mcore.booking_round import BookingJob, process_booking_results, submit_bookings
 from mcore.notify_round import (
     drop_shadow_sources,
@@ -39,7 +39,7 @@ def clear_maintenance_meta_if_recovered(storage: Storage) -> None:
         )
         storage.set_meta("upstream_maintenance_seen_at", "")
         storage.set_meta("upstream_maintenance_last_at", "")
-        logger.info("🔧→✅ H2S 平台维护已结束，抓取恢复正常")
+        logger.info("🔧→✅ 上游平台维护已结束，抓取恢复正常")
 
 
 # 这些结果只在一轮内传递。通知列表可被重放合并，但阶段不会通过模块全局
@@ -89,38 +89,21 @@ def prepare_round_events(cfg, storage, fresh: list[Listing], *, dry_run: bool) -
 
 async def submit_round_bookings(
     events: RoundEvents, fresh: list[Listing], user_notifiers, storage,
-    *, booking_deadline: float, loop, prewarm,
+    *, booking_deadline: float, loop,
 ) -> BookingSubmissions:
-    """收集候选、预登录并提交预订，返回所有已提交任务及提交错误。"""
+    """收集候选并提交预订，返回所有已提交任务及提交错误。"""
     ab_candidates, status_transition = collect_booking_candidates(
         events.new_listings, events.status_changes, fresh, user_notifiers, storage,
     )
-    candidate_user_ids = {
-        uid for uid, candidates in ab_candidates.items()
-        if any(listing_source(listing) == "holland2stay" for listing in candidates)
-    }
-    # 心跳需在候选预登录之前执行，且没有候选时也要执行。
-    try:
-        prewarm.heartbeat()
-        prewarm.start_for_candidates(candidate_user_ids)
-        await prewarm.wait_for_candidates()
-    except Exception:
-        logger.exception("预登录准备失败，本轮继续正常预订")
-
     submitted = BookingSubmissions()
     try:
         submit_bookings(
-            loop, ab_candidates, user_notifiers,
-            prewarm.cached, prewarm.futures, status_transition, booking_deadline,
+            loop, ab_candidates, user_notifiers, status_transition, booking_deadline,
             storage=storage, submitted=submitted.futures,
         )
     except Exception as exc:
         logger.exception("提交预订阶段失败，继续处理已提交任务")
         submitted.errors.append(exc)
-    try:
-        await prewarm.stash_pending()
-    except Exception:
-        logger.exception("收集预登录结果失败，继续处理预订和通知")
     return submitted
 
 
@@ -183,11 +166,7 @@ def finish_round(storage, events: RoundEvents, delivery: DeliveryResult) -> None
     )
 
 
-async def _report_round_failure(exc: Exception, fresh, storage, web_notifier, prewarm) -> None:
-    try:
-        await prewarm.stash_pending()
-    except Exception:
-        logger.exception("管线失败后收集预登录结果失败")
+async def _report_round_failure(exc: Exception, fresh, storage, web_notifier) -> None:
     logger.error("抓取后管线错误（入库/通知）listings=%d: %s", len(fresh), exc, exc_info=True)
     if should_notify_internal():
         try:
@@ -205,14 +184,14 @@ async def _report_round_failure(exc: Exception, fresh, storage, web_notifier, pr
 
 async def run_post_scrape(
     cfg, storage, user_notifiers, fresh, completeness, *, web_notifier,
-    dry_run: bool, booking_deadline: float, loop, prewarm,
+    dry_run: bool, booking_deadline: float, loop,
 ):
     """按顺序编排抓取后的阶段；失败时不把扫描结果用于 stale 收敛。"""
     try:
         events = prepare_round_events(cfg, storage, fresh, dry_run=dry_run)
         bookings = await submit_round_bookings(
             events, fresh, user_notifiers, storage,
-            booking_deadline=booking_deadline, loop=loop, prewarm=prewarm,
+            booking_deadline=booking_deadline, loop=loop,
         )
         from mcore import push  # 局部 import，避免冷启动加载 httpx
         delivery = await deliver_round_events(
@@ -221,5 +200,5 @@ async def run_post_scrape(
         finish_round(storage, events, delivery)
         return completeness
     except Exception as exc:
-        await _report_round_failure(exc, fresh, storage, web_notifier, prewarm)
+        await _report_round_failure(exc, fresh, storage, web_notifier)
         return {}

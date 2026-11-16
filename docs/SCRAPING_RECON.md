@@ -16,10 +16,10 @@ robots.txt 的内容不能单独证明数据使用或再分发获得许可。
 
 ## 1. 已接入平台：实现与历史观察
 
-当前仓库在 [mcore/sources.py](../mcore/sources.py) 中登记了 Holland2Stay、OurDomain、
+当前仓库在 [mcore/sources.py](../mcore/sources.py) 中登记了 Codomo（原 Holland2Stay）、OurDomain、
 OurCampus、Xior、Magis、Student Experience 和 Plaza。登记表示项目具备相应抓取器，
-不代表某个部署已启用该平台，也不保证上游接口当前可用。Holland2Stay、Xior 和
-OurDomain 分别见 [H2S.md](H2S.md)、[XIOR.md](XIOR.md) 和 [OURDOMAIN.md](OURDOMAIN.md)；
+不代表某个部署已启用该平台，也不保证上游接口当前可用。Codomo、Xior 和
+OurDomain 分别见 [CODOMO.md](CODOMO.md)、[XIOR.md](XIOR.md) 和 [OURDOMAIN.md](OURDOMAIN.md)；
 三者共用的 RENTCafe 预订流程见 [RENTCAFE.md](RENTCAFE.md)，Plaza 自动应征见
 [PLAZA.md](PLAZA.md)。
 

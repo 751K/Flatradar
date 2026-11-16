@@ -1,4 +1,4 @@
-"""The shared dispatch must preserve per-platform failure and recovery behavior."""
+"""每个平台走同一条调度路径：熔断、canary、节奏与代理上报都没有平台特例。"""
 import asyncio
 from unittest.mock import AsyncMock, Mock
 
@@ -14,7 +14,7 @@ def _task(source, city="City"):
 
 def _run(tasks, *, dry_run=False):
     async def execute():
-        return await scrape_round.dispatch_with_h2s_circuit(
+        return await scrape_round.dispatch_with_circuits(
             asyncio.get_running_loop(), tasks, storage=object(),
             source_totals={task.source: 1 for task in tasks},
             multi_source=True, dry_run=dry_run,
@@ -39,19 +39,19 @@ def dispatch(monkeypatch):
     return circuits, pacing, invoke, telemetry, proxy
 
 
-@pytest.mark.parametrize("source", ["holland2stay", "xior", "plaza"])
+@pytest.mark.parametrize("source", ["codomo", "xior", "plaza"])
 def test_success_uses_source_executor_and_relaxes_pacing(source, dispatch):
     _, pacing, invoke, telemetry, _ = dispatch
-    fresh, _, blocked, _ = _run([_task(source)])
-    assert len(fresh) == 1 and blocked is None
-    assert invoke.await_args.kwargs["isolated"] is (source in {"holland2stay", "xior"})
+    fresh, _ = _run([_task(source)])
+    assert len(fresh) == 1
+    assert invoke.await_args.kwargs["isolated"] is (source == "xior")
     assert invoke.await_args.kwargs["browser_source"] == source
     pacing.relax.assert_called_once()
     assert pacing.relax.call_args.args[0] == source
     assert telemetry.call_args.kwargs["source"] == source
 
 
-@pytest.mark.parametrize("source", ["holland2stay", "xior"])
+@pytest.mark.parametrize("source", ["codomo", "xior"])
 def test_proxy_failure_is_reported_even_when_another_source_succeeds(source, dispatch):
     _, _, invoke, telemetry, proxy = dispatch
 
@@ -61,15 +61,15 @@ def test_proxy_failure_is_reported_even_when_another_source_succeeds(source, dis
         return [object()], {}
 
     invoke.side_effect = scrape
-    fresh, completeness, _, _ = _run([_task(source), _task("plaza")])
+    fresh, completeness = _run([_task(source), _task("plaza")])
     assert len(fresh) == 1
     assert completeness[f"{source}:City"] is False
     assert proxy.call_args.args[0] == source
     assert {call.kwargs["source"] for call in telemetry.call_args_list} == {source, "plaza"}
 
 
-@pytest.mark.parametrize("source", ["holland2stay", "xior"])
-def test_rate_limit_penalizes_each_browser_source(source, dispatch):
+@pytest.mark.parametrize("source", ["codomo", "xior"])
+def test_rate_limit_penalizes_each_source(source, dispatch):
     _, pacing, invoke, _, _ = dispatch
     invoke.side_effect = RateLimitError("429")
     with pytest.raises(RateLimitError):
@@ -77,26 +77,35 @@ def test_rate_limit_penalizes_each_browser_source(source, dispatch):
     assert pacing.penalize.call_args.args[0] == source
 
 
-def test_h2s_block_invokes_login_protection(dispatch, monkeypatch):
-    _, _, invoke, telemetry, _ = dispatch
+def test_block_trips_the_sources_own_circuit(dispatch):
+    circuits, _, invoke, telemetry, _ = dispatch
     invoke.side_effect = BlockedError("403")
-    blocked = Mock()
-    monkeypatch.setattr(scrape_round, "mark_h2s_scrape_blocked", blocked)
-    _, _, error, mode = _run([_task("holland2stay")])
-    assert isinstance(error, BlockedError) and mode == "normal"
-    blocked.assert_called_once()
-    assert telemetry.call_args.kwargs["source"] == "holland2stay"
+    with pytest.raises(BlockedError):
+        _run([_task("codomo")])
+    assert circuits.trip.call_args.args[0] == "codomo"
+    assert telemetry.call_args.kwargs["source"] == "codomo"
 
 
-def test_h2s_canary_success_uses_special_recovery(dispatch, monkeypatch):
+def test_block_of_one_source_does_not_stop_the_round(dispatch):
+    circuits, _, invoke, _, _ = dispatch
+
+    async def scrape(loop, selected, **kwargs):
+        if selected[0].source == "codomo":
+            raise BlockedError("403")
+        return [object()], {"plaza:City": True}
+
+    invoke.side_effect = scrape
+    fresh, completeness = _run([_task("codomo"), _task("plaza")])
+    assert len(fresh) == 1
+    assert completeness == {"codomo:City": False, "plaza:City": True}
+
+
+def test_canary_success_recovers_through_the_shared_path(dispatch):
     circuits, _, invoke, _, _ = dispatch
     circuits.plan.return_value = ("canary", 1)
-    recovered = Mock()
-    monkeypatch.setattr(scrape_round, "mark_h2s_scrape_recovered", recovered)
-    _, _, _, mode = _run([_task("holland2stay", "one"), _task("holland2stay", "two")])
-    assert mode == "canary"
+    _run([_task("codomo", "one"), _task("codomo", "two")])
     assert len(invoke.await_args.args[1]) == 1
-    recovered.assert_called_once()
+    assert circuits.recover.call_args.args[0] == "codomo"
 
 
 def test_other_source_canary_uses_its_own_circuit(dispatch):
@@ -108,25 +117,26 @@ def test_other_source_canary_uses_its_own_circuit(dispatch):
     assert circuits.recover.call_args.args[0] == "xior"
 
 
-def test_h2s_open_does_not_prevent_other_sources(dispatch):
+def test_open_circuit_does_not_prevent_other_sources(dispatch):
     circuits, _, invoke, telemetry, _ = dispatch
     circuits.plan.side_effect = lambda source, n_tasks: (
-        ("open", 0) if source == "holland2stay" else ("normal", n_tasks)
+        ("open", 0) if source == "codomo" else ("normal", n_tasks)
     )
     circuits.remaining.return_value = 120
     circuits.reason.return_value = "blocked"
-    fresh, _, blocked, mode = _run([_task("holland2stay"), _task("plaza")])
-    assert len(fresh) == 1 and blocked is None and mode == "open"
+    fresh, completeness = _run([_task("codomo"), _task("plaza")])
+    assert len(fresh) == 1
+    assert completeness["codomo:City"] is False
     assert invoke.await_count == 1 and invoke.await_args.args[1][0].source == "plaza"
     by_source = {call.kwargs["source"]: call.kwargs for call in telemetry.call_args_list}
-    assert by_source["holland2stay"]["error_type"] == scrape_round.CIRCUIT_OPEN_ERROR
+    assert by_source["codomo"]["error_type"] == scrape_round.CIRCUIT_OPEN_ERROR
 
 
 def test_dry_run_does_not_report_proxy_failure(dispatch):
     _, _, invoke, telemetry, proxy = dispatch
     invoke.side_effect = ProxyError("proxy down")
     with pytest.raises(ProxyError):
-        _run([_task("holland2stay")], dry_run=True)
+        _run([_task("codomo")], dry_run=True)
     proxy.assert_not_called()
     telemetry.assert_not_called()
 
@@ -154,11 +164,9 @@ def test_round_exposes_named_scrape_result(dispatch):
     outcome = _run([_task("plaza")])
     assert isinstance(outcome, scrape_round.ScrapeRoundResult)
     assert len(outcome.listings) == 1
-    assert outcome.completeness == {} and outcome.h2s_blocked is None
-    # Existing tuple consumers remain compatible during the migration.
-    listings, completeness, blocked, mode = outcome
+    assert outcome.completeness == {}
+    listings, completeness = outcome
     assert listings is outcome.listings and completeness is outcome.completeness
-    assert blocked is None and mode == outcome.h2s_mode
 
 
 def test_failed_source_does_not_replace_an_existing_completeness_value(dispatch):
@@ -169,7 +177,7 @@ def test_failed_source_does_not_replace_an_existing_completeness_value(dispatch)
         return [object()], {'City': True}
     invoke.side_effect = scrape
     async def run():
-        return await scrape_round.dispatch_with_h2s_circuit(
+        return await scrape_round.dispatch_with_circuits(
             asyncio.get_running_loop(), [_task('plaza'), _task('xior')], storage=object(),
             source_totals={'plaza': 1, 'xior': 1}, multi_source=False, dry_run=False,
         )

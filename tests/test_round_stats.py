@@ -81,8 +81,8 @@ class TestQueries:
 
     def test_sources_listing(self, st):
         _fill(st, "xior", 2)
-        _fill(st, "holland2stay", 2)
-        assert st.round_stats_sources() == ["holland2stay", "xior"]
+        _fill(st, "codomo", 2)
+        assert st.round_stats_sources() == ["codomo", "xior"]
 
     def test_sources_include_removed_ones(self, st):
         """答的是「抓过什么」而不是「现在配置了什么」——排查时往往正是刚摘掉的那个。"""
@@ -94,7 +94,7 @@ class TestGrouping:
     def test_limit_counts_rounds_not_rows(self, st):
         """limit=2 要返回 2 **轮**，不是 2 行——每轮有多个 source。"""
         for i in range(5):
-            for src in ("xior", "ourdomain", "holland2stay"):
+            for src in ("xior", "ourdomain", "codomo"):
                 st.record_round_stat(
                     round_at=f"2026-08-03T{i:02d}:00:00+00:00",
                     source=src, listings=1, targets=1, complete=1,

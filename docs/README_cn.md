@@ -5,11 +5,9 @@
 > English version: [README.md](README.md)
 
 FlatRadar 监控荷兰租房市场，提供托管服务 [flatradar.app](https://flatradar.app)，
-也可以自行部署。它同时追踪 Holland2Stay、OurDomain、OurCampus、Xior、Magis、
-Student Experience 与 Plaza 七个平台，一旦出现符合所设条件的房源，即通过所选渠道
-发出通知，通知中附有直达链接。对 Holland2Stay 更进一步——先将预订推进至支付页面，
-再连同付款链接一并发出，因此收到通知时仅余付款一步。
-Plaza 则可在用户单独启用后自动提交应征。
+也可以自行部署。它同时追踪 Codomo（原 Holland2Stay）、OurDomain、OurCampus、Xior、
+Magis、Student Experience 与 Plaza 七个平台，一旦出现符合所设条件的房源，即通过
+所选渠道发出通知，通知中附有直达链接。Plaza 可在用户单独启用后自动提交应征。
 
 **FlatRadar 的服务范围不包括自动付款，亦不保证预订成功。** 能否订到仍取决于平台上的实际竞争。
 
@@ -38,18 +36,18 @@ Plaza 则可在用户单独启用后自动提交应征。
 
 | | |
 |---|---|
-| **监控范围** | Holland2Stay、OurDomain、OurCampus、Xior、Magis、Student Experience、Plaza 共七个平台；新房源集中上架的时段轮询更为频繁 |
+| **监控范围** | Codomo、OurDomain、OurCampus、Xior、Magis、Student Experience、Plaza 共七个平台；新房源集中上架的时段轮询更为频繁 |
 | **通知渠道** | Web、Telegram、邮件、WhatsApp、iOS 推送、Android 推送、iMessage，可同时启用多个 |
 | **筛选条件** | 租金上限、面积下限、楼层下限、户型、入住人数、城市、街区、平台、合同类型、租客要求等 |
 | **浏览方式** | 列表、地图、日历、仪表盘、图表，界面支持中英文 |
 | **多用户** | 支持。设访客、用户、管理员三种角色，各用户的过滤条件与凭据互相独立 |
-| **自动预订与应征** | Holland2Stay 止于支付页面；Plaza 支持自动应征，默认关闭；见[自动预订](#自动预订) |
+| **自动应征** | Plaza 支持自动应征，默认关闭；见[自动预订](#自动预订) |
 
 ### 平台覆盖
 
 | 平台 | 覆盖范围 | 抓取成熟度 | 预订 |
 |---|---|---|---|
-| Holland2Stay | 任意配置的荷兰城市 | 稳定，为房源的主要来源 | 支持自动预订 |
+| Codomo（原 Holland2Stay） | 荷兰 26 个城市 | 2026-11 改名后改为纯 HTTP 抓取，为房源的主要来源 | 仅通知（旧预订流程随改名失效） |
 | OurDomain | Amsterdam Diemen / South-East | 稳定 | 仅通知（预订链路已实现，未开放）|
 | Xior | 14 个城市共 30 栋楼，可按需选择 | 稳定 | 仅通知（预订链路已实现，未开放）|
 | OurCampus | Amsterdam Diemen（1 栋） | 已用真实 markup 校准；出房极少 | 仅通知 |
@@ -61,7 +59,7 @@ Plaza 则可在用户单独启用后自动提交应征。
 新接入的抓取器靠这个用真实数据验证一段时间，期间没有人的提醒依赖于它。
 
 第三方站点随时可能变更，覆盖范围亦随之变化。各平台的抓取实现见
-[H2S.md](H2S.md)、[XIOR.md](XIOR.md)、[OURDOMAIN.md](OURDOMAIN.md)、
+[CODOMO.md](CODOMO.md)、[XIOR.md](XIOR.md)、[OURDOMAIN.md](OURDOMAIN.md)、
 [PLAZA.md](PLAZA.md)、[SCRAPING_RECON.md](SCRAPING_RECON.md)。
 
 ### 客户端
@@ -103,7 +101,7 @@ python launcher.py
 ```
 
 第一次运行会自动生成可直接使用的 `.env`，并下载一次浏览器内核（解压后约 700 MB）。
-随后面板在 `http://127.0.0.1:8088` 打开，监控也会自动启动。默认只监控 Holland2Stay
+随后面板在 `http://127.0.0.1:8088` 打开，监控也会自动启动。默认只监控 Codomo
 的 Eindhoven，其余平台和城市在「设置」里启用。
 
 要收到提醒：打开「用户」，给自己建一个用户，启用一个通知渠道并发一条测试。
@@ -247,8 +245,8 @@ docker exec h2s python -c "import sqlite3; \
 | 系统级：source、城市、轮询间隔 | SQLite `app_settings` | 面板「设置」页 |
 | 部署级：凭据、路径、时区、对外基址 | `.env` | 文本编辑器 |
 
-监控范围与轮询节奏由数据库管理。`SOURCES`、`CITIES`、
-`*_CITIES`、`AVAILABILITY_FILTERS`、`CHECK_INTERVAL`、`PEAK_*` 等运行参数存于
+监控范围与轮询节奏由数据库管理。`SOURCES`、
+`*_CITIES`、`CHECK_INTERVAL`、`PEAK_*` 等运行参数存于
 数据库，由面板管理。首次启动会自动将其从 `.env` 迁入，迁移前把整份文件备份为
 `.env.bak.<时间戳>`，日志中记有搬入与跳过的明细。
 
@@ -329,7 +327,7 @@ python -m tools.doctor --no-network
 分别标识。
 
 对于未覆盖预留状态的 feed，默认先推断 Reserved，再根据消失总时长推断 Occupied；
-如果配置的 Holland2Stay 状态已包含 Reserved，则可跳过中间推断：
+如果某个 feed 也列出 Reserved 房源，则可跳过中间推断（目前没有平台如此）：
 
 ```mermaid
 stateDiagram-v2
@@ -351,7 +349,7 @@ stateDiagram-v2
 `status_is_inferred` 字段，使平台上报与系统推断始终可以区分。实际运行中，所见的
 `Occupied` 多数为推断结果。推测转换**不产生通知**。
 
-默认 2 小时参考 Holland2Stay 的付款时限，但状态仍是推断，不能保证与平台实时状态
+默认 2 小时参考常见的付款时限，但状态仍是推断，不能保证与平台实时状态
 一致。中间态 `Reserved` 的作用是降低判错的代价——
 `Reserved → 可订` 本就是常见迁移；若直接判定为 Occupied 而房源随后回归，则会向
 一批用户推送失实的「重新上架」通知。两个阈值均可配置（`STALE_RESERVED_HOURS` /
@@ -365,13 +363,8 @@ stateDiagram-v2
 
 ## 自动预订
 
-Holland2Stay：系统以所配置的账号登录，尝试符合条件的可直接预订房源，
-**止于支付 URL，不会完成支付**。
-
-如果预订结果不明确，系统会暂停该 Holland2Stay 账号的自动预订并发送核实提示，
-避免重复下单。请登录 Holland2Stay 检查订单或预留、按需付款或取消，然后在用户
-设置中选择“已核实，恢复自动预订”。后台预订任务仍在运行时无法解除保护；若任务
-卡住，请先停止监控。该保护跨监控重启保留，同一账号的多个用户共享保护。
+Codomo（原 Holland2Stay）仅通知：旧的 Holland2Stay 预订流程随 2026-11 改名失效，
+新站的预订流程尚未侦察。
 
 Plaza：配置用户名和密码并单独开启 Plaza 自动应征后，系统可对符合条件的房源
 直接提交应征。该开关默认关闭；应征提交后即生效，并不保证获得房源。详见
@@ -412,7 +405,6 @@ Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
 | 完全没有通知，面板显示陈旧数据 | monitor 进程已停止。先用 `supervisorctl status` 确认，再执行 `supervisorctl start monitor`。心跳超过 `MONITOR_HEARTBEAT_MAX_AGE` 后 `/health` 将返回 503。 |
 | 某平台在 `/monitoring` 上显示为 `down` / `warn` | 卡片上已注明触发了哪条规则。参见[健康状态与排障](ARCHITECTURE.md#health-and-troubleshooting)。 |
 | 需查询某时间段的日志 | `/logs` 支持关键字、级别与 `since`–`until` 过滤，且在服务端执行，不限于当前屏幕内的内容。 |
-| 日志反复出现 `H2S source 熔断` | Cloudflare 正在拦截该出口 IP。熔断仅暂停该 source，稍后会以单个城市试探恢复。若持续出现，请配置 `HTTPS_PROXY`。 |
 | 日志反复出现 `CF 挑战 ... 未解开` | 同上，通常属 IP 信誉问题，而非本地配置问题。 |
 | 某个平台持续返回 0 条 | 可能确无房源。先查看该轮是否被标记为完整扫描，参考[房源状态与完整性](ARCHITECTURE.md#status-convergence)。 |
 | 已出租的房源仍显示为「可订」 | 该城市未被完整扫描，因而未进入收敛范围。查看 `/monitoring` 轮次表格中的 `(完整/任务)`。 |
@@ -437,7 +429,7 @@ Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构、关键故障边界与排障入口 |
 | [API.md](API.md) | 面向移动端与外部集成的后端契约 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
-| [H2S.md](H2S.md) · [H2S_BOOKING_OPS.md](H2S_BOOKING_OPS.md) · [RENTCAFE.md](RENTCAFE.md) · [XIOR.md](XIOR.md) · [OURDOMAIN.md](OURDOMAIN.md) · [PLAZA.md](PLAZA.md) · [SCRAPING_RECON.md](SCRAPING_RECON.md) | 各平台抓取侦察；`RENTCAFE.md` 写 Xior / OurDomain / OurCampus 共用的预订流程，`PLAZA.md` 只写预订侧，抓取侧连同 Magis / Student Experience 都在 `SCRAPING_RECON.md` 里 |
+| [CODOMO.md](CODOMO.md) · [RENTCAFE.md](RENTCAFE.md) · [XIOR.md](XIOR.md) · [OURDOMAIN.md](OURDOMAIN.md) · [PLAZA.md](PLAZA.md) · [SCRAPING_RECON.md](SCRAPING_RECON.md) | 各平台抓取侦察；`RENTCAFE.md` 写 Xior / OurDomain / OurCampus 共用的预订流程，`PLAZA.md` 只写预订侧，抓取侧连同 Magis / Student Experience 都在 `SCRAPING_RECON.md` 里 |
 | [iOS_README.md](https://github.com/751K/FlatRadar-iOS/blob/master/docs/iOS_README.md) | iOS 客户端 — 已迁至 [FlatRadar-iOS](https://github.com/751K/FlatRadar-iOS) |
 | [ANDROID_PLAN.md](https://github.com/751K/FlatRadar-Android/blob/master/docs/ANDROID_PLAN.md) | Android 客户端 — 已迁至 [FlatRadar-Android](https://github.com/751K/FlatRadar-Android) |
 | [dataflow_ch.mmd](dataflow_ch.mmd) · [dataflow_en.mmd](dataflow_en.mmd) | 完整抓取与通知流程的 Mermaid 图 |

@@ -39,7 +39,7 @@ def _add(st, **kw):
             kw.get("city", "Eindhoven"),
             _iso(kw.get("days_ago", 0) + 1), _iso(kw.get("days_ago", 0)), 0,
             kw.get("status", "Available to book"),
-            kw.get("source", "holland2stay"),
+            kw.get("source", "codomo"),
         ),
     )
     st.conn.commit()

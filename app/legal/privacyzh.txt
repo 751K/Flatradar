@@ -2,7 +2,7 @@
 
 本隐私政策说明 FlatRadar 如何收集、使用、存储和保护您的数据。
 
-FlatRadar 是一款独立的、非官方的租房监控工具，跨平台跟踪 Holland2Stay、OurDomain、Xior 等多个平台的房源。FlatRadar 与其监控的任何房源平台均不存在关联、认可、赞助、维护或运营关系。
+FlatRadar 是一款独立的、非官方的租房监控工具，跨平台跟踪 Codomo、OurDomain、Xior 等多个平台的房源。FlatRadar 与其监控的任何房源平台均不存在关联、认可、赞助、维护或运营关系。
 
 使用 FlatRadar，即表示您确认已阅读并理解本隐私政策。
 
@@ -127,7 +127,7 @@ FlatRadar 通过以下服务发送房源提醒：iOS 设备使用 Apple 推送�
 
 9. 房源平台与数据
 
-FlatRadar 可能会从公开可访问的各房源平台（包括但不限于 Holland2Stay、OurDomain、Xior 等）的服务、API 或技术接口获取房源信息。这些平台独立于 FlatRadar。FlatRadar 不控制这些平台的数据、系统、条款或隐私实践。
+FlatRadar 可能会从公开可访问的各房源平台（包括但不限于 Codomo、OurDomain、Xior 等）的服务、API 或技术接口获取房源信息。这些平台独立于 FlatRadar。FlatRadar 不控制这些平台的数据、系统、条款或隐私实践。
 
 10. 第三方服务
 

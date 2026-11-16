@@ -118,13 +118,13 @@ def dim_applies(row: dict, dim: str) -> bool:
     """
     from config import source_supports_dim
 
-    return source_supports_dim(row.get("source") or "holland2stay", dim)
+    return source_supports_dim(row.get("source") or "", dim)
 
 
 def normalize_listing_row(row: dict) -> dict:
     """Return a display-normalized copy of one listing row."""
     out = dict(row)
-    source = (out.get("source") or "holland2stay").lower()
+    source = (out.get("source") or "").lower()
     if source == "ourdomain":
         out["name"] = _ourdomain_display_name(out)
     elif source == "xior":
@@ -231,7 +231,7 @@ def row_to_listing(row: dict) -> Listing:
         features=safe_features(row),
         url=row.get("url", "") or "",
         city=row.get("city", "") or "",
-        source=row.get("source") or "holland2stay",
+        source=row.get("source") or "",
     )
 
 
@@ -278,7 +278,7 @@ def serialize_listing(row: dict) -> dict:
         "price_value": parse_float(row.get("price_raw", "")),
         "available_from": row.get("available_from") or "",
         "city": row.get("city") or "",
-        "source": row.get("source") or "holland2stay",
+        "source": row.get("source") or "",
         # 第三方 URL 只放行 http/https：分享页、收件箱、API 都从这里取
         "url": safe_external_url(row.get("url")),
         "features": feats,
@@ -493,7 +493,7 @@ def query_listing_rows(
         ]
     if len(sources) > 1:
         source_set = {s.lower() for s in sources}
-        rows = [r for r in rows if (r.get("source") or "holland2stay").lower() in source_set]
+        rows = [r for r in rows if (r.get("source") or "").lower() in source_set]
     if max_rent is not None:
         rows = [
             r for r in rows

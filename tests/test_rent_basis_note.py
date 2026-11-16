@@ -119,7 +119,7 @@ class TestListingProperty:
         l = _listing("ourdomain", ["Service costs: €174–204 excl."])
         assert l.rent_basis_note == "base rent, service costs €174–204 excl."
 
-    @pytest.mark.parametrize("source", ["holland2stay", "xior"])
+    @pytest.mark.parametrize("source", ["codomo", "xior"])
     def test_all_in_sources_carry_no_note(self, source):
         """H2S 与 Xior 的 price_raw 已经是到手价，再标"基础租金"就是假话。"""
         assert _listing(source, ["Type: Studio"]).rent_basis_note == ""
@@ -142,7 +142,7 @@ class TestNotification:
     @pytest.mark.parametrize("lang", ["zh", "en"])
     def test_all_in_sources_get_a_clean_rent_line(self, lang):
         from notifier import _format_new
-        l = _listing("holland2stay", ["Type: Studio"])
+        l = _listing("codomo", ["Type: Studio"])
         rent_line = next(x for x in _format_new(l, lang=lang).splitlines() if "1.563" in x)
         assert "base rent" not in rent_line and "基础租金" not in rent_line
 
@@ -183,7 +183,7 @@ class TestInboxDetailRendering:
                               "Service costs: €248–361 + ~€85 heating excl."]),
             Listing(id="h2s_1", name="Eindhoven Beukenlaan", status="Available to book",
                     price_raw="€966", available_from="", url="https://y",
-                    city="Eindhoven", source="holland2stay",
+                    city="Eindhoven", source="codomo",
                     features=["Type: Studio", "Area: 45 m²"]),
         ])
         st.close()

@@ -97,7 +97,7 @@ class TestFooter:
         """两种邮件同一句落款。分开写迟早只改一处。"""
         import notifier
 
-        assert _VERIFY_FOOTER in notifier._format_email_html("[H2S] New Listing")
+        assert _VERIFY_FOOTER in notifier._format_email_html("[CD] New Listing")
 
     def test_footer_is_language_independent(self):
         for lang in ("zh", "en"):

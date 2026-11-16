@@ -1,7 +1,7 @@
 """自动预订候选：判定、收集与多用户分配。
 
 从 monitor.py 拆出。这一层只做内存判定，不触网、不提交订单；真正的提交与
-结果处理仍留在 monitor.py（它们依赖 prewarm、H2S 抑制与通知节流）。
+结果处理在 ``mcore.booking_round``。
 
 日志通道仍用 ``monitor``。
 """
@@ -17,8 +17,8 @@ logger = logging.getLogger("monitor")
 
 
 def listing_source(listing) -> str:
-    """返回 listing 的规范化 source；旧数据缺 source 时按 H2S 处理。"""
-    return (getattr(listing, "source", "") or "holland2stay").strip().lower()
+    """返回 listing 的规范化 source；旧数据缺 source 时按 Codomo 处理。"""
+    return (getattr(listing, "source", "") or "").strip().lower()
 
 
 def listing_booking_key(listing) -> tuple[str, str]:
@@ -46,8 +46,8 @@ def can_auto_book(user, listing) -> bool:
     if listing.source == "plaza":
         # Plaza 要**两道闸**：显式开关 + 凭据。
         #
-        # 另外三个平台只用凭据当开关，因为它们都还有一步在用户手里（H2S 要付款，
-        # 两个 RENTCafe 停在存草稿）。Plaza 的应征一次 POST 就落地，中间没有任何
+        # RENTCafe 平台只用凭据当开关，因为它们都还有一步在用户手里（停在
+        # 存草稿 / 开始申请）。Plaza 的应征一次 POST 就落地，中间没有任何
         # 人工关卡——所以「填了凭据」不等于「授权系统替我应征」，要单独点头。
         #
         # 凭据那一半仍然重要：没凭据就不产生候选，免得每条新房源都跑一次注定失败

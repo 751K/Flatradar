@@ -43,23 +43,6 @@
 {{ ui.section_heads(sections) }}
 
 {% if booking_guard_error %}<div class="alert alert-warning">{{ _('booking_review_error') }}</div>{% endif %}
-{% if booking_attempt and booking_attempt.user_id == u.id %}
-<div class="alert alert-warning">
-  <strong>{{ _('booking_review_title') }}</strong>
-  <p>{{ _('booking_review_listing') }}: {{ booking_attempt.listing }}. {{ _('booking_review_check') }}</p>
-  {% if booking_attempt.cart %}<p>{{ _('booking_review_cart') }}: {{ booking_attempt.cart }}</p>{% endif %}
-  {% if booking_attempt.order_number %}<p>{{ _('booking_review_order') }}: {{ booking_attempt.order_number }}</p>{% endif %}
-  {% if booking_attempt.pay_url %}<p>{{ _('booking_review_pay') }}</p>{% endif %}
-  <p>{{ _('booking_review_running') }}</p>
-  <form method="post" action="{{ url_for('user_acknowledge_booking', user_id=u.id) }}" data-confirm="{{ _('booking_review_confirm') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="attempt" value="{{ booking_attempt.attempt }}">
-    <button class="btn btn-warning" type="submit">{{ _('booking_review_action') }}</button>
-  </form>
-</div>
-{% elif booking_attempt %}
-<div class="alert alert-warning"><strong>{{ _('booking_review_title') }}</strong><p>{{ _('booking_review_shared') }}</p></div>
-{% endif %}
 {% for attempt in plaza_attempts %}
 <div class="alert alert-warning">
   <strong>{{ _('plaza_review_title') }}</strong>

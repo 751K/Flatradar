@@ -8,7 +8,7 @@ crypto.encrypt/decrypt 测试。
 4. 空字符串：双向都返回 ""（不应该消耗密钥的随机性 quota）
 
 为什么重要：
-users.json 里存的 email_password / twilio_token / auto_book.password
+users.json 里存的 email_password / twilio_token / auto_book.plaza_password
 全部走 crypto。如果 decrypt 出错被吞，启动时会被错误地用空字符串覆盖
 真实数据，相当于"密钥变了一次就丢失所有凭据"。
 """

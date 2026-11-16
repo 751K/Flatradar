@@ -409,13 +409,14 @@ class StorageBase:
             "TEXT NOT NULL DEFAULT ''",
         )
 
-        # P0 多源重构：listings.source 标识房源来自哪个第三方平台。
-        # 老库默认 'holland2stay'（迁移时全量房源都属于 H2S，符合实际）；
-        # 新写入由 ListingOps.diff() 从 Listing.source 字段读取。
+        # listings.source 标识房源来自哪个第三方平台，由 ListingOps.diff() 从
+        # Listing.source 写入。多源之前的老库补这一列时值为空，那批房源全属于
+        # 当时唯一的平台 Holland2Stay（今 Codomo），由 _rename_holland2stay_to_codomo
+        # 统一改写。
         # 索引：跨 source 时按 source / (source, city) 过滤的查询会很多。
         self._add_column_if_missing(
             "listings", "source",
-            "TEXT NOT NULL DEFAULT 'holland2stay'",
+            "TEXT NOT NULL DEFAULT ''",
         )
         with self._conn:
             self._conn.execute(
@@ -509,6 +510,7 @@ class StorageBase:
         self._add_column_if_missing(
             "listings", "city_normalized", "TEXT NOT NULL DEFAULT ''",
         )
+        self._rename_holland2stay_to_codomo()
         self._backfill_city_normalized()
         self.retire_surplus_sessions_globally()
         self._retire_legacy_notification_backlog()
@@ -522,6 +524,18 @@ class StorageBase:
                 "CREATE INDEX IF NOT EXISTS idx_listings_city_effective "
                 "ON listings(COALESCE(NULLIF(city_normalized,''), city))"
             )
+
+    def _rename_holland2stay_to_codomo(self) -> None:
+        """平台 key ``holland2stay`` → ``codomo``，只跑一次。见 mstorage/_codomo_rename.py。"""
+        from ._codomo_rename import MIGRATION_KEY, rename_holland2stay
+
+        if self.get_meta(MIGRATION_KEY, default=""):
+            return
+        stats = rename_holland2stay(self._conn)
+        self.set_meta(MIGRATION_KEY, _dt.now(_tz.utc).isoformat())
+        if any(stats.values()):
+            logger.info("平台改名 holland2stay → codomo：%s",
+                        ", ".join(f"{k} {v}" for k, v in stats.items() if v))
 
     #: 一次性迁移的标记 key。见 ``_retire_legacy_notification_backlog``。
     _BACKLOG_MIGRATION_KEY = "notified_backlog_retired_at"

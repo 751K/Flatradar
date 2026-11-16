@@ -50,10 +50,19 @@ class TestTranspose:
 class TestKnownAsymmetries:
     """这些不对称正是要告诉用户的东西——它们变了，界面上的说明也得跟着改。"""
 
-    def test_contract_neighborhood_offer_are_holland2stay_only(self):
+    def test_offer_is_codomo_only(self):
         table = config.filter_dim_sources()
-        for dim in ("contract", "neighborhood", "offer"):
-            assert table[dim] == ["holland2stay"], dim
+        assert table["offer"] == ["codomo"]
+
+    def test_contract_and_neighborhood_have_no_platform(self):
+        """Codomo 列表页不给合同与片区，眼下没有平台登记这两个维度。
+
+        转置表里因此根本没有这两个键——客户端按「缺键 = 无平台生效」处理。
+        """
+        table = config.filter_dim_sources()
+        for dim in ("contract", "neighborhood"):
+            assert dim not in table, dim
+            assert config.sources_supporting_dim(dim) == [], dim
 
     def test_universal_dims_cover_every_registered_source(self):
         table = config.filter_dim_sources()

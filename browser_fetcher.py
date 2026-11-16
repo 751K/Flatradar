@@ -7,16 +7,15 @@ browser_fetcher.py — 站点无关的浏览器传输层
 CF clearance token，无需手动管理会话。
 
 站点差异全部收在 ``SiteProfile`` 里（challenge_url / 默认头 / clearance 判据
-/ 维护检测钩子 / 是否轮换出口 IP），其余流程对所有站点通用。当前有两个
-profile：``H2S_PROFILE``（GraphQL）和 ``XIOR_PROFILE``（WordPress admin-ajax）。
+/ 维护检测钩子 / 是否轮换出口 IP），其余流程对所有站点通用。当前只有
+``XIOR_PROFILE``（WordPress admin-ajax）。
 
-使用者：``scrapers/holland2stay.py``、``scrapers/xior.py``、``bookers/h2s_checkout.py``。
+使用者：``scrapers/xior.py``（经 ``scrapers/_browser_backed.py``）。
 
 线程安全
 --------
 每个 BrowserFetcher 实例**绑定创建它的线程**——Playwright 对象换线程即失效。
-Scraper 侧每个浏览器型 source 运行在独立常驻子进程的主线程中；Booker 在
-自己的线程里另建实例。
+Scraper 侧每个浏览器型 source 运行在独立常驻子进程的主线程中。
 
 两个独立的 Playwright sync 实例**不能共存于同一线程**（第一个会在该线程装上
 event loop，第二个 launch() 随即被判成「在 asyncio loop 里用同步 API」），
@@ -27,7 +26,6 @@ from __future__ import annotations
 import logging
 import os
 import platform
-import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable, Mapping, Optional
@@ -36,10 +34,10 @@ from json import dumps as _json_dumps
 logger = logging.getLogger(__name__)
 
 # ── 延迟导入异常类 ──────────────────────────────────────────────────
-# browser_fetcher 被 scrapers/holland2stay 导入，而 scrapers.base（定义
-# 异常的模块）通过 scrapers/__init__.py 提前触发了 holland2stay 的加载。
-# 若在模块顶层 import scrapers.base 会导致循环导入。
-# 异常只在 fetch_gql 实际遇到错误时才需要，故延迟到首次 raise 时加载。
+# browser_fetcher 被 scrapers/xior 导入，而 scrapers.base（定义异常的模块）
+# 通过 scrapers/__init__.py 提前触发了 xior 的加载。若在模块顶层 import
+# scrapers.base 会导致循环导入。异常只在实际遇到错误时才需要，故延迟到首次
+# raise 时加载。
 _exc_cache: dict[str, type] = {}
 
 
@@ -47,14 +45,12 @@ def _exc(name: str) -> type:
     if name not in _exc_cache:
         from scrapers.base import (  # noqa: E402
             BlockedError,
-            OperationNotAllowedError,
             RateLimitError,
             ScrapeNetworkError,
             UpstreamMaintenanceError,
         )
         _exc_cache.update({
             "BlockedError": BlockedError,
-            "OperationNotAllowedError": OperationNotAllowedError,
             "RateLimitError": RateLimitError,
             "ScrapeNetworkError": ScrapeNetworkError,
             "UpstreamMaintenanceError": UpstreamMaintenanceError,
@@ -62,104 +58,6 @@ def _exc(name: str) -> type:
     return _exc_cache[name]
 
 
-#: 从 GraphQL 文档正文里读出 operation 名，例如 ``query GetProduct($k: String!)``
-#: → ``GetProduct``。
-_OPERATION_LABEL_RE = re.compile(
-    r"\b(?:query|mutation|subscription)\s+([A-Za-z_][A-Za-z0-9_]*)"
-)
-
-
-def _operation_label(query: str) -> str:
-    """给错误消息用的 operation 名，**不参与请求**。
-
-    调用方没传 ``operation_name`` 时（booker 的 9 条 mutation 都没传）从文档
-    正文里读一个出来。纯展示用途：往请求体里补 operationName 会改变发给上游
-    的内容，而上游正是按 operation 判放行的——为了让日志好看去动线上行为，
-    因果就反了。
-    """
-    m = _OPERATION_LABEL_RE.search(query or "")
-    return m.group(1) if m else "(匿名)"
-
-
-def _is_operation_rejected(body: str) -> bool:
-    """403 正文是否表示「这条 operation 没在上游白名单里」。
-
-    判据本身住在 ``scrapers.base``（和 ``is_cloudflare_body`` 这些放一起，
-    抓取侧与预订侧共用一份文案清单）；这里只是同样的延迟导入包装，理由见
-    上面 ``_exc`` 的注释——模块顶层 import 会循环。
-    """
-    from scrapers.base import is_operation_rejected_body  # noqa: E402
-
-    return is_operation_rejected_body(body)
-
-
-_H2S_MAIN_PAGE = "https://www.holland2stay.com/residences"
-# GraphQL 端点。H2S 迁过两次：
-#   api.holland2stay.com/graphql  →  www.holland2stay.com/api/graphql
-#                                 →  www.holland2stay.com/api/service/residences
-#
-# 2026-08-11 19:34 第二次迁移，旧路径直接 404（Next.js 错误页，不是 JSON）。
-# 404 不在 clearance_pending_markers 里，于是被当成硬网络错误——整个 source
-# 每轮隔离，连带把「所有城市第 1 页都连不上」判成全网失败。生产静默了三天。
-#
-# 同一次改版还上了一层加密信道：客户端 AES-GCM 加密请求体、RSA-OAEP 包裹会话
-# 密钥，POST 成 {v,k,iv,d,ct} 信封。但它只作用于 axios 拦截器命中的
-# `/api/rest/*`（源码里的判据就是 `url.startsWith("/api/rest/")`）；
-# `/api/service/residences` 不在其中，仍是明文 GraphQL——所以这里不需要复刻
-# 那套加密。它哪天挪进 /api/rest/ 才需要，那时得从页面 webpack runtime 里取
-# 出加密函数来用，而不是自己实现。详见 docs/H2S.md。
-#
-# **改这个常量前先确认新路径返回的是 GraphQL 错误而不是 HTML**：打一个空 body，
-# 端点对了会回 `{"errors":[{"message":"Syntax Error: Unexpected <EOF>"...}]}`。
-#
-# 2026-08-17 第三次迁移：/api/service/residences 也 404 了，GraphQL 整体搬进
-# 加密信道 /api/__enc__。**schema 一字未改**——截获站点加密前的明文可见，它发的
-# 仍是 GetCategories / products / category_uid:"Nw==" / 同一套 available_to_book
-# ID。变的只有传输层，所以 _GQL_QUERY 与 _to_listing 都不用动。见 docs/H2S.md §3.2。
-_H2S_GQL_PATH = "/api/__enc__"
-
-# 信封请求头。值恒为 "1"：请求上表示 body 是信封，响应上表示 body 需要解密。
-_ENC_HEADER = "x-enc"
-# ── /api/rest/* 的信封约定（2026-08-19 逐字读自站点 module 82361）──────
-# 站点对 REST 的加密**和 GraphQL 不同**，分 GET / 非 GET 两套：
-#
-#   非 GET（函数 J）：加密 **body** → POST 原 URL，头 x-enc: 1
-#                    ——形状与 GraphQL 一致，可直接复用 _encrypted_fetch
-#   GET（函数 H）：  加密 **路径本身**（去掉 /api 前缀，含 query string），
-#                    base64(JSON(信封)) 塞进 x-enc-q 头，
-#                    实际请求 GET /api/rest/__enc__
-#
-# 直接发明文 /api/rest/... 两种都会被拒。
-_ENC_QUERY_HEADER = "x-enc-q"
-_REST_ENC_PATH = "/api/rest/__enc__"
-_REST_API_PREFIX = "/api"
-
-# 公钥在 bundle 里是个 SPKI base64 常量（实测 392 字符）。运行时抓而不是写死：
-# 它可能轮换，写死会在轮换当天变成一次无从下手的解密失败。
-_ENC_PUBKEY_RE = r'"(MII[A-Za-z0-9+/=]{80,})"'
-
-# 只在这些 chunk 里找公钥。**别再扫全部 script。**
-#
-# 2026-08-18 生产事故：初版实现遍历页面上全部 <script src>（实测 81 个）逐个
-# fetch，直到命中含 __enc__ 的那个。代价是每建一次浏览器多打 ~97 个请求：
-#
-#     Holland2Stay   217 → 314 个响应 / 会话，1.78 → 2.66 MB
-#     Xior（对照组）   93 →  97 个响应 / 会话，0.60 → 0.61 MB
-#
-# 部署当晚 H2S 就开始连续 403（此前三天一次都没有），熔断退避到 110 分钟。
-# 「从页面里把每个 JS chunk 都拉一遍」本身就是极像爬虫的行为特征。
-#
-# 实测 __enc__ 只出现在 common-* 与 vendors-* 两类 chunk 里，按名字先筛一遍
-# 就够，命中即停——正常情况下只需 1–2 个请求。
-_ENC_CHUNK_HINTS = ("common-", "vendors-")
-
-# 公钥是站点级常量，**进程内共享**，不随浏览器重建作废。
-#
-# 初版绑在浏览器生命周期上（2 小时一换），本意是让公钥轮换最多废掉一个会话；
-# 但那意味着每次重建浏览器都要重新扫一遍 bundle，而 403 恰恰会触发重建——
-# 于是被封之后反而扫得更凶，正反馈。改为进程级缓存 + 失败时作废：轮换照样
-# 能自愈（解密失败会清缓存重取），代价却降到每进程一次。
-_ENC_PUBKEY_CACHE: dict[str, str] = {}
 _XIOR_MAIN_PAGE = "https://www.xiorstudenthousing.eu/netherlands/"
 _XIOR_AJAX_PATH = "/wp-admin/admin-ajax.php"
 
@@ -203,38 +101,15 @@ _PROXY_ERROR_MARKERS: tuple[str, ...] = (
 _CHALLENGE_CLEAR_TIMEOUT = 90.0
 _CHALLENGE_POLL_INTERVAL = 1.0
 
-# clearance 未生效时 H2S 返回的标记（403 + 这段 JSON）
-_CLEARANCE_REQUIRED_MARKER = "clearance_required"
-# 探测用的最小查询：只取 total_count，不翻页不取字段
-# 探测必须用白名单登记的那条 operation。**不能自己写个最小查询**——
-# H2S 自 2026-08-18 起按 operation 白名单放行，匿名/自定义查询一律
-# 403 operation_not_allowed，而那不是 clearance_pending_markers 里的标记，
-# 于是初始化会把「查询没登记」误判成「这个 IP 被封」，一路熔断。
-# 代价只是探测请求变大，一次初始化一次，可接受。
-from h2s_gql import GQL_QUERY as _H2S_GQL_DOCUMENT, OPERATION_NAME as _H2S_OPERATION
 
-_CLEARANCE_PROBE_VARIABLES = {
-    "pageSize": 1,
-    "currentPage": 1,
-    "filters": {"category_uid": {"eq": "Nw=="}},
-    "sort": {"next_contract_startdate": "ASC"},
-}
-# 单次导航后等 cookie 落地的上限。实测正常 2–3s（本地）到 10–22s（生产 VPS）。
-# 不宜再长：token 只能靠重新导航签发，超过这个窗口还没落地，继续轮询是白打
-# 必然 403 的请求，换一次导航才有意义。
+# 单次导航后等 clearance cookie 落地的上限（仅配了 clearance_probe 的 profile）。
+# token 只能靠重新导航签发，超过这个窗口还没落地，继续轮询是白打必然 403 的
+# 请求，换一次导航才有意义。
 _CLEARANCE_TIMEOUT = 25.0
 _CLEARANCE_POLL_INTERVAL = 2.0
 
 # 初始化最多导航几次。每次都是一轮完整的 CF 挑战，次数过多反而加重怀疑。
 _INIT_ATTEMPTS = 3
-_H2S_GQL_HEADERS = {
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-    # Match Magento/Hyva-style storefront GraphQL requests more closely than a
-    # bare browser fetch. These are not secrets and are safe for anonymous reads.
-    "Store": "default",
-    "Content-Currency": "EUR",
-}
 _XIOR_AJAX_HEADERS = {
     "Accept": "*/*",
     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -306,12 +181,12 @@ def _should_block(url: str, resource_type: str) -> bool:
 # HTTP 缓存只在内存里，浏览器一关即弃——只给 --disk-cache-dir 无济于事，实测
 # 缓存目录里只会留下几个索引文件，字节数一点不降。
 #
-# 必须换成 launch_persistent_context()。本地实测（2026-08-05，H2S 首页）：
+# 必须换成 launch_persistent_context()。本地实测（2026-08-05，某站点首页）：
 #   冷 profile  3.93 MB
 #   暖 profile  0.25 MB   143 个请求命中磁盘缓存，页面照常渲染
 #
-# 一个 profile 目录同一时刻只能被一个 Chromium 打开，而 H2S 的 scraper 与
-# booker 用的是同一个 profile、跑在不同线程上。因此按槽位加文件锁，抢不到就
+# 一个 profile 目录同一时刻只能被一个 Chromium 打开，而同一 source 可能同时有
+# 不止一个浏览器（例如工具脚本与常驻抓取）。因此按槽位加文件锁，抢不到就
 # 退回临时 profile——省流量不能以抢不到浏览器为代价。
 _PROFILE_SLOTS = 3
 
@@ -441,7 +316,7 @@ def _reap_profile(path) -> int:
 
     实测后果：常驻浏览器每次「就绪」5–6 分钟就死，一次泄漏一整套（node 驱动 +
     整棵进程树）。18 小时泄漏 5 套，容器内存 1.14 → 1.73 GiB（上限 2 GiB），随后
-    xior 渲染器卡死 600 秒、Holland2Stay 过不了 CF 挑战并熔断。
+    xior 渲染器卡死 600 秒、另一个浏览器型 source 过不了 CF 挑战并熔断。
 
     所以槽位锁释放之前必须先确认目录真的空了。
     """
@@ -493,20 +368,6 @@ def _redact_proxy(url: str) -> str:
     return url.rsplit("@", 1)[-1] if "@" in url else url
 
 
-def _h2s_maintenance_check(title: str, html: str) -> None:
-    """H2S 专有：识别平台维护页，命中则抛 UpstreamMaintenanceError。"""
-    if "maintenance" in title.lower():
-        raise _exc("UpstreamMaintenanceError")(
-            f"H2S 平台维护中（页面标题: {title}）"
-        )
-    if not html:
-        return
-    from scrapers.base import is_maintenance_body  # 延迟导入，避免循环导入
-
-    if is_maintenance_body(html):
-        raise _exc("UpstreamMaintenanceError")("H2S 平台维护中")
-
-
 @dataclass(frozen=True)
 class ProbeRequest:
     """初始化阶段用来确认 clearance 已生效的最小请求。"""
@@ -515,19 +376,6 @@ class ProbeRequest:
     method: str = "POST"
     body: str = ""
     headers: Mapping[str, str] = field(default_factory=dict)
-
-
-def _gql_body(query: str, variables: dict | None, operation_name: str = "") -> str:
-    """拼 GraphQL 请求体。
-
-    ``operationName`` 只在非空时才写进去——H2S 自 2026-08-18 起按 operation
-    白名单放行（见 docs/H2S.md §4.1），而 Xior 那边根本不发 GraphQL。多塞一个
-    ``"operationName": ""`` 会改变请求体，没必要冒这个险。
-    """
-    body: dict = {"query": query, "variables": variables or {}}
-    if operation_name:
-        body["operationName"] = operation_name
-    return _json_dumps(body)
 
 
 @dataclass(frozen=True)
@@ -575,39 +423,7 @@ class SiteProfile:
     clearance_pending_markers: tuple[str, ...] = _CF_CHALLENGE_PENDING_MARKERS
     maintenance_check: Optional[Callable[[str, str], None]] = None
     rotating_proxy: bool = False
-    #: 请求体是否要包成加密信封。见 ``BrowserFetcher._encrypted_fetch``。
-    #: 只影响传输层：调用方照旧传明文 body、拿到明文 text。
-    encrypted_envelope: bool = False
 
-
-H2S_PROFILE = SiteProfile(
-    name="Holland2Stay",
-    source="holland2stay",
-    challenge_url=_H2S_MAIN_PAGE,
-    default_headers=_H2S_GQL_HEADERS,
-    clearance_probe=ProbeRequest(
-        path=_H2S_GQL_PATH,
-        body=_gql_body(
-            _H2S_GQL_DOCUMENT, _CLEARANCE_PROBE_VARIABLES, _H2S_OPERATION,
-        ),
-        headers=_H2S_GQL_HEADERS,
-    ),
-    # H2S 不回 CF 挑战页，而是自己的 JSON：
-    #   403 {"error":"Browser verification required","code":"clearance_required"}
-    clearance_pending_markers=(_CLEARANCE_REQUIRED_MARKER,)
-    + _CF_CHALLENGE_PENDING_MARKERS,
-    maintenance_check=_h2s_maintenance_check,
-    # GraphQL 自 2026-08-17 起只走加密信道，明文直接吃 Cloudflare 挑战。
-    encrypted_envelope=True,
-    # 2026-08-03 生产事故：出口 IP 被 CF 盯上后，H2S 连续 3 次 90s 挑战全失败，
-    # 熔断退避 30 分钟。而 sticky session id 是 sha1(source) 的常量——重建浏览器
-    # 拿到的还是同一个 IP，403 恢复路径根本走不出去。
-    #
-    # 开 rotating 不损失 clearance 复用：浏览器存活 2 小时（_BROWSER_MAX_AGE），
-    # 这期间 IP 和 clearance 都稳定；而重建浏览器本来就要重解挑战，那一刻换个
-    # 新 IP 是免费的。
-    rotating_proxy=True,
-)
 
 # Xior 的 AJAX 端点要 property/room id 才能拿到有意义的响应，profile 层拿不到，
 # 所以不配 probe：初始化只等挑战解开，clearance 没生效时由首个真实请求触发
@@ -630,36 +446,11 @@ class BrowserFetcher:
 
     浏览器内 fetch() 自带 cookies / TLS 指纹 / CF clearance token。
 
-    **浏览器是过挑战所必需的，但发请求并不必需。** 此处原先写着「脱离浏览器把
-    cookie 搬给 HTTP 客户端通常无效，因为 clearance 同时绑定了 TLS 指纹」——
-    2026-08-05 实测该结论不成立：
-
-        浏览器过一次挑战 → 导出 cf_clearance 与 UA
-        curl_cffi 带上二者 + **同一个出口 IP** + Chrome 指纹
-        → GraphQL 返回 200
-
-        chrome131 / chrome136 / chrome124 三种指纹均可
-
-    clearance 确实绑 IP，但 curl_cffi 的 Chrome 指纹伪装已足够接近，不再是障碍。
-
-    **但据此改造省不了流量，反而更费。** 同日用 ``tools/clearance_probe.py`` 实测
-    了一张票离开浏览器之后能活多久：
-
-        0 / 5 / 10 / 15 分钟   200
-        20 / 25 / 30 分钟      403 «Just a moment...»
-        → 真实寿命 15–20 分钟
-
-    ``cf_clearance`` 上标称的一年是摆设；真正管事的是同域下的 ``h2s_clr``，
-    它的过期时间正好是 **0.5 小时**。
-
-    而浏览器内的会话能撑 2 小时（``_BROWSER_MAX_AGE``），因为它一直在正常发请求、
-    cookie 由服务端持续刷新；票一旦离开浏览器就没人续了。也就是说改用 curl_cffi
-    之后**过挑战的频率只会上升**——从 2 小时一次变成 15–20 分钟一次。
-
-    挑战载荷（2026-08-04：985MB 中 558MB）只能靠**减少浏览器重建次数**来省，也就是
-    持久化 profile（已做）与放宽重建周期。这条路走不通。
-
-    换出口 IP 必须重新过挑战，这一点也不会改变。
+    **为什么不把 clearance 导出给 HTTP 客户端**：2026-08-05 实测导出的
+    cf_clearance + UA + 同一出口 IP + curl_cffi Chrome 指纹确实能用，但票离开
+    浏览器后只活 15–20 分钟；浏览器内的会话因为一直在发请求、cookie 被服务端
+    持续刷新，能撑到 ``_BROWSER_MAX_AGE``。改用 HTTP 客户端只会让过挑战更频繁。
+    挑战载荷只能靠**减少浏览器重建次数**来省（持久化 profile + 放宽重建周期）。
 
     站点差异全部收在 ``SiteProfile`` 里（见该类）；本类只负责通用流程：
     过挑战 → 等 clearance → 发请求 → 处理 clearance 过期。
@@ -667,9 +458,6 @@ class BrowserFetcher:
     用法
     ----
     ::
-
-        with BrowserFetcher(profile=H2S_PROFILE) as f:
-            data = f.fetch_gql(query, variables)
 
         with BrowserFetcher(profile=XIOR_PROFILE) as f:
             resp = f.fetch_form("/wp-admin/admin-ajax.php", {"action": "..."})
@@ -684,8 +472,7 @@ class BrowserFetcher:
         headless: bool = True,
         profile: "SiteProfile" = None,  # type: ignore[assignment]
     ):
-        # 默认 H2S：booker 和 H2S scraper 都按位置参数调用，保持向后兼容
-        self._profile = profile if profile is not None else H2S_PROFILE
+        self._profile = profile if profile is not None else XIOR_PROFILE
         self._headless = headless
         self._browser = None
         self._page = None
@@ -1037,7 +824,7 @@ class BrowserFetcher:
         #
         # 上面那句 close() 外面包着 `except: pass`——连接断了的时候它既不报错也
         # 不生效，进程照旧活着。只信它的后果见 _reap_profile 的 docstring
-        # （2026-09-09：泄漏 5 套浏览器，拖垮 xior 与 h2s）。所以这里先核实。
+        # （2026-09-09：泄漏 5 套浏览器，拖垮两个浏览器型 source）。所以这里先核实。
         if self._profile_path is not None:
             try:
                 _reap_profile(self._profile_path)
@@ -1053,7 +840,7 @@ class BrowserFetcher:
         """
         懒加载：首次请求前访问主页完成 CF Turnstile 挑战。
 
-        公开方法——booker 可以提前调用来热身，也可以在 fetch_gql 首次调用时自动触发。
+        公开方法——调用方可以提前调用来热身，也可以在 fetch 首次调用时自动触发。
         """
         if self._initialized:
             return
@@ -1064,7 +851,7 @@ class BrowserFetcher:
         # 每次尝试 = 一次完整导航 + 短暂等 cookie 落地。等不到就**重新导航**，
         # 而不是继续对 API 轮询：token 由导航签发，轮询换不出来，只会朝一个
         # 拿不到 clearance 的会话打几十个必然 403 的请求，反过来加重 CF 的
-        # 怀疑。（同理见 fetch_gql 里 clearance 过期的处理。）
+        # 怀疑。（同理见 fetch 里 clearance 过期的处理。）
         for attempt in range(1, _INIT_ATTEMPTS + 1):
             try:
                 challenge_elapsed, clearance_elapsed = self._navigate_and_verify(
@@ -1166,18 +953,16 @@ class BrowserFetcher:
 
         # goto(domcontentloaded) 返回时页面通常还是 CF 挑战页，必须先等挑战
         # 真正解开，再做任何基于页面内容的判定——否则读到的标题和正文是
-        # Cloudflare 的，不是 H2S 的。
+        # Cloudflare 的，不是站点的。
         self._wait_for_challenge_clear()
         challenge_elapsed = time.monotonic() - start
 
         # 挑战已解开，此刻的标题/正文才代表站点真实状态
         self._raise_if_maintenance_page()
 
-        # 最后一关：确认 clearance 真的生效。
-        # 这里以前等的是 ``[data-cy="FilterList-item"]``——实测它和能否发请求
-        # 无关（GraphQL 已经 200 时该元素仍可能没渲染），而且等不到还只告警
-        # 就继续，等于把「没通过校验」当成「通过了」。改为直接探 GraphQL：
-        # 能拿到响应才算初始化完成。
+        # 最后一关：确认 clearance 真的生效。等页面元素出现不算数——元素和
+        # 能否发请求无关；配了 clearance_probe 的 profile 直接探 API，能拿到
+        # 响应才算初始化完成。
         clearance_start = time.monotonic()
         self._wait_for_clearance()
         return challenge_elapsed, time.monotonic() - clearance_start
@@ -1230,7 +1015,7 @@ class BrowserFetcher:
         """轮询到 CF 挑战解开为止；超时抛 BlockedError。
 
         这是「挑战是否通过」的唯一判据。以前用 ``[data-cy=FilterList-item]``
-        选择器代替，超时后仅告警并继续，导致挑战没过也照发 GraphQL——
+        选择器代替，超时后仅告警并继续，导致挑战没过也照发请求——
         必然 403，再触发会话重建，最终把 source 打进熔断。
         """
         deadline = time.monotonic() + timeout
@@ -1278,12 +1063,10 @@ class BrowserFetcher:
         ------------------------------------------------
         Chromium 崩掉 / 被 OOM killer 干掉之后，``self._browser`` 仍然是个对象，
         ``close()`` 也从没被调用过。而调用方判断「要不要复用」看的是「非 None
-        且没超龄」，于是死掉的实例会被一直复用到 ``_BROWSER_MAX_AGE``
-        （H2S 2 小时）才自愈。
+        且没超龄」，于是死掉的实例会被一直复用到 ``_BROWSER_MAX_AGE`` 才自愈。
 
-        中间那些轮次不会自己恢复：崩溃在 ``page.evaluate`` 处抛出，被
-        ``_scrape_city_pages`` 改判成 ``ScrapeNetworkError``，而 dispatcher 的
-        网络分支**刻意不丢会话**（丢的话每次代理抖动都要重过一整轮 CF 挑战）。
+        中间那些轮次不会自己恢复：崩溃在 ``page.evaluate`` 处抛出，被 scraper
+        改判成 ``ScrapeNetworkError``，而 dispatcher 的网络分支**刻意不丢会话**（丢的话每次代理抖动都要重过一整轮 CF 挑战）。
 
         实现上只读**本地标志位**，不发任何 IPC：``is_closed()`` / ``is_connected()``
         由连接层维护，进程没了会被置位。所以这个检查几乎零成本，可以每次复用前跑。
@@ -1319,29 +1102,12 @@ class BrowserFetcher:
         body: str = "",
         headers: Mapping[str, str] | None = None,
         timeout_ms: int = 30_000,
-        encrypted: bool | None = None,
     ) -> dict:
         """在页面里发一次同源请求，原样返回 ``{status, ok, text, headers}``。
 
         不做任何状态码处理，也**不会**触发 ``ensure_initialized``——
         clearance 探测要在初始化过程中调用它，走公开方法会无限递归。
-
-        ``encrypted`` 决定带 body 的请求走不走加密信封：
-        - ``None``（默认）→ 跟随 profile 的 ``encrypted_envelope``；
-        - ``True`` → 强制信封；``False`` → 强制明文。
-
-        H2S 的 GraphQL 走信封，但同站的 NextAuth 端点（``/api/auth/*``）是明文
-        表单 REST，硬套信封只会 400——那条路要显式传 ``encrypted=False``。
-        GET/HEAD 没有 body，无所谓信封。
         """
-        use_envelope = (
-            self._profile.encrypted_envelope if encrypted is None else encrypted
-        )
-        if use_envelope and method.upper() not in ("GET", "HEAD"):
-            return self._encrypted_fetch(
-                path, body=body, headers=headers or {}, timeout_ms=timeout_ms,
-            )
-
         merged = dict(self._profile.default_headers)
         if headers:
             merged.update(headers)
@@ -1391,357 +1157,14 @@ class BrowserFetcher:
         """
         return self._page.evaluate(js_code)
 
-    # ── 加密信封传输 ────────────────────────────────────────────────
-    #
-    # 2026-08-17 起 H2S 的 GraphQL 只走这条路：明文请求会直接吃 Cloudflare
-    # 挑战。算法照抄站点自己的 JS（chunk 里搜 ``__enc__``）：
-    #
-    #     aesKey  = AES-GCM 256，每次请求新生成
-    #     k       = RSA-OAEP(SHA-256) 包裹 aesKey 的裸字节
-    #     iv      = 12 字节随机数
-    #     d       = AES-GCM(aesKey, iv, 明文)
-    #     信封     = {v:1, k, iv, d, ct}   全部 base64
-    #     POST 到 /api/__enc__，带 x-enc: 1
-    #     响应带 x-enc: 1 时，body 是 {iv, d, ct}，用同一个 aesKey 解
-    #
-    # **为什么在页面里做而不是在 Python 里做**：WebCrypto 就在手边，且密钥
-    # 材料不出浏览器；更重要的是这样能沿用同源 fetch 的全部凭据（cookies /
-    # clearance / TLS 指纹），与既有的 _raw_fetch 完全同构。
-    #
-    # 公钥不写死，见 ``_ensure_enc_pubkey``。
-
-    def _ensure_enc_pubkey(self) -> str:
-        """取加密用的 RSA 公钥（SPKI base64）。进程内缓存，见 ``_ENC_PUBKEY_CACHE``。
-
-        **按 chunk 名字先筛**（``_ENC_CHUNK_HINTS``），不要遍历全部 script——
-        那条路 2026-08-18 把出口 IP 送进了 Cloudflare 黑名单，原因见常量注释。
-        """
-        cached = _ENC_PUBKEY_CACHE.get(self._profile.name)
-        if cached:
-            return cached
-
-        key = self._page.evaluate(
-            """async ([re, hints]) => {
-                const rx = new RegExp(re);
-                const all = [...document.querySelectorAll('script[src]')]
-                    .map(s => s.src);
-                // 先按名字筛；筛不到再退回全量，但正常情况下走不到那一步。
-                const named = all.filter(u => hints.some(h => u.includes(h)));
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 30000);
-                try {
-                    for (const list of [named, all]) {
-                        for (const u of list) {
-                            if (controller.signal.aborted) return {timedOut: true};
-                            let t;
-                            try { t = await (await fetch(u, {signal: controller.signal})).text(); }
-                            catch (e) { continue; }
-                            if (!t.includes('__enc__')) continue;
-                            const m = t.match(rx);
-                            if (m) return {key: m[1], scanned: list.length,
-                                           fallback: list === all};
-                        }
-                    }
-                    return controller.signal.aborted ? {timedOut: true} : null;
-                } finally {
-                    clearTimeout(timer);
-                }
-            }""",
-            [_ENC_PUBKEY_RE, list(_ENC_CHUNK_HINTS)],
-        )
-        if key and key.get("timedOut"):
-            raise _exc("ScrapeNetworkError")(
-                f"{self._profile.name} 获取加密公钥超时，未完成 script 扫描"
-            )
-        if not key or not key.get("key"):
-            raise _exc("ScrapeNetworkError")(
-                f"{self._profile.name} 找不到加密公钥——bundle 结构可能已变。"
-                f"到含 __enc__ 的 chunk 里搜 SPKI 常量（形如 MIIBIjANBgkq…），"
-                f"并核对 _ENC_PUBKEY_RE / _ENC_CHUNK_HINTS。"
-            )
-        if key.get("fallback"):
-            # 退回全量说明 _ENC_CHUNK_HINTS 过期了。它能救这一次，但代价正是
-            # 当初惹祸的那个行为特征，所以要吵一声，别让它悄悄变成常态。
-            logger.warning(
-                "%s 按 chunk 名字没找到公钥，退回扫描全部 %d 个 script。"
-                "请更新 _ENC_CHUNK_HINTS——长期这么扫会被 Cloudflare 盯上。",
-                self._profile.name, key.get("scanned", 0),
-            )
-        _ENC_PUBKEY_CACHE[self._profile.name] = key["key"]
-        logger.info(
-            "%s 已取得加密公钥（%d 字符，扫了 %d 个 chunk）",
-            self._profile.name, len(key["key"]), key.get("scanned", 0),
-        )
-        return key["key"]
-
-    def _drop_enc_pubkey(self) -> None:
-        """作废缓存的公钥。上游轮换时靠它自愈——下次请求会重新抓。"""
-        if _ENC_PUBKEY_CACHE.pop(self._profile.name, None):
-            logger.warning("%s 加密公钥已作废，下次请求将重新抓取", self._profile.name)
-
-    #: 信封的 JS 实现。**只有这一份。**
-    #:
-    #: 站点对两种投递方式用的是同一套密码学，只在三处不同（module 82361 的
-    #: J / H 两个函数）：加密什么、ct 写什么、信封放 body 还是放头。这三处
-    #: 参数化掉之后剩下的全是共享的——RSA-OAEP 包裹 AES 会话密钥、12 字节 IV、
-    #: 同源 fetch 的凭据设置、响应头白名单、x-enc 判定与解密。
-    #:
-    #: 之前是两份各 90+ 行、行级 76% 重复的拷贝。公钥轮换自愈、错误收敛、
-    #: 响应头白名单各写了两遍——改一处忘另一处只是时间问题。
-    _ENVELOPE_JS = """
-        async (a) => {
-            const b2a = (b) => { let s = "";
-                for (const x of b) s += String.fromCharCode(x); return btoa(s); };
-            const a2b = (s) => { const t = atob(s);
-                const u = new Uint8Array(t.length);
-                for (let i = 0; i < t.length; i++) u[i] = t.charCodeAt(i);
-                return u; };
-            const sub = crypto.subtle;
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), a.timeoutMs);
-            try {
-                const rsa = await sub.importKey("spki", a2b(a.pub),
-                    {name: "RSA-OAEP", hash: "SHA-256"}, false, ["encrypt"]);
-                const aes = await sub.generateKey({name: "AES-GCM", length: 256},
-                    true, ["encrypt", "decrypt"]);
-                const raw = new Uint8Array(await sub.exportKey("raw", aes));
-                const k = new Uint8Array(
-                    await sub.encrypt({name: "RSA-OAEP"}, rsa, raw));
-                const iv = crypto.getRandomValues(new Uint8Array(12));
-                const d = new Uint8Array(await sub.encrypt({name: "AES-GCM", iv},
-                    aes, new TextEncoder().encode(a.plaintext)));
-                const envelope = {v: 1, k: b2a(k), iv: b2a(iv), d: b2a(d),
-                                  ct: a.contentType};
-
-                const h = Object.assign({}, a.headers);
-                const init = {
-                    method: a.method,
-                    credentials: "include",
-                    mode: "same-origin",
-                    cache: "no-store",
-                    redirect: "follow",
-                    referrer: window.location.href,
-                    referrerPolicy: "strict-origin-when-cross-origin",
-                    signal: controller.signal,
-                };
-                if (a.queryHeader) {
-                    // 站点：x-enc-q = base64(utf8(JSON(信封)))，请求不带 body
-                    h[a.queryHeader] = b2a(
-                        new TextEncoder().encode(JSON.stringify(envelope)));
-                } else {
-                    init.body = JSON.stringify(envelope);
-                }
-                init.headers = h;
-
-                const resp = await fetch(a.url, init);
-                const raw_text = await resp.text();
-                const out = {};
-                for (const [key, value] of resp.headers.entries()) {
-                    const lower = key.toLowerCase();
-                    if (['cf-ray', 'content-type', 'server', 'vary',
-                         a.encHeader].includes(lower)) out[lower] = value;
-                }
-                // 没有 x-enc 头 = 明文（403 clearance_required 走这条）
-                if (out[a.encHeader] !== "1") {
-                    return {status: resp.status, ok: resp.ok,
-                            text: raw_text, headers: out};
-                }
-                const back = JSON.parse(raw_text);
-                const plain = new Uint8Array(await sub.decrypt(
-                    {name: "AES-GCM", iv: a2b(back.iv)}, aes, a2b(back.d)));
-                return {status: resp.status, ok: resp.ok,
-                        text: new TextDecoder().decode(plain), headers: out};
-            } catch (err) {
-                return {error: err.message || String(err)};
-            } finally {
-                clearTimeout(timer);
-            }
-        }
-    """
-
-    def _envelope_fetch(
-        self,
-        *,
-        url: str,
-        method: str,
-        plaintext: str,
-        content_type: str,
-        headers: Mapping[str, str],
-        timeout_ms: int,
-        query_header: str = "",
-    ) -> dict:
-        """发一次信封请求，返回**解密后**的 ``{status, ok, text, headers}``。
-
-        返回形状与 ``_raw_fetch`` 完全一致，所以 ``fetch`` / ``fetch_gql`` 以上
-        一行都不用改。响应没有 x-enc 头时原样返回明文——403 的
-        ``{"code":"clearance_required"}`` 就是这么回的，clearance 探测要靠它。
-
-        ``query_header`` 非空时信封走那个请求头（GET 的形态），否则走 body。
-        """
-        pub = self._ensure_enc_pubkey()
-        merged = dict(self._profile.default_headers)
-        merged.update(headers or {})
-
-        result = self._page.evaluate(self._ENVELOPE_JS, {
-            "pub": pub,
-            "url": url,
-            "method": method,
-            "plaintext": plaintext,
-            "contentType": content_type,
-            "headers": merged,
-            "timeoutMs": timeout_ms,
-            "encHeader": _ENC_HEADER,
-            "queryHeader": query_header,
-        })
-        # JS 侧的 try/catch 把 importKey / encrypt / decrypt 的失败都收成
-        # {"error": ...}。公钥轮换正是从这里冒出来的：旧公钥加密的信封服务端
-        # 解不开，或响应用新密钥回来我们解不开。作废缓存，下次请求重抓即自愈。
-        if isinstance(result, dict) and result.get("error"):
-            self._drop_enc_pubkey()
-        return result
-
-    def _encrypted_fetch(
-        self,
-        path: str,
-        *,
-        body: str,
-        headers: Mapping[str, str],
-        timeout_ms: int,
-    ) -> dict:
-        """非 GET：加密 **body** → POST 原 URL，头 ``x-enc: 1``。
-
-        站点 module 82361 的函数 ``J``。GraphQL（``/api/__enc__``）、
-        ``/api/booking``、``POST /api/rest/*`` 都是这个形状。
-        """
-        merged = dict(headers or {})
-        merged[_ENC_HEADER] = "1"
-        merged["Content-Type"] = "application/json"
-        return self._envelope_fetch(
-            url=path,
-            method="POST",
-            plaintext=body,
-            content_type="application/json",
-            headers=merged,
-            timeout_ms=timeout_ms,
-        )
-
-    def _encrypted_rest_get(
-        self,
-        path: str,
-        *,
-        headers: Mapping[str, str],
-        timeout_ms: int,
-    ) -> dict:
-        """GET ``/api/rest/*``：加密**路径**走 ``x-enc-q`` 头。
-
-        站点 module 82361 的函数 ``H``::
-
-            r = url.slice("/api".length)            # "/rest/V1/..."（含 query）
-            envelope = encrypt(r, "text/plain")
-            headers["x-enc-q"] = base64(JSON(envelope))
-            GET /api/rest/__enc__
-
-        注意加密的是**路径字符串**、ct 为 ``text/plain``——与 body 加密那条
-        （``application/json``）不是一回事，写混了服务端解不开。
-        """
-        inner = path[len(_REST_API_PREFIX):] if path.startswith(_REST_API_PREFIX) else path
-        return self._envelope_fetch(
-            url=_REST_ENC_PATH,
-            method="GET",
-            plaintext=inner,
-            content_type="text/plain",
-            headers=headers or {},
-            timeout_ms=timeout_ms,
-            query_header=_ENC_QUERY_HEADER,
-        )
-
-    def fetch_encrypted_json(
-        self,
-        path: str,
-        *,
-        body: str,
-        headers: Mapping[str, str] | None = None,
-        timeout_ms: int = 30_000,
-    ) -> dict:
-        """POST 一个加密信封到任意同源路径，返回解密后的 ``{status, ok, text, headers}``。
-
-        给 GraphQL 以外、但同样走信封的站点端点用——目前是 ``/api/booking``
-        （站点自己的占房入口，见 docs/H2S_BOOKING_OPS.md §3.3）。编码与站点的
-        ``zg`` 一致：``JSON → 信封 → body``，头带 ``x-enc: 1``。
-
-        不做 403 重建：401/403 在这些业务端点上是语义响应（未登录、参数无效），
-        换 IP 解决不了。状态码原样交回调用方。
-        """
-        self.ensure_initialized()
-        result = self._encrypted_fetch(
-            path, body=body, headers=headers or {}, timeout_ms=timeout_ms,
-        )
-        if "error" in result:
-            raise _exc("ScrapeNetworkError")(
-                f"{self._profile.name} 加密请求失败 {path}: {result['error']}"
-            )
-        return result
-
-    def fetch_rest(
-        self,
-        path: str,
-        *,
-        method: str = "GET",
-        body: str = "",
-        headers: Mapping[str, str] | None = None,
-        timeout_ms: int = 30_000,
-    ) -> dict:
-        """发一次 ``/api/rest/*`` 请求，按站点的信封约定编码，返回解密后的响应。
-
-        GET 走 ``x-enc-q``（加密路径），其余走加密 body（形状同 GraphQL）。
-        两条规则逐字照抄自站点 module 82361 的 ``H`` / ``J``，见
-        docs/H2S_BOOKING_OPS.md §3.2。
-
-        **不是 ``fetch_plain``**：那条是给 ``/api/auth/*``（NextAuth）用的，
-        站点对它确实不加密（拦截器只对 ``/api/rest/`` 生效）。两者别混。
-        """
-        self.ensure_initialized()
-        if method.upper() == "GET":
-            result = self._encrypted_rest_get(
-                path, headers=headers or {}, timeout_ms=timeout_ms,
-            )
-        else:
-            result = self._encrypted_fetch(
-                path, body=body, headers=headers or {}, timeout_ms=timeout_ms,
-            )
-        if "error" in result:
-            raise _exc("ScrapeNetworkError")(
-                f"{self._profile.name} REST 请求失败 {path}: {result['error']}"
-            )
-        return result
-
-    def _raw_fetch_gql(
-        self,
-        query: str,
-        variables: dict | None = None,
-        *,
-        operation_name: str = "",
-        timeout_ms: int = 30_000,
-        extra_headers: dict[str, str] | None = None,
-    ) -> dict:
-        """GraphQL 形态的 ``_raw_fetch``。"""
-        return self._raw_fetch(
-            _H2S_GQL_PATH,
-            method="POST",
-            body=_gql_body(query, variables, operation_name),
-            headers=extra_headers,
-            timeout_ms=timeout_ms,
-        )
-
     def _is_clearance_required(self, result: dict) -> bool:
         """403 是否属于「clearance 还没落地」这种**瞬时**状态。
 
         两者都是 403，但含义相反：clearance 未生效重新导航就好，IP 被封则
         换 IP 才有用。混为一谈会把马上要生效的会话反复推倒重建。
 
-        判据由 profile 给：
-        - H2S 回自己的 JSON ``{"code":"clearance_required"}``
-        - 多数站点直接回 CF 挑战页（``_cf_chl_opt`` / ``Just a moment``）
+        判据由 profile 给（``clearance_pending_markers``）；默认是 CF 挑战页的
+        特征（``_cf_chl_opt`` / ``Just a moment``）。
         """
         if result.get("status") != 403:
             return False
@@ -1752,7 +1175,7 @@ class BrowserFetcher:
         )
 
     def _wait_for_clearance(self, timeout: float = _CLEARANCE_TIMEOUT) -> None:
-        """轮询到 GraphQL 不再回 clearance_required 为止。
+        """轮询到 profile 的 clearance 探针不再回「待校验」为止。
 
         挑战页消失只说明文档被真实页面替换了，``cf_clearance`` cookie 未必
         已经生效——实测两者之间有约 2s 的空窗，这期间发请求必然 403。
@@ -1786,86 +1209,6 @@ class BrowserFetcher:
                     "持续要求浏览器校验。可能需要更换 IP 或等待冷却。"
                 )
             time.sleep(_CLEARANCE_POLL_INTERVAL)
-
-    def probe_clearance(self, timeout_ms: int = 15_000) -> bool:
-        """打一次 profile 自己声明的 clearance 探针，返回它过没过。
-
-        公开出来给常驻浏览器做保活用（见 mcore/warm_browser.py）。用探针而不是
-        随便一个请求，是因为初始化最后一步 ``_wait_for_clearance`` 判「能不能用」
-        用的就是它——保活和健康检查因此是同一件事，不必做两遍。
-
-        没配探针的 profile 返回 True：它本来就是「由首个真实请求兜底」的约定，
-        这里报 False 会让调用方把一条好好的浏览器丢掉。
-        """
-        probe = self._profile.clearance_probe
-        if probe is None:
-            return True
-        try:
-            result = self._raw_fetch(
-                probe.path, method=probe.method, body=probe.body,
-                headers=probe.headers, timeout_ms=timeout_ms,
-            )
-        except Exception as e:
-            logger.debug("%s clearance 探针异常: %s", self._profile.name, e)
-            return False
-        return "error" not in result and not self._is_clearance_required(result)
-
-    def fetch_gql(
-        self,
-        query: str,
-        variables: dict | None = None,
-        *,
-        operation_name: str = "",
-        timeout_ms: int = 30_000,
-        extra_headers: dict[str, str] | None = None,
-    ) -> dict:
-        """
-        在浏览器内通过 fetch() 发 GraphQL POST 请求。
-
-        Parameters
-        ----------
-        query         : GraphQL query 或 mutation 字符串
-        variables     : GraphQL variables dict（可选）
-        operation_name: GraphQL operationName。H2S 自 2026-08-18 起按 operation
-                        白名单放行，缺了它一律 403 ``operation_not_allowed``
-        timeout_ms    : fetch 超时毫秒数
-        extra_headers : 额外 HTTP 头（e.g. Authorization: Bearer xxx）
-
-        Returns
-        -------
-        响应 JSON 的完整 dict（含 data / errors 字段）
-
-        Raises
-        ------
-        BlockedError              HTTP 403 且是 Cloudflare 屏蔽（换 IP 有意义）
-        OperationNotAllowedError  HTTP 403 但是 operation 没登记（换 IP 无意义）
-        RateLimitError            HTTP 429 (限流)
-        ScrapeNetworkError        网络/超时错误 / 非 JSON 响应
-        """
-        try:
-            result = self.fetch(
-                _H2S_GQL_PATH,
-                method="POST",
-                body=_gql_body(query, variables, operation_name),
-                headers=extra_headers,
-                timeout_ms=timeout_ms,
-            )
-        except _exc("OperationNotAllowedError") as e:
-            # fetch() 是站点通用入口，看不到 operationName。把它补进消息里——
-            # 这条异常唯一的修法就是「照抄哪条 operation」，不写清楚是哪条，
-            # 日志等于只说了「有一条不行」，而 booker 里有 9 条。
-            raise _exc("OperationNotAllowedError")(
-                f"operation {operation_name or _operation_label(query)} 被拒: {e}"
-            ) from e
-
-        import json
-
-        try:
-            return json.loads(result["text"])
-        except json.JSONDecodeError as e:
-            raise _exc("ScrapeNetworkError")(
-                f"{self._profile.name} 响应非 JSON: {e}"
-            ) from e
 
     def fetch_form(
         self,
@@ -1907,27 +1250,18 @@ class BrowserFetcher:
         headers: Mapping[str, str] | None = None,
         timeout_ms: int = 30_000,
     ) -> dict:
-        """发一次**不走加密信封**的同源请求，原样返回 ``{status, ok, text, headers}``。
+        """发一次同源请求，原样返回 ``{status, ok, text, headers}``，不处理状态码。
 
-        给同站的明文 REST 端点用——目前是 H2S 的 NextAuth 登录流
-        （``/api/auth/csrf`` · ``/api/auth/callback/credentials`` ·
-        ``/api/auth/session``）。这些不是 GraphQL、不吃加密信道，被 ``fetch()``
-        默认套上信封只会 400。
-
-        与 ``fetch()`` 的两点区别，都是刻意的：
-
-        - **强制明文**（``encrypted=False``）——绕开 profile 的
-          ``encrypted_envelope``；
-        - **不做 403/CF 重建**——登录失败回 401、需要重新校验回 403，都是业务
+        与 ``fetch()`` 的区别是刻意的：**不做 403/CF 重建**——登录失败回 401、需要重新校验回 403，都是业务
           语义的响应，换 IP / 重建浏览器解决不了。状态码原样交回调用方判断。
 
-        仍然会 ``ensure_initialized``：NextAuth 端点同样在 Cloudflare 后面，
-        clearance cookie 得先就位。
+        仍然会 ``ensure_initialized``：端点同样在 Cloudflare 后面，clearance
+        cookie 得先就位。
         """
         self.ensure_initialized()
         result = self._raw_fetch(
             path, method=method, body=body, headers=headers,
-            timeout_ms=timeout_ms, encrypted=False,
+            timeout_ms=timeout_ms,
         )
         if "error" in result:
             raise _exc("ScrapeNetworkError")(
@@ -1946,14 +1280,11 @@ class BrowserFetcher:
     ) -> dict:
         """发一次同源请求并处理 CF 相关的失败，返回 ``{status, ok, text, headers}``。
 
-        这是所有站点共用的请求入口：``fetch_gql`` / ``fetch_form`` 只是在它
-        外面套一层响应解析。
+        这是所有站点共用的请求入口：``fetch_form`` 只是在它外面套一层响应解析。
 
         Raises
         ------
         BlockedError              403 且重建会话后仍被挡
-        OperationNotAllowedError  403 且正文表明这条 operation 没在白名单里。
-                                  **不重建、不换 IP** —— 见该异常的 docstring
         RateLimitError            429
         ScrapeNetworkError        网络/超时错误
         UpstreamMaintenanceError  重建过程中发现站点在维护
@@ -1989,24 +1320,6 @@ class BrowserFetcher:
                 )
             status = result["status"]
 
-        if status == 403 and _is_operation_rejected(result.get("text", "")):
-            # 403 但不是 Cloudflare —— 是上游应用说「这条 operation 没登记」。
-            #
-            # 必须在下面那段重建之前拦住。重建做的三件事（换出口 IP、换指纹、
-            # 重跑 CF 挑战）对这种 403 一件都不管用：正文由业务后端生成，
-            # Cloudflare 只是把它转出来。2026-08-19 一次自动预订就是这样烧掉
-            # 75 秒和两轮完整挑战，最后拿到的还是同一个 403，并且把误判上抛成
-            # BlockedError，触发了 1 小时登录链路抑制。
-            #
-            # 抛一个**不继承 BlockedError**的异常：上层任何 `except BlockedError`
-            # 都不该接住它，否则换 IP / 熔断 / 抑制会原样重演。
-            raise _exc("OperationNotAllowedError")(
-                f"{self._profile.name} 拒绝了这条 GraphQL operation："
-                f"不在上游白名单里（HTTP 403，正文由业务后端返回，非 Cloudflare 挑战页）。"
-                f"换 IP、重建浏览器、等冷却都无效，只能照抄站点自己发的那条 operation。"
-                f"路径 {path}，响应: {result.get('text', '')[:200]}"
-            )
-
         if status == 403:
             logger.warning(
                 "%s 返回 403，尝试重建 CF 会话... headers=%s body=%s",
@@ -2041,15 +1354,6 @@ class BrowserFetcher:
                     retry.get("headers", {}),
                     retry.get("text", "")[:300],
                 )
-                # 重建后才露出 operation 文案的情形也要认下来。上面那道闸门只看
-                # 第一次响应，而挑战未过时拿到的是挑战页 HTML，真正的业务 403
-                # 要到挑战过了之后才看得见。
-                if _is_operation_rejected(retry.get("text", "")):
-                    raise _exc("OperationNotAllowedError")(
-                        f"{self._profile.name} 拒绝了这条 GraphQL operation："
-                        f"不在上游白名单里。重建会话后仍是同一个 403 —— 与出口 IP 无关。"
-                        f"路径 {path}，响应: {retry.get('text', '')[:200]}"
-                    )
                 raise _exc("BlockedError")(
                     f"{self._profile.name} 持续返回 403。可能需要更换 IP 或等待冷却。"
                 )
@@ -2065,9 +1369,8 @@ class BrowserFetcher:
             # 404 = 这个路径在上游不存在了，几乎只有一个成因：端点被迁走。
             #
             # 单独拎出来是因为它此前落进下面那条通用分支，报成
-            # 「抓取网络失败 … 请检查代理/网络」——2026-08-11 H2S 把
-            # /api/graphql 迁到 /api/service/residences 时，日志连刷三天
-            # 「请检查代理/网络」，而代理一直是好的。诊断被引向了完全错误的
+            # 「抓取网络失败 … 请检查代理/网络」——2026-08-11 上游迁走端点时，
+            # 日志连刷三天「请检查代理/网络」，而代理一直是好的。诊断被引向了完全错误的
             # 方向，是那次静默三天的直接原因之一。
             #
             # 仍然抛 ScrapeNetworkError：调用方的隔离与重试语义不该变，改的

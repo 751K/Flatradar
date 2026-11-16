@@ -22,24 +22,24 @@ import notifier
 
 class TestSourceTagSurvives:
     @pytest.mark.parametrize("first_line", [
-        "[H2S] New Listing",
+        "[CD] New Listing",
         "[OD] Status Change",
         "[OC] Booking Successful!",
         "[XR] Lottery listings × 3",
-        "[H2S] 新房源上架",
+        "[CD] 新房源上架",
     ])
     def test_bracket_is_not_stripped(self, first_line):
         assert notifier._strip_leading_symbol(first_line) == first_line
 
     def test_subject_keeps_the_bracket(self):
         """主题行是用户在收件箱列表里唯一看得见的东西。"""
-        subject = notifier._format_email_subject("[H2S] New Listing\n\nJames Wattstraat 77B3")
-        assert subject == "[FlatRadar] [H2S] New Listing"
+        subject = notifier._format_email_subject("[CD] New Listing\n\nJames Wattstraat 77B3")
+        assert subject == "[FlatRadar] [CD] New Listing"
 
     def test_html_heading_keeps_the_bracket(self):
-        html = notifier._format_email_html("[H2S] New Listing\n\nJames Wattstraat 77B3")
-        assert "[H2S] New Listing" in html
-        assert "H2S] New Listing" not in html.replace("[H2S] New Listing", "")
+        html = notifier._format_email_html("[CD] New Listing\n\nJames Wattstraat 77B3")
+        assert "[CD] New Listing" in html
+        assert "CD] New Listing" not in html.replace("[CD] New Listing", "")
 
     def test_every_notification_first_line_is_affected(self):
         """这不是某一种通知的问题——所有格式化函数的首行都是 ``[来源] ...``。
@@ -91,7 +91,7 @@ def test_email_and_telegram_share_one_implementation():
 
 
 @pytest.mark.parametrize("raw,want", [
-    ("[H2S] New Listing", "[H2S] New Listing"),
+    ("[CD] New Listing", "[CD] New Listing"),
     ("⚠️ 抓取被限流",       "抓取被限流"),
 ])
 def test_both_strippers_agree(raw, want):

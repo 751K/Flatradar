@@ -31,7 +31,7 @@ def _insert(st, lid: str, *, days_ago: float, name="Kastanjelaan 1, Eindhoven",
             first_seen, last_seen, notified, last_status, source)
            VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?)""",
         (lid, name, status, "€900", "2026-09-01", "[]", f"https://x/{lid}",
-         "Eindhoven", _iso(days_ago + 1), _iso(days_ago), status, "holland2stay"),
+         "Eindhoven", _iso(days_ago + 1), _iso(days_ago), status, "codomo"),
     )
     st.conn.commit()
 

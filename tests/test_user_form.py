@@ -19,8 +19,6 @@ from werkzeug.datastructures import ImmutableMultiDict
 from app.forms.user_form import (
     build_user_from_form,
     build_user_from_form_self,
-    VALID_PAYMENT_METHODS,
-    DEFAULT_PAYMENT_METHOD,
 )
 from users import UserConfig, set_app_password, verify_app_password
 
@@ -222,50 +220,17 @@ class TestPasswordPreservation:
         assert u.email_password == "OLD_PW"
 
     def test_auto_book_password_preservation(self):
-        """auto_book.password 同样适用密码保留语义。"""
+        """auto_book 里的平台密码同样适用密码保留语义。"""
         from config import AutoBookConfig
         existing = UserConfig(
             name="X", id="aaaaaaaa",
-            auto_book=AutoBookConfig(enabled=True, email="x@y.com", password="H2S_OLD"),
+            auto_book=AutoBookConfig(enabled=True, plaza_username="x", plaza_password="PZ_OLD"),
         )
         u = build_user_from_form(
             _form(("name", "x")),
             user_id="aaaaaaaa", existing=existing,
         )
-        assert u.auto_book.password == "H2S_OLD"
-
-
-# ─── 支付方式白名单 ─────────────────────────────────────────────
-
-
-class TestPaymentMethodWhitelist:
-    """payment_method 字段必须走白名单，攻击者不能注入任意字符串。"""
-
-    def test_valid_methods_accepted(self):
-        for method in VALID_PAYMENT_METHODS:
-            u = build_user_from_form(_form(
-                ("name", "x"), ("AUTO_BOOK_PAYMENT_METHOD", method),
-            ))
-            assert u.auto_book.payment_method == method
-
-    def test_invalid_method_falls_back_to_default(self):
-        u = build_user_from_form(_form(
-            ("name", "x"),
-            ("AUTO_BOOK_PAYMENT_METHOD", "evil_method_paypal_attacker"),
-        ))
-        assert u.auto_book.payment_method == DEFAULT_PAYMENT_METHOD
-
-    def test_empty_falls_back_to_default(self):
-        u = build_user_from_form(_form(("name", "x")))
-        assert u.auto_book.payment_method == DEFAULT_PAYMENT_METHOD
-
-    def test_sql_injection_payload_blocked(self):
-        """安全：尝试 SQL 注入 payload 也必须落到默认值。"""
-        u = build_user_from_form(_form(
-            ("name", "x"),
-            ("AUTO_BOOK_PAYMENT_METHOD", "'; DROP TABLE listings; --"),
-        ))
-        assert u.auto_book.payment_method == DEFAULT_PAYMENT_METHOD
+        assert u.auto_book.plaza_password == "PZ_OLD"
 
 
 # ─── 列表字段（checkbox + 兼容逗号串） ──────────────────────────
@@ -320,13 +285,13 @@ class TestAutoBookConfig:
             ("name", "x"),
             ("AUTO_BOOK_ENABLED", "true"),
             ("AUTO_BOOK_DRY_RUN", "false"),
-            ("AUTO_BOOK_EMAIL", "h2s@example.com"),
-            ("AUTO_BOOK_PASSWORD", "h2sPW"),
+            ("AUTO_BOOK_PLAZA_USERNAME", "pz-user"),
+            ("AUTO_BOOK_PLAZA_PASSWORD", "pzPW"),
         ))
         assert u.auto_book.enabled is True
         assert u.auto_book.dry_run is False
-        assert u.auto_book.email == "h2s@example.com"
-        assert u.auto_book.password == "h2sPW"
+        assert u.auto_book.plaza_username == "pz-user"
+        assert u.auto_book.plaza_password == "pzPW"
 
     def test_auto_book_listing_filter_independent_from_user_filter(self):
         """auto_book 内嵌的 listing_filter 与用户级 filter 字段独立。"""

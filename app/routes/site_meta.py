@@ -165,7 +165,7 @@ def _llms_txt() -> str:
                 if "index" in listed else "")
     return f"""# FlatRadar
 
-> Monitors Dutch rental platforms (Holland2Stay, Xior, OurDomain, OurCampus)
+> Monitors Dutch rental platforms (Codomo, Xior, OurDomain, OurCampus)
 > and alerts you the moment a listing you can actually book appears. Filter by
 > city, rent, floor area and tenant eligibility; notifications go to email,
 > Telegram, iOS and Android push. Free to use, and self-hostable.

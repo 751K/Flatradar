@@ -6,7 +6,7 @@
 
 - 日常使用和部署：[中文 README](README_cn.md) / [English README](README.md)、[使用指南](https://flatradar.app/guide?lang=zh)
 - API 契约：[API.md](API.md) / [openapi.json](openapi.json)
-- 平台细节：[H2S.md](H2S.md)、[H2S_BOOKING_OPS.md](H2S_BOOKING_OPS.md)、[RENTCAFE.md](RENTCAFE.md)、[XIOR.md](XIOR.md)、[OURDOMAIN.md](OURDOMAIN.md)、[PLAZA.md](PLAZA.md)、[SCRAPING_RECON.md](SCRAPING_RECON.md)
+- 平台细节：[CODOMO.md](CODOMO.md)、[RENTCAFE.md](RENTCAFE.md)、[XIOR.md](XIOR.md)、[OURDOMAIN.md](OURDOMAIN.md)、[PLAZA.md](PLAZA.md)、[SCRAPING_RECON.md](SCRAPING_RECON.md)
 - 后续工作：[FUTURE_PLAN.md](FUTURE_PLAN.md)；版本历史：[CHANGELOG.md](CHANGELOG.md)
 
 ## 进程与存储
@@ -14,7 +14,7 @@
 在标准 Docker 部署中，Caddy 容器提供 HTTPS 和反向代理，应用容器内的 supervisord
 管理 Web 和 monitor 两个独立进程。Web 提供管理面板和 API；monitor 负责周期性抓取
 房源并处理抓取结果。两个进程共享 SQLite 数据库，并通过文件和进程控制机制传递启停
-或重载请求。系统还使用受控工作进程执行浏览器抓取及 Holland2Stay 的预登录和预订。
+或重载请求。系统还使用受控工作进程执行 Xior 的浏览器抓取。
 
 ```mermaid
 flowchart LR
@@ -57,7 +57,7 @@ monitor 切换配置；准备失败时，monitor 保留旧配置和通知器。�
 系统按照来源优先级重新确定该键的值。实现见
 [settings_store.py](../settings_store.py) 和 [monitor.py](../monitor.py)。
 
-每轮开始时，monitor 捕获一份只读运行配置快照。浏览器抓取、预登录、预订及关联工作
+每轮开始时，monitor 捕获一份只读运行配置快照。浏览器抓取、预订及关联工作
 沿用该快照的版本；版本号不包含密钥。影响浏览器启动参数的配置发生变化时，系统会
 在当前操作结束后重建相关工作进程，不会为了应用配置而中断正在提交的预订。对于无需
 重建进程的参数，系统在下次调用时使用新快照。系统从快照读取代理配置，monitor 则
@@ -77,7 +77,7 @@ flowchart TD
     B --> C[合并房源与扫描完整性]
     C --> D[入库并生成新房源 / 状态事件]
     D --> E[合并待重放事件，再过滤影子平台]
-    E --> F[筛选候选、预登录并提交预订]
+    E --> F[筛选候选并提交预订]
     F --> G[发送房源和状态通知]
     G --> H[处理预订结果并等待已排队推送]
     H --> I[保存重试状态]
@@ -94,13 +94,13 @@ flowchart TD
 
 平台标识、显示名、抓取器入口和基础能力统一登记在
 [mcore/sources.py](../mcore/sources.py) 的 `SourceSpec`；抓取器注册表和展示名称由其
-派生。目前，注册表包含 Holland2Stay、OurDomain、OurCampus、Xior、Magis、Student
+派生。目前，注册表包含 Codomo（原 Holland2Stay，2026-11 更名）、OurDomain、OurCampus、Xior、Magis、Student
 Experience 和 Plaza。新增平台时，开发者仍需实现抓取器，并按需接入城市配置和过滤规则。
 
 [config.py](../config.py) 生成平台和城市或楼盘组成的 `ScrapeTask`；
 [monitor.py](../monitor.py) 应用代理可用性、平台间隔和分片规则。
 [mcore/scrape_round.py](../mcore/scrape_round.py) 按平台执行抓取任务并记录结果和
-遥测数据；其中，Holland2Stay 保留登录抑制和熔断恢复所需的特殊判断。调度器隔离单个
+遥测数据；Codomo 与 Magis、Plaza 一样是普通的 TargetSpec 平台，每批只抓一次全国列表再按城市拆分。调度器隔离单个
 平台或目标的失败，并保留其他平台已成功获取的结果。如果整轮没有可用结果，系统将
 进入相应的失败处理流程。
 
@@ -160,15 +160,12 @@ HTTP 传输和浏览器传输处理不同平台的请求。[mcore/browser_worker
 
 | 平台 | 当前开放能力 | 保护范围 |
 |---|---|---|
-| Holland2Stay | 自动预订至取得支付链接；用户自行付款 | 账号级 |
 | Plaza | 单独开启后自动提交应征；提交不保证获得房源 | 账号及房源级 |
-| 其他平台 | 不开放自动预订；RENTCafe 流程的验证进度见 [RENTCAFE.md](RENTCAFE.md) | 不适用 |
+| 其他平台（含 Codomo） | 不开放自动预订；Codomo 新站预订需登录，流程尚未摸清；RENTCafe 流程的验证进度见 [RENTCAFE.md](RENTCAFE.md) | 不适用 |
 
-当存在 Holland2Stay 预订候选时，系统可以提前登录。当前 `/api/booking` 路径已用真实
-账号验证，细节见 [H2S_BOOKING_OPS.md](H2S_BOOKING_OPS.md)。
 Plaza 默认关闭自动应征，详见 [PLAZA.md](PLAZA.md)。
 
-真实提交前，系统会持久化保护记录：Holland2Stay 按账号保护，Plaza 按账号和房源保护。如果提交后
+真实提交前，系统会持久化保护记录：Plaza 按账号和房源保护。如果提交后
 结果不确定、任务超时或进程中断，系统保留相应保护并提示用户核实，避免自动重复提交。
 后台任务仍在运行时，用户或管理员不能解除保护；任务结束后，用户或管理员可按权限
 确认核实结果。成功结果的通知

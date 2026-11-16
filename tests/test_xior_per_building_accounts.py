@@ -168,9 +168,10 @@ class TestBuildingKeyLookup:
 
 
 class TestAutoBookGate:
-    def test_h2s_still_allowed(self):
+    def test_codomo_is_not_auto_bookable(self):
+        """Codomo（原 Holland2Stay）改版后旧下单接口已失效，不再产生候选。"""
         from monitor import _can_auto_book
-        assert _can_auto_book(_user(), _listing("holland2stay")) is True
+        assert _can_auto_book(_user(), _listing("codomo")) is False
 
     def test_xior_is_gated_off_until_flow_is_implemented(self):
         """预订流程还是没走过流程硬猜的草稿，放开等于拿真实账号提交半懂的表单。"""
@@ -183,7 +184,7 @@ class TestAutoBookGate:
         """把闸门打开后，凭据判定必须按楼栋生效。"""
         import monitor
         from mcore import booking_candidates
-        monkeypatch.setattr(booking_candidates, "AUTO_BOOK_SOURCES", ("holland2stay", "xior"))
+        monkeypatch.setattr(booking_candidates, "AUTO_BOOK_SOURCES", ("xior",))
 
         has = _user(xior_accounts={"p0196062": {"email": "a@x.com", "password": "p"}})
         assert monitor._can_auto_book(has, _listing("xior", "Amsterdam Karspeldreef")) is True

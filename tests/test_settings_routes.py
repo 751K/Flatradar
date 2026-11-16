@@ -52,7 +52,7 @@ class TestSettingsPost:
         """POST 写入 CHECK_INTERVAL=120 应生效。"""
         r = admin_client.post("/settings", data={
             "CHECK_INTERVAL": "120",
-            "city_selected": "Eindhoven,29",
+            "codomo_city_selected": "Eindhoven,29",
         }, headers={"X-CSRF-Token": "test_csrf"})
         # 验证 .env 文件内容被写入
         assert r.status_code in (200, 302)
@@ -70,7 +70,7 @@ class TestSettingsPost:
             "PEAK_WEEKDAYS_ONLY": "false",
             "JITTER_RATIO": "0.15",
             "LOG_LEVEL": "DEBUG",
-            "city_selected": "Eindhoven,29|Amsterdam,24",
+            "codomo_city_selected": "Eindhoven,29|Amsterdam,24",
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
         saved = _saved()
@@ -79,21 +79,21 @@ class TestSettingsPost:
         assert saved["PEAK_START"] == "08:00"
         assert saved["PEAK_END"] == "09:30"
         assert saved["LOG_LEVEL"] == "DEBUG"
-        # CITIES 应为 | 拼接格式
-        assert saved["CITIES"] == "Eindhoven,29|Amsterdam,24"
+        # CODOMO_CITIES 应为 | 拼接格式
+        assert saved["CODOMO_CITIES"] == "Eindhoven,29|Amsterdam,24"
 
-    def test_save_sources_h2s_and_ourdomain(self, admin_client, isolated_data_dir):
+    def test_save_sources_codomo_and_ourdomain(self, admin_client, isolated_data_dir):
         r = admin_client.post("/settings", data={
             "CHECK_INTERVAL": "300",
             "LOG_LEVEL": "INFO",
-            "source_selected": ["holland2stay", "ourdomain"],
-            "city_selected": ["Eindhoven,29"],
+            "source_selected": ["codomo", "ourdomain"],
+            "codomo_city_selected": ["Eindhoven,29"],
             "ourdomain_city_selected": ["Amsterdam Diemen,diemen"],
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
         saved = _saved()
-        assert saved["SOURCES"] == "holland2stay,ourdomain"
-        assert saved["CITIES"] == "Eindhoven,29"
+        assert saved["SOURCES"] == "codomo,ourdomain"
+        assert saved["CODOMO_CITIES"] == "Eindhoven,29"
         assert saved["OURDOMAIN_CITIES"] == "Amsterdam Diemen,diemen"
 
     def test_save_sources_ourdomain_only(self, admin_client, isolated_data_dir):
@@ -101,22 +101,22 @@ class TestSettingsPost:
             "CHECK_INTERVAL": "300",
             "LOG_LEVEL": "INFO",
             "source_selected": ["ourdomain"],
-            "city_selected": ["Eindhoven,29"],
+            "codomo_city_selected": ["Eindhoven,29"],
             "ourdomain_city_selected": ["Amsterdam Diemen,diemen"],
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
         saved = _saved()
         assert saved["SOURCES"] == "ourdomain"
 
-    def test_empty_sources_falls_back_to_h2s(self, admin_client, isolated_data_dir):
+    def test_empty_sources_falls_back_to_codomo(self, admin_client, isolated_data_dir):
         r = admin_client.post("/settings", data={
             "CHECK_INTERVAL": "300",
             "LOG_LEVEL": "INFO",
-            "city_selected": ["Eindhoven,29"],
+            "codomo_city_selected": ["Eindhoven,29"],
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
         saved = _saved()
-        assert saved["SOURCES"] == "holland2stay"
+        assert saved["SOURCES"] == "codomo"
 
     def test_invalid_numeric_not_written(self, admin_client, isolated_data_dir):
         """非法数字（abc）与空值都不写入，保留旧值。
@@ -134,7 +134,7 @@ class TestSettingsPost:
             "PEAK_INTERVAL": "abc",
             "HEARTBEAT_INTERVAL_MINUTES": "",
             "LOG_LEVEL": "INFO",
-            "city_selected": "Eindhoven,29",
+            "codomo_city_selected": "Eindhoven,29",
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
         saved = _saved()
@@ -145,7 +145,7 @@ class TestSettingsPost:
 class TestStructuredValidation:
     """结构化配置坏了要挡在写入之前。
 
-    这些值是分隔符拼出来的字符串，坏掉的后果不一致：CITIES 解析失败会静默变成
+    这些值是分隔符拼出来的字符串，坏掉的后果不一致：CODOMO_CITIES 解析失败会静默变成
     0 个城市（监控照跑，什么都不抓），SHARD_SIZES 非法则让 load_config() 抛
     ValueError，monitor 起不来。挡在入口，坏值就进不了库。
     """
@@ -153,30 +153,30 @@ class TestStructuredValidation:
     def _post(self, client, **extra):
         data = {
             "CHECK_INTERVAL": "300", "LOG_LEVEL": "INFO",
-            "source_selected": "holland2stay",
-            "city_selected": "Eindhoven,29",
+            "source_selected": "codomo",
+            "codomo_city_selected": "Eindhoven,29",
         }
         data.update(extra)
         return client.post("/settings", data=data,
                            headers={"X-CSRF-Token": "test_csrf"})
 
     def test_malformed_city_is_rejected(self, admin_client, isolated_data_dir):
-        self._post(admin_client, city_selected="Eindhoven")
-        assert "CITIES" not in _saved(), "格式错的城市写进库了"
+        self._post(admin_client, codomo_city_selected="Eindhoven")
+        assert "CODOMO_CITIES" not in _saved(), "格式错的城市写进库了"
 
     def test_nothing_else_is_saved_either(self, admin_client, isolated_data_dir):
         """整批一起拒绝：一半新一半旧比全旧更难排查。"""
-        self._post(admin_client, city_selected="Eindhoven", CHECK_INTERVAL="123")
+        self._post(admin_client, codomo_city_selected="Eindhoven", CHECK_INTERVAL="123")
         assert _saved().get("CHECK_INTERVAL") != "123"
 
     def test_valid_config_still_saves(self, admin_client, isolated_data_dir):
-        self._post(admin_client, city_selected=["Eindhoven,29", "Amsterdam,24"])
-        assert _saved()["CITIES"] == "Eindhoven,29|Amsterdam,24"
+        self._post(admin_client, codomo_city_selected=["Eindhoven,29", "Amsterdam,24"])
+        assert _saved()["CODOMO_CITIES"] == "Eindhoven,29|Amsterdam,24"
 
     def test_unknown_city_id_saves_with_a_warning(self, admin_client, isolated_data_dir):
-        """官方城市表会更新，不认识的 ID 不该阻止保存。"""
-        self._post(admin_client, city_selected="SomeNewTown,99999")
-        assert _saved()["CITIES"] == "SomeNewTown,99999"
+        """官方城市表会更新，不认识的 key 不该阻止保存。"""
+        self._post(admin_client, codomo_city_selected="SomeNewTown,99999")
+        assert _saved()["CODOMO_CITIES"] == "SomeNewTown,99999"
 
 
 class TestUncheckingAllCitiesSticks:
@@ -188,7 +188,7 @@ class TestUncheckingAllCitiesSticks:
         od_cities_val = "|".join(selected) if selected else "Amsterdam Diemen,diemen"
 
     界面把**没保存的东西显示成保存了**——这比拒绝保存还糟，用户会以为是自己
-    点错了。CITIES 有同样的写法，XIOR_CITIES 一直是允许空的。
+    点错了。CITIES（今 CODOMO_CITIES）有同样的写法，XIOR_CITIES 一直是允许空的。
     """
 
     #: 这一组里有两条断言中文文案，**POST 和 GET 都要钉住语言**。
@@ -200,8 +200,8 @@ class TestUncheckingAllCitiesSticks:
     def _post(self, client, **extra):
         data = {
             "CHECK_INTERVAL": "300", "LOG_LEVEL": "INFO",
-            "source_selected": ["holland2stay", "ourdomain"],
-            "city_selected": "Eindhoven,29",
+            "source_selected": ["codomo", "ourdomain"],
+            "codomo_city_selected": "Eindhoven,29",
             "ourdomain_city_selected": "Amsterdam Diemen,diemen",
         }
         data.update(extra)
@@ -215,9 +215,9 @@ class TestUncheckingAllCitiesSticks:
         self._post(admin_client, ourdomain_city_selected=[])
         assert _saved()["OURDOMAIN_CITIES"] == "", "取消勾选又被写回默认城市了"
 
-    def test_unchecking_h2s_cities_saves_empty(self, admin_client, isolated_data_dir):
-        self._post(admin_client, city_selected=[])
-        assert _saved()["CITIES"] == ""
+    def test_unchecking_codomo_cities_saves_empty(self, admin_client, isolated_data_dir):
+        self._post(admin_client, codomo_city_selected=[])
+        assert _saved()["CODOMO_CITIES"] == ""
 
     def test_the_settings_page_renders_them_unchecked(self, admin_client, isolated_data_dir):
         """存进去还不够——GET 回来必须真的是没勾上的状态。"""
@@ -244,7 +244,7 @@ class TestUncheckingAllCitiesSticks:
 
     def test_no_warning_when_the_source_is_disabled(self, admin_client, isolated_data_dir):
         """平台本来就没启用，没勾楼盘是理所当然的，不该报。"""
-        self._post(admin_client, source_selected="holland2stay",
+        self._post(admin_client, source_selected="codomo",
                    ourdomain_city_selected=[])
         html = admin_client.get("/settings", headers=self._ZH).get_data(as_text=True)
         assert "不会抓取" not in html
@@ -267,8 +267,8 @@ class TestXiorEmptyMeansAll:
     def test_empty_xior_does_not_warn(self, admin_client, isolated_data_dir):
         admin_client.post("/settings", data={
             "CHECK_INTERVAL": "300", "LOG_LEVEL": "INFO",
-            "source_selected": ["holland2stay", "xior"],
-            "city_selected": "Eindhoven,29",
+            "source_selected": ["codomo", "xior"],
+            "codomo_city_selected": "Eindhoven,29",
             "xior_city_selected": [],
         }, headers={"X-CSRF-Token": "test_csrf"})
         html = admin_client.get("/settings").get_data(as_text=True)
@@ -299,7 +299,7 @@ class TestRegistryAck:
 
         r = admin_client.post("/settings", data={
             "CHECK_INTERVAL": "120",
-            "city_selected": "Eindhoven,29",
+            "codomo_city_selected": "Eindhoven,29",
         }, headers={"X-CSRF-Token": "test_csrf"})
         assert r.status_code in (200, 302)
 
@@ -309,79 +309,3 @@ class TestRegistryAck:
         finally:
             st.close()
         assert stored == ack_registry()
-
-
-class TestH2SRestSettings:
-    """H2S 快速通道的开关与间隔：面板写 app_settings，monitor 按 rest_enabled 读。"""
-
-    def _post(self, client, **extra):
-        data = {"CHECK_INTERVAL": "300", "city_selected": "Eindhoven,29"}
-        data.update(extra)
-        return client.post("/settings", data=data, headers={"X-CSRF-Token": "test_csrf"})
-
-    def test_enable_and_interval_are_saved(self, admin_client, isolated_data_dir):
-        self._post(admin_client, H2S_REST_ENABLED="true", H2S_REST_INTERVAL="2")
-        saved = _saved()
-        assert saved["H2S_REST_ENABLED"] == "true"
-        assert saved["H2S_REST_INTERVAL"] == "2"
-
-    def test_saved_value_is_what_the_monitor_reads_as_on(self, admin_client,
-                                                         isolated_data_dir, monkeypatch):
-        from mcore.h2s_rest import rest_enabled
-        self._post(admin_client, H2S_REST_ENABLED="true")
-        monkeypatch.setenv("H2S_REST_ENABLED", _saved()["H2S_REST_ENABLED"])
-        assert rest_enabled()
-        self._post(admin_client, H2S_REST_ENABLED="false")
-        monkeypatch.setenv("H2S_REST_ENABLED", _saved()["H2S_REST_ENABLED"])
-        assert not rest_enabled()
-
-    def test_invalid_interval_is_not_written(self, admin_client, isolated_data_dir):
-        self._post(admin_client, H2S_REST_INTERVAL="2")
-        self._post(admin_client, H2S_REST_INTERVAL="fast")
-        assert _saved()["H2S_REST_INTERVAL"] == "2"
-
-    def test_page_defaults_to_off(self, admin_client, isolated_data_dir):
-        html = admin_client.get("/settings").get_data(as_text=True)
-        box = re.search(r'<input type="checkbox" name="H2S_REST_ENABLED" value="true"[^>]*>', html)
-        assert box and " checked" not in box.group(0)
-        # 不勾选时复选框不提交，靠紧跟的 false 兜底
-        assert '<input type="hidden" name="H2S_REST_ENABLED" value="false">' in html
-        assert 'name="H2S_REST_INTERVAL" value="3"' in html
-        assert 'name="H2S_REST_HOME_INTERVAL" value="0"' in html
-
-    def test_home_interval_is_saved_and_read_by_monitor(self, admin_client,
-                                                        isolated_data_dir, monkeypatch):
-        from mcore.h2s_rest import rest_home_interval
-        self._post(admin_client, H2S_REST_HOME_INTERVAL="15")
-        assert _saved()["H2S_REST_HOME_INTERVAL"] == "15"
-        monkeypatch.setenv("H2S_REST_HOME_INTERVAL", _saved()["H2S_REST_HOME_INTERVAL"])
-        assert rest_home_interval() == 15.0
-        html = admin_client.get("/settings").get_data(as_text=True)
-        assert 'name="H2S_REST_HOME_INTERVAL" value="15"' in html
-
-    def test_page_reflects_saved_on(self, admin_client, isolated_data_dir):
-        self._post(admin_client, H2S_REST_ENABLED="true", H2S_REST_INTERVAL="5")
-        html = admin_client.get("/settings").get_data(as_text=True)
-        box = re.search(r'<input type="checkbox" name="H2S_REST_ENABLED" value="true"[^>]*>', html)
-        assert box and " checked" in box.group(0)
-        assert 'name="H2S_REST_INTERVAL" value="5"' in html
-
-    def test_window_is_saved(self, admin_client, isolated_data_dir):
-        self._post(admin_client, H2S_REST_START="09:00", H2S_REST_END="17:30",
-                   H2S_REST_WEEKDAYS_ONLY="false")
-        saved = _saved()
-        assert saved["H2S_REST_START"] == "09:00"
-        assert saved["H2S_REST_END"] == "17:30"
-        assert saved["H2S_REST_WEEKDAYS_ONLY"] == "false"
-
-    @pytest.mark.parametrize("bad", ["9am", "25:00", "08:61", ""])
-    def test_bad_time_is_not_written(self, admin_client, isolated_data_dir, bad):
-        self._post(admin_client, H2S_REST_START="09:00")
-        self._post(admin_client, H2S_REST_START=bad)
-        assert _saved()["H2S_REST_START"] == "09:00"
-
-    def test_page_defaults_to_weekday_0830_1745(self, admin_client, isolated_data_dir):
-        html = admin_client.get("/settings").get_data(as_text=True)
-        assert 'name="H2S_REST_START" value="08:30"' in html
-        assert 'name="H2S_REST_END" value="17:45"' in html
-        assert 'name="H2S_REST_WEEKDAYS_ONLY" value="true"' in html

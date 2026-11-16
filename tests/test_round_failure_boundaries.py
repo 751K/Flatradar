@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bookers.h2s_checkout import BookingResult
+from bookers.base import BookingResult
 from models import Listing
 from mcore import booking_round, post_round
 
@@ -23,20 +23,7 @@ class Storage:
         return 1
 
 
-class Prewarm:
-    cached = {}
-    futures = {}
-    def heartbeat(self):
-        pass
-    def start_for_candidates(self, ids):
-        pass
-    async def wait_for_candidates(self):
-        pass
-    async def stash_pending(self):
-        pass
-
-
-@pytest.mark.parametrize('failure_stage', ['new', 'status', 'submit', 'stash', 'prewarm', 'count'])
+@pytest.mark.parametrize('failure_stage', ['new', 'status', 'submit', 'count'])
 def test_booking_results_are_processed_after_another_stage_fails(monkeypatch, failure_stage):
     processed = []
     calls = []
@@ -66,29 +53,24 @@ def test_booking_results_are_processed_after_another_stage_fails(monkeypatch, fa
     monkeypatch.setattr(post_round, 'notify_new_listings', new)
     monkeypatch.setattr(post_round, 'notify_status_changes', status)
     monkeypatch.setattr(post_round, 'process_booking_results', results)
-    prewarm = Prewarm()
     storage = Storage()
-    if failure_stage == 'stash':
-        prewarm.stash_pending = AsyncMock(side_effect=RuntimeError('prewarm error'))
-    if failure_stage == 'prewarm':
-        prewarm.heartbeat = lambda: (_ for _ in ()).throw(RuntimeError('heartbeat error'))
     if failure_stage == 'count':
         storage.count_all = lambda: (_ for _ in ()).throw(RuntimeError('count error'))
     async def run():
         return await post_round.run_post_scrape(
             SimpleNamespace(), storage, [], [object()], {'city': True},
             web_notifier=None, dry_run=False, booking_deadline=float('inf'),
-            loop=asyncio.get_running_loop(), prewarm=prewarm,
+            loop=asyncio.get_running_loop(),
         )
     result = asyncio.run(run())
     assert processed == ['booking already submitted']
     assert calls == ['new', 'status', 'save']
-    assert result == ({'city': True} if failure_stage in {'stash', 'prewarm', 'count'} else {})
+    assert result == ({'city': True} if failure_stage == 'count' else {})
 
 
 def test_one_user_notification_error_does_not_block_booking_push_or_other_user(monkeypatch):
     room = Listing(id='L', name='L', status='Available to book', price_raw=None,
-                   available_from='', features=[], url='', source='holland2stay')
+                   available_from='', features=[], url='', source='xior')
     first = SimpleNamespace(id='u1', name='first')
     second = SimpleNamespace(id='u2', name='second')
     class BadNotifier:
@@ -106,7 +88,7 @@ def test_one_user_notification_error_does_not_block_booking_push_or_other_user(m
             future = loop.create_future()
             future.set_result(BookingResult(listing=room, success=True, message='ok',
                                             pay_url='https://example.test/pay', phase='success'))
-            futures.append((user, notifier, [room], future, None))
+            futures.append(booking_round.BookingJob(user, notifier, [room], future))
         return await booking_round.process_booking_results(futures, None, BrokenStorage(), push)
     assert asyncio.run(run()) == []
     assert push.dispatch.await_count == 2
@@ -134,7 +116,7 @@ def test_partial_executor_failure_preserves_submitted_futures(monkeypatch):
         submitted = []
         with pytest.raises(RuntimeError, match='executor stopped'):
             booking_round.submit_bookings(loop, {'u': [first, second]}, [(user, object())],
-                                          {}, {}, {}, float('inf'), submitted=submitted)
+                                          {}, float('inf'), submitted=submitted)
         assert len(submitted) == 1
         assert isinstance(submitted[0], booking_round.BookingJob)
         assert submitted[0].user is user and submitted[0].future is submitted[0][3]
@@ -142,25 +124,23 @@ def test_partial_executor_failure_preserves_submitted_futures(monkeypatch):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('phase', ['blocked', 'operation_rejected'])
-def test_grouped_booking_errors_do_not_block_other_recipients(monkeypatch, phase):
+def test_grouped_booking_errors_do_not_block_other_recipients(monkeypatch):
+    phase = 'blocked'
     room = Listing(id='L', name='L', status='Available to book', price_raw=None,
-                   available_from='', features=[], url='', source='holland2stay')
+                   available_from='', features=[], url='', source='xior')
     users = [SimpleNamespace(id='u1', name='first'), SimpleNamespace(id='u2', name='second')]
     bad = SimpleNamespace(send_booking_failed=AsyncMock(side_effect=RuntimeError('channel down')))
     good = SimpleNamespace(send_booking_failed=AsyncMock(return_value=True))
     push = SimpleNamespace(dispatch=AsyncMock(return_value=1), dispatch_admin=AsyncMock(return_value=1))
     web = SimpleNamespace(send_error=AsyncMock(side_effect=RuntimeError('web down')))
     monkeypatch.setattr(booking_round, 'should_notify_block', lambda: True)
-    monkeypatch.setattr(booking_round, 'should_notify_operation_rejected', lambda: True)
-    monkeypatch.setattr(booking_round, 'mark_h2s_login_blocked', lambda *args: None)
     async def run():
         loop = asyncio.get_running_loop()
         bookings = []
         for user, notifier in zip(users, (bad, good), strict=True):
             future = loop.create_future()
             future.set_result(BookingResult(listing=room, success=False, message='error', phase=phase))
-            bookings.append((user, notifier, [room], future, None))
+            bookings.append(booking_round.BookingJob(user, notifier, [room], future))
         tasks = await booking_round.process_booking_results(bookings, web, Storage(), push)
         await asyncio.gather(*tasks)
     asyncio.run(run())
@@ -172,7 +152,7 @@ def test_grouped_booking_errors_do_not_block_other_recipients(monkeypatch, phase
 def test_new_listing_notification_failure_stays_pending_while_booking_is_processed(tmp_path, monkeypatch):
     from storage import Storage as RealStorage
     listing = Listing(id='L', name='L', status='Available to book', price_raw=None,
-                      available_from='', features=[], url='', city='Eindhoven', source='holland2stay')
+                      available_from='', features=[], url='', city='Eindhoven', source='xior')
     web = SimpleNamespace(send_new_listing=AsyncMock(side_effect=RuntimeError('feed down')))
     monkeypatch.setattr(post_round, 'collect_booking_candidates', lambda *args: ({}, {}))
     monkeypatch.setattr(post_round, 'should_notify_internal', lambda: False)
@@ -189,7 +169,7 @@ def test_new_listing_notification_failure_stays_pending_while_booking_is_process
         return await post_round.run_post_scrape(
             SimpleNamespace(), st, [], [listing], {'Eindhoven': True},
             web_notifier=web, dry_run=False, booking_deadline=float('inf'),
-            loop=asyncio.get_running_loop(), prewarm=Prewarm(),
+            loop=asyncio.get_running_loop(),
         )
     try:
         assert asyncio.run(run()) == {}
@@ -225,7 +205,7 @@ def test_post_scrape_passes_each_stage_output_to_next_stage(monkeypatch):
     async def run():
         return await post_round.run_post_scrape(
             object(), Storage(), [], [], {'city': True}, web_notifier=None,
-            dry_run=False, booking_deadline=10, loop=asyncio.get_running_loop(), prewarm=Prewarm(),
+            dry_run=False, booking_deadline=10, loop=asyncio.get_running_loop(),
         )
     assert asyncio.run(run()) == {'city': True}
     assert calls == ['prepare', 'submit', 'deliver', 'finish']

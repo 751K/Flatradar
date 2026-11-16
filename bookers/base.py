@@ -2,7 +2,6 @@
 bookers/base.py — 自动下单层抽象（source-agnostic）
 ====================================================
 
-P1 引入：把 H2S 的电商式 checkout 从 ``booker.try_book`` 单源耦合中解放出来。
 每个 source 的下单实现一个 ``AbstractBooker`` 子类，由 ``bookers/__init__.py``
 里的 ``BOOKER_REGISTRY`` 路由。
 
@@ -15,12 +14,10 @@ P1 引入：把 H2S 的电商式 checkout 从 ``booker.try_book`` 单源耦合�
 - 单独包让"下单能力矩阵"在代码里一目了然：grep ``bookers/`` 看到哪些 source
   支持自动下单
 
-零回归承诺
-----------
-- 复用 ``booker.BookingResult`` 作为统一返回类型——这样 ``notifier.py`` /
-  ``monitor.py`` 那些读 ``result.pay_url`` / ``result.phase`` 的代码完全不动
-- H2S 现有所有行为（dry_run / prewarmed session 复用 / 各种
-  phase 分类）通过 ``HollandStayBooker`` thin-wrapper 原样转发
+约定
+----
+- 所有 booker 返回同一个 ``BookingResult``——``notifier.py`` / ``mcore.booking_round``
+  只读 ``result.pay_url`` / ``result.phase``，不关心是哪个平台
 - 不支持下单的 source 走 ``phase="unsupported"`` 分支，``book_with_fallback``
   会过滤掉这些候选，不会产生误报"失败"通知
 """
@@ -28,7 +25,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from models import Listing
@@ -36,19 +33,11 @@ if TYPE_CHECKING:
 
 
 # ── 跨平台共用的结果类型 ────────────────────────────────────────────
-#
-# 原先定义在 H2S 的结账流程（当时的顶层 booker.py，现 bookers/h2s_checkout.py）里，
-# 于是抽象层反过来依赖具体实现。现在住在这里，h2s_checkout 保留 re-export。
 
 BookingPhase = Literal[
     "", "dry_run", "success", "race_lost",
     "reserved_conflict", "unknown_error",
     "blocked",
-    # 403，但正文是上游应用说「这条 GraphQL operation 没登记」，不是 CF 屏蔽。
-    # 和 blocked 分开的理由是上层动作完全相反：blocked 要换 IP、失效 session、
-    # 暂停登录链路；这个换多少 IP 都一样，只能改代码把站点原文照抄回来。
-    # 混在一起的代价见 OperationNotAllowedError 的 docstring。
-    "operation_rejected",
     "unsupported",
     # 半自动预订：申请已起草并存在用户账号下，但**没有占住房**——
     # 还差用户自己上传证件和付款。与 "success" 必须分开：把它当成功报给
@@ -65,15 +54,12 @@ BookingPhase = Literal[
     # 走到了最后一步但服务端拒绝保存。**绝不能报成 draft_saved**——那条消息
     # 让用户以为表单已填好、安心去传证件，而实际上什么都没存下。
     "save_rejected",
-    # 占房已成立，但后续（支付方式 / 下单 / 支付链接）某一步失败。**绝不能报成
-    # race_lost 或 unknown_error**：房正被这个账号占着，用户以为没抢到就不会去
-    # 处理，既不付款也不取消，直到预留超时。必须把 cart/order 号给他。
-    "held_incomplete",
+    # 变更请求已经发出，但没拿到确定结果（断线 / 超时 / 异常）。不能当失败去换
+    # 下一套备选，见 ``mcore.booking.book_with_fallback``。
     "uncertain",
 ]
 
 
-@dataclass
 @dataclass
 class BookingResult:
     listing: Listing
@@ -83,60 +69,6 @@ class BookingResult:
     pay_url: str = ""
     contract_start_date: str = ""
     phase: BookingPhase = ""
-    #: 占房已经成立、但后续步骤失败时的凭据。**必须交给用户。**
-    #:
-    #: create_booking 一旦返回，这套房就被这个账号占着了。此后
-    #: set_payment_method / place_order / _ideal_checkout 任一失败，原实现只报
-    #: 「预订失败」——用户以为没抢到，实际房在自己名下挂着，既不知道去哪付款，
-    #: 也不知道要去取消，直到预留超时自动释放（或者更糟：一直占着）。
-    held_cart_id: str = ""
-    held_order_number: str = ""
-
-
-class PrewarmedSession:
-    """
-    预认证的 BrowserFetcher + token，供 try_book() 直接复用。
-
-    Attributes
-    ----------
-    fetcher    : 已过 CF 挑战的 BrowserFetcher 实例
-    token      : NextAuth session 的 accessToken(JWT)，用作下单的 Bearer
-    created_at : time.monotonic() 创建时刻
-    email      : 对应的 H2S 账号邮箱
-    owns_fetcher : 这个 fetcher 归本 session 所有吗。
-
-        False 表示借的是常驻浏览器（mcore/warm_browser.py）。**借来的一律不许
-        关**——它是全进程共用的那一个，关掉之后下一个用它的人拿到的是空壳，而
-        且没人会察觉，只会看到「莫名其妙又要过一次挑战」。
-
-    use_lock   : 借来时是那条常驻的锁，自有时为 None。
-
-        一个 BrowserFetcher 不能被多线程同时使唤。持有者在整段 I/O 期间握着它，
-        所以多个用户同时下单会串行——每笔下单是秒级，而实测可订窗口 p10 约 10
-        分钟，这个代价换得起。
-    """
-
-    __slots__ = ("fetcher", "token", "created_at", "token_expiry", "email",
-                 "owns_fetcher", "use_lock")
-
-    def __init__(self, fetcher, token: str, created_at: float, token_expiry: float,
-                 email: str, owns_fetcher: bool = True, use_lock=None):
-        self.fetcher = fetcher
-        self.token = token
-        self.created_at = created_at
-        self.token_expiry = token_expiry
-        self.email = email
-        self.owns_fetcher = owns_fetcher
-        self.use_lock = use_lock
-
-    def close_if_owned(self) -> None:
-        """只关自己的。借来的常驻浏览器留给下一个人。"""
-        if not self.owns_fetcher:
-            return
-        try:
-            self.fetcher.close()
-        except Exception:
-            pass
 
 
 @dataclass
@@ -148,16 +80,13 @@ class BookingRequest:
     ------
     listing       目标房源。``listing.source`` 决定路由到哪个 Booker
     user          用户配置（凭据、自动下单偏好）。Booker 自取 ``user.auto_book.*``
-                  里它需要的字段；不同 source 可能用不同子集（H2S 用
-                  email/password/payment_method，OurDomain 未来可能用 API key 等）
+                  里它需要的字段；不同 source 用不同子集（Plaza 用
+                  plaza_username/plaza_password，Xior 用按楼栋的 xior_accounts）
     dry_run       仅完成认证 / 资格检查，不真正提交订单
-    prewarmed     可选预登录 session。只有支持的 source 会使用——
-                  当前只有 H2S 用 ``PrewarmedSession``。其他 booker 收到时直接忽略
     """
     listing: "Listing"
     user: "UserConfig"
     dry_run: bool = False
-    prewarmed: Optional["PrewarmedSession"] = None
 
 
 class AbstractBooker(ABC):
@@ -175,10 +104,10 @@ class AbstractBooker(ABC):
     线程模型
     --------
     book() 在 monitor 的 executor 线程里跑。Booker 实例可能被多个线程并发
-    使用——内部状态自行加锁或每次新建。H2S 用的就是"每次新建 Session"策略。
+    使用——内部状态自行加锁或每次新建（现有 booker 都是每次新建 Session）。
     """
 
-    # 子类必须覆盖。例：``source = "holland2stay"``
+    # 子类必须覆盖。例：``source = "plaza"``
     source: str = ""
 
     @abstractmethod

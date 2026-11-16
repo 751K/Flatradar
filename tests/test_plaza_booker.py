@@ -345,7 +345,7 @@ class TestCandidateGating:
         """source 级的闸仍在最前面，用户开关翻不过它。"""
         import monitor
         from mcore import booking_candidates
-        monkeypatch.setattr(booking_candidates, "AUTO_BOOK_SOURCES", ("holland2stay",))
+        monkeypatch.setattr(booking_candidates, "AUTO_BOOK_SOURCES", ("xior",))
         req.user.auto_book.plaza_enabled = True
         assert not monitor._can_auto_book(req.user, req.listing)
 

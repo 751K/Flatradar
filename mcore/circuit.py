@@ -2,32 +2,18 @@
 mcore/circuit.py — 按 source 的抓取熔断
 ==========================================
 
-为什么不再是 H2S 专属
---------------------
-熔断、canary 恢复探测、登录抑制、专属 executor 线程——``monitor`` 里 H2S 专属
-逻辑曾有 56 处引用。抽象层是对称的（``AbstractScraper`` + ``SCRAPER_REGISTRY``），
-编排层却把 H2S 硬编码成了特例。这是历史遗留（H2S 曾是唯一 source）固化成的架构。
-
-结果是**保护装在了最不需要它的那个 source 上**。保留日志全量统计「整体抓取失败」：
-
-    xior       RateLimitError     147 次   ← 无熔断
-    ourdomain  ScrapeNetworkError  67 次   ← 无熔断
-    ourcampus  ScrapeNetworkError  60 次   ← 无熔断
-    xior       ScrapeNetworkError  57 次   ← 无熔断
-    holland2stay 全部合计            6 次   ← 有熔断
-
-Xior 的限流按 **IP 累积**（见 ``scrapers/xior.py`` 模块头：~15–20 req/window），
-整源 429 之后没有任何退避，下一轮照常再打——正是「限流最狠的时候接着撞」。
+每个 source 一个熔断器：整源失败后冷却一段时间，冷却到点只放 1 个 target 做
+canary，成功才全量放开。状态落库，跨进程重启存活（见 mcore/backoff.py）。
 
 策略按 source 配，不一刀切
 --------------------------
 各家的失败语义不同，退避参数也就不该相同：
 
-- H2S 的 403 要**换出口 IP** 才好 → 冷却长（30 分钟起，最长 6 小时）
-- Xior 的 429 **等一会就好** → 冷却短（10 分钟起，最长 1 小时），但必须有
+- 403 一般要**换出口 IP / 指纹**才好 → 默认冷却中等（15 分钟起，最长 2 小时）
+- Xior 的 429 按 IP 累积，**等一会就好** → 冷却短（10 分钟起，最长 1 小时），但必须有
 
-**429 是否熔断也按 source 配**：H2S 那边「429 等等就好、由 scrapers 内部的
-RATE_LIMIT_BACKOFF 处理」的判断是实测来的，这次是推广机制，不能顺手改掉它。
+**429 是否熔断也按 source 配**：多数平台的 429 由 scrapers 内部的
+RATE_LIMIT_BACKOFF 与自适应节奏（mcore/pacing.py）处理，只有 Xior 需要熔断兜底。
 
 网络错误一律不熔断：``monitor`` 已经有连续失败计数 + 冷却那条路，叠两层退避只会
 让恢复变得难以预测。
@@ -59,10 +45,6 @@ class CircuitPolicy:
     )
 
 
-#: H2S：403 要换出口 IP 才好，冷却长。**这两个数字来自既有实现，不要在这次改动
-#: 里调整**——本次是把机制推广开，不是重新调它的策略。
-_H2S_POLICY = CircuitPolicy(base_cooldown=1800, max_cooldown=21600)
-
 #: Xior：429 按 IP 累积，等一会就好，所以冷却短得多，但必须有。
 #: 10 分钟 ≈ 3–4 个轮次，足够让 window 内的计数掉下去。
 _XIOR_POLICY = CircuitPolicy(
@@ -70,13 +52,11 @@ _XIOR_POLICY = CircuitPolicy(
     trips_on=(BlockedError, RateLimitError),
 )
 
-#: 其余 source 的默认。**新接一个平台不该顺带获得「没有熔断」这个默认值**
-#: ——那正是这次要修的东西。RentCafe 系（OurDomain / OurCampus）的 403 同样
-#: 要换指纹/IP 才好，沿用中等长度的冷却。
+#: 其余 source 的默认。**新接一个平台不该顺带获得「没有熔断」这个默认值**。
+#: 403 要换指纹/IP 才好，用中等长度的冷却。
 _DEFAULT_POLICY = CircuitPolicy(base_cooldown=900, max_cooldown=7200)
 
 _POLICIES: dict[str, CircuitPolicy] = {
-    "holland2stay": _H2S_POLICY,
     "xior": _XIOR_POLICY,
 }
 

@@ -375,7 +375,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Comma-separated source list, for example holland2stay,ourdomain."
+            "description": "Comma-separated source list, for example codomo,ourdomain."
           },
           {
             "name": "city",
@@ -3086,8 +3086,7 @@
             "type": "string"
           },
           "source": {
-            "type": "string",
-            "default": "holland2stay"
+            "type": "string"
           },
           "price_raw": {
             "type": "string"
@@ -3201,8 +3200,7 @@
             "type": "string"
           },
           "source": {
-            "type": "string",
-            "default": "holland2stay"
+            "type": "string"
           },
           "price_raw": {
             "type": "string"
@@ -3298,8 +3296,7 @@
             "type": "string"
           },
           "source": {
-            "type": "string",
-            "default": "holland2stay"
+            "type": "string"
           },
           "price_raw": {
             "type": "string"

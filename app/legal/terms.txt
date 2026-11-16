@@ -2,7 +2,7 @@ Last updated: November 2, 2026
 
 These Terms of Use govern your access to and use of FlatRadar.
 
-FlatRadar is an independent, unofficial monitoring tool for rental housing listings across multiple platforms, including Holland2Stay, OurDomain, and Xior. FlatRadar is not affiliated with, endorsed by, sponsored by, maintained by, or operated by any of the housing platforms it monitors.
+FlatRadar is an independent, unofficial monitoring tool for rental housing listings across multiple platforms, including Codomo, OurDomain, and Xior. FlatRadar is not affiliated with, endorsed by, sponsored by, maintained by, or operated by any of the housing platforms it monitors.
 
 By creating an account, accessing, or using FlatRadar, you agree to these Terms.
 
@@ -36,7 +36,7 @@ We may suspend or terminate your FlatRadar account if we reasonably believe that
 
 4. Housing Platforms and Third-Party Terms
 
-You are solely responsible for complying with the Terms of Service of each housing platform you interact with (including Holland2Stay, OurDomain, Xior, and others) and all applicable laws, rules, and regulations.
+You are solely responsible for complying with the Terms of Service of each housing platform you interact with (including Codomo, OurDomain, Xior, and others) and all applicable laws, rules, and regulations.
 
 FlatRadar does not grant you any right to access, use, copy, scrape, bypass, or interfere with any housing platform's systems in a way that is not permitted by that platform.
 

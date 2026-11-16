@@ -19,7 +19,8 @@
 扫描器的已知边界
 ----------------
 它按**当前代码里存在的读取形态**匹配：``os.environ.get`` / ``os.environ[...]`` /
-``_env_int`` / ``_env_float`` / ``_read``，以及 ``*_ENV`` 常量持有键名。如果将来有
+``_env_int`` / ``_env_float`` / ``_read``，``*_ENV`` 常量持有键名，以及
+``TargetSpec`` 的 env_key / ``legacy_env_key``。如果将来有
 人用新的包装函数读环境变量，扫描器看不见它——那时这个测试会**静默漏掉**，而不是
 报错。新增包装函数请同时把名字加进 ``_READER_NAMES``。
 """
@@ -74,6 +75,14 @@ def _scan_source_keys() -> dict[str, set[str]]:
                     key = node.args[1]
                     if isinstance(key, ast.Constant) and isinstance(key.value, str):
                         note(key.value, path)
+                    # legacy_env_key="CITIES"：改名前的旧键，新键未设置时由
+                    # config._load_targets 按 spec.legacy_env_key 兜底读取。
+                    for kw in node.keywords:
+                        if (kw.arg == "legacy_env_key"
+                                and isinstance(kw.value, ast.Constant)
+                                and isinstance(kw.value.value, str)
+                                and kw.value.value):
+                            note(kw.value.value, path)
             elif isinstance(node, ast.Subscript) and "environ" in ast.unparse(node.value):
                 if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
                     note(node.slice.value, path)

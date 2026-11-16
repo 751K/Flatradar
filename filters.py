@@ -171,7 +171,7 @@ class ListingFilter:
     allowed_sources: list[str] = field(default_factory=list)
     """
     平台白名单（精确匹配 Listing.source，大小写不敏感）。非空时只通知指定平台。
-    e.g. ["holland2stay", "ourdomain"]
+    e.g. ["codomo", "ourdomain"]
     """
 
     allowed_contract: list[str] = field(default_factory=list)
@@ -335,7 +335,7 @@ class ListingFilter:
                 return False
 
         if self.allowed_sources:
-            source = listing.source or "holland2stay"
+            source = listing.source or ""
             if not any(a.lower() == source.lower() for a in self.allowed_sources):
                 return False
 
@@ -406,25 +406,16 @@ class AutoBookConfig:
     字段说明
     --------
     enabled         : 总开关。False 时整个自动预订跳过，不登录也不调用任何 API
-    dry_run         : 试运行模式。True 时只做登录/购物车验证，不执行 addNewBooking；
+    dry_run         : 试运行模式。True 时只做登录/资格验证，不真正提交；
                       默认 True，需显式设为 False 才真正提交预订
-    email           : Holland2Stay 账号邮箱
-    password        : Holland2Stay 账号密码（加密后存储于 SQLite user_configs）
     listing_filter  : 独立于通知过滤的预订条件，可以设置比通知更严格的门槛；
                       is_empty() 为 True 时对所有 Available to book 房源都会触发
-    payment_method  : setPaymentMethodOnCart 使用的支付方式代码。
-                      可选值（均来自浏览器抓包）：
-                        "idealcheckout_ideal"       → iDEAL（荷兰网银，推荐）
-                        "idealcheckout_visa"        → Visa 信用卡
-                        "idealcheckout_mastercard"  → Mastercard 信用卡
-                      注意：Visa / Mastercard 仅适用于已在 H2S 账号绑定对应卡的用户。
 
     平台凭据独立
     ------------
-    H2S、Xior、OurDomain 是三个不同平台、不同账号（Xior 与 OurDomain 还是
-    不同的 RENTCafe 租户，账号不互通），各自一套凭据：
+    各平台是不同公司、不同账号（Xior 与 OurDomain 还是不同的 RENTCafe 租户，
+    账号不互通），各自一套凭据：
 
-    - H2S：``email`` / ``password`` / ``payment_method``
     - Xior：``xior_accounts``（**按楼栋**，见下）
     - OurDomain：``ourdomain_email`` / ``ourdomain_password``
     - Plaza：``plaza_username`` / ``plaza_password``（用户名，不是邮箱）
@@ -451,18 +442,14 @@ class AutoBookConfig:
     ``p0196062``）。**没有该楼凭据 = 该楼不参与自动预订**，凭据本身就是开关，
     不需要额外的 per-building 开关。
 
-    迁移：旧版共用一套 ``email``/``password``，``users._ab_from_dict`` 在加载时
-    把旧值回填进各平台字段；更早的单对 ``xior_email``/``xior_password`` 保留
-    为只读兼容字段，见 ``xior_account_for()``。
+    迁移：旧版的共用 ``email``/``password``/``payment_method``（Holland2Stay 下单
+    凭据）已废弃，``users._ab_from_dict`` 加载时直接忽略，下次保存即从库里消失；
+    更早的单对 ``xior_email``/``xior_password`` 保留为只读兼容字段，见
+    ``xior_account_for()``。
     """
     enabled: bool = False
     dry_run: bool = True
     listing_filter: ListingFilter = field(default_factory=ListingFilter)
-
-    # ── H2S ──
-    email: str = ""
-    password: str = ""
-    payment_method: str = "idealcheckout_ideal"
 
     # ── Xior（RENTCafe 租户 xiorstudenthousing，一栋楼一个账号）──
     #: ``{building_key: {"email": str, "password": str}}``
@@ -516,9 +503,8 @@ class AutoBookConfig:
     plaza_password: str = ""
     #: Plaza 自动应征的**显式开关**，默认关（fail-closed）。
     #:
-    #: 另外三个平台是「有凭据即参与」——凭据本身就是开关。Plaza 多这一道，是因为
-    #: 它和那三个不是一类：H2S 下单后还要付款、Xior / OurDomain 停在存草稿，
-    #: 都还有一步在用户手里；Plaza 的应征**一次 POST 就落地**，中间没有任何人工
+    #: RENTCafe 平台是「有凭据即参与」——凭据本身就是开关。Plaza 多这一道，是因为
+    #: 它和那几个不是一类：Xior / OurDomain 停在存草稿，还有一步在用户手里；Plaza 的应征**一次 POST 就落地**，中间没有任何人工
     #: 关卡。让「填了凭据」顺带等于「授权系统替我应征」，这个跨度太大。
     #:
     #: 凭据仍然是第二道闸：两个都满足才产生候选（monitor._can_auto_book）。
