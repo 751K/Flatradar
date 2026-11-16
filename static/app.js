@@ -128,6 +128,19 @@ document.querySelectorAll('.admin-scroll[role="region"]').forEach(function(box, 
   box.setAttribute('aria-labelledby', heading.id);
 });
 
+// ── <dialog closedby="any"> 回退 ────────────────────────────────
+// 支持 closedby 的浏览器：点遮罩和 Esc 都由浏览器关闭。不支持的：这里补上点遮罩。
+// 用点击坐标是否落在对话框矩形外判断——以前用 event.target === dialog，点到
+// 对话框自己的内边距（包括在 <pre> 里拖选文字松手）也会误关。
+if(window.HTMLDialogElement && !('closedBy' in HTMLDialogElement.prototype)) {
+  document.addEventListener('click', function(e) {
+    var d = e.target;
+    if(!(d instanceof HTMLDialogElement) || !d.open || d.getAttribute('closedby') !== 'any') return;
+    var r = d.getBoundingClientRect();
+    if(e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close();
+  });
+}
+
 // ── Toasts ────────────────────────────────────────────────────────
 // 所有 toast 都走 makeToast：
 // - #toast-container 是有名字的 region；朗读交给页面加载时就在的 #toast-live

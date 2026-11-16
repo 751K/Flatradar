@@ -136,7 +136,7 @@
 </div>
 </section>
 
-<dialog id="deleteModal" aria-labelledby="delete-title">
+<dialog id="deleteModal" aria-labelledby="delete-title" closedby="any">
   <h2 id="delete-title">{{ _('users_delete_confirm') }}</h2>
   <p>{{ _('users_delete_msg') }}<strong id="deleteUserName"></strong>{{ '？' if lang == 'zh' else '? ' }}{{ _('users_delete_warn') }}</p>
   <form id="deleteForm" method="post" class="mail-dialog-actions">

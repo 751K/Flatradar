@@ -172,15 +172,23 @@
 
   // Email verification for the address currently in the field
   const verifyArea = document.getElementById('email_verify_area');
-  function renderVerify() {
+  // 格式错误只在离开输入框（change）时提示：#email_verify_area 是 role="status"，
+  // 打字途中每敲一个字就报「格式不正确」既干扰视觉，也会被读屏反复播报。
+  // 格式用浏览器自己的 type="email" 校验（validity.typeMismatch），再加上服务端
+  // resend-verify 的要求：域名里要有点（浏览器认为 a@localhost 合法，服务端不收）。
+  function renderVerify(event) {
     if (!emailInput || !verifyArea) return;
     const value = emailInput.value.trim();
     if (value === verifyArea.dataset.savedEmail) return;
     if (!value) { verifyArea.textContent = ''; return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { verifyArea.textContent = label('邮箱格式不正确', 'Invalid email address'); return; }
+    if (emailInput.validity.typeMismatch || !value.split('@').pop().includes('.')) {
+      verifyArea.textContent = event?.type === 'change' ? label('邮箱格式不正确', 'Invalid email address') : '';
+      return;
+    }
     verifyArea.innerHTML = `${escape(label('新地址需要验证。', 'The new address needs verification.'))} <button type="button" class="account-text-button" data-send-verification>${escape(label('发送验证邮件', 'Send verification email'))}</button>`;
   }
   emailInput?.addEventListener('input', renderVerify);
+  emailInput?.addEventListener('change', renderVerify);
   verifyArea?.addEventListener('click', event => {
     const button = event.target.closest('[data-send-verification]');
     if (!button) return;

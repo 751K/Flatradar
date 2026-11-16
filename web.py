@@ -299,19 +299,15 @@ def _add_security_headers(resp):
             resp.headers["Vary"] = ", ".join(parts + ["Accept-Language"])
 
     # ── 静态资源缓存 ──────────────────────────────────────────────
-    # /static/ 下的文件都通过 `?v=NN` 查询字符串做 cache bust（design.css?v=15、
-    # app.js?v=5 等）。URL 不变就能命中缓存。
-    #
-    # 缓存周期 30 天：在"重复访问命中率高"和"忘记 bump v=N 时痛苦时长"
-    # 之间折中——理论可以拉到 1 年（immutable 标准做法），但如果某次部署
-    # 改了 design.css 忘记 bump，用户/Cloudflare 边缘缓存会卡 1 年；30
-    # 天意味着最差 30 天内就会自动 revalidate。
+    # 模板里的 /static/ 资源都经 asset() 带上按文件 mtime+size 算的 `?v=<hash>`：文件一改
+    # URL 就变，所以同一个 URL 的内容永远不变，可以缓存一年并标 immutable
+    # （刷新页面时浏览器也不再逐个发条件请求）。以前手写 ?v=N，怕忘了改才只给
+    # 30 天；自动版本号之后那个顾虑已经不存在。
     #
     # 不带版本号的 favicon / logo 给更保守的 1 天，因为它们没 cache-bust 机制。
     if resp.status_code == 200 and request.path.startswith("/static/"):
         if request.query_string:
-            # cache-busted URL → 30 天
-            resp.headers["Cache-Control"] = "public, max-age=2592000"
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         else:
             resp.headers["Cache-Control"] = "public, max-age=86400"
 

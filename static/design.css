@@ -293,13 +293,7 @@ h4{font-size:15px;text-transform:uppercase;letter-spacing:.04em;color:var(--text
 }
 .skip-link:focus{top:8px}
 
-/* ── Animations ────────────────────────────────────────────────── */
-
-/* Reduced motion */
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
-  html{scroll-behavior:auto}
-}
+/* ── Animations ──（减少动态效果的覆盖规则在文件末尾）──────────── */
 
 /* 切日夜主题时给 400ms 窗口（JS 那边 setTimeout 400ms 移除该 class）期间统一过渡。
    - 所有属性统一 .3s ease：节奏不一致时，文字和底色会一前一后切换。
@@ -415,4 +409,29 @@ html.theme-transitioning *::after{
   .mail-page .sidebar-nav .mail-scope a[aria-current],
   .account-segment label:has(input:checked){outline:2px solid Highlight;outline-offset:-2px}
   .toast{border:1px solid CanvasText}
+}
+
+/* iOS Safari 在聚焦字号小于 16px 的输入框时会放大整页。触屏设备上把可输入
+   控件提到至少 16px（桌面保持原来的紧凑字号）。:is() 取参数里最高的优先级
+   (0,3,1)，select / textarea 也一起压过 .admin-input、.mail-search input 之类的 13px 规则。 */
+@media (pointer: coarse){
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){font-size:max(16px,1em)}
+}
+/* 弹窗里滚到底时，别把滚动传给后面的页面；不支持的浏览器（Safari）照旧 */
+dialog:modal{overscroll-behavior:contain}
+dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
+
+/* ── Reduced motion ────────────────────────────────────────────── */
+@keyframes toastFade{from{opacity:0}}
+/* 减少动态效果：只去掉「位移」类动画，颜色 / 透明度渐变照常保留。
+   以前是对 * 一刀切把所有 animation/transition 压到 0.01ms，副作用是主题切换的
+   颜色过渡也没了、加载转圈被冻在半帧（看起来像卡死）。
+   放在文件末尾并加 :root 前缀：要压过后面的 .spinner / 移动端 .sidebar 规则，
+   以及后加载的 inbox.css 里的 .mail-page .sidebar。 */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  :root .toast{animation-name:toastFade}                       /* 滑入 → 只淡入 */
+  :root .sidebar,:root .mail-page .sidebar,:root .mail-page .sidebar.open{transition-property:visibility} /* 抽屉直接出现 */
+  :root .toggle-track::after,:root .account-switch .toggle-track::after{transition-property:background}
+  :root .spinner{animation-duration:1.6s}                      /* 放慢，不停：停了就看不出在加载 */
 }

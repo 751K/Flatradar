@@ -71,7 +71,7 @@
 </section>
 
 {% if crashes %}
-<dialog id="detailModal" class="admin-wide" aria-labelledby="detail-title">
+<dialog id="detailModal" class="admin-wide" aria-labelledby="detail-title" closedby="any">
   <h2 id="detail-title">{{ _('crashes_detail_title') }}</h2>
   <pre id="detail-body" class="admin-pre"></pre>
   <div class="mail-dialog-actions"><button type="button" data-close-detail>{{ '关闭' if lang == 'zh' else 'Close' }}</button></div>
@@ -151,9 +151,9 @@
     }
   }
 
-  // <dialog> 自带 Esc 关闭；点遮罩或「关闭」也关
+  // Esc 和点遮罩由 <dialog closedby="any"> 处理（不支持的浏览器由 app.js 回退）；这里只管「关闭」按钮
   document.getElementById('detailModal').addEventListener('click', e => {
-    if (e.target === e.currentTarget || e.target.closest('[data-close-detail]')) closeDetail();
+    if (e.target.closest('[data-close-detail]')) closeDetail();
   });
 
   // 事件绑定（CSP 不允许内联 onclick/onchange）。行内按钮从所在行的 data-crash-id 取 id。

@@ -12,17 +12,17 @@
 
   {#
     资源加载策略：
-    - design.css：render-blocking + preload + fetchpriority=high，浏览器优先下载
-    - Inter / Bootstrap Icons：自托管（static/vendor），保持 render-blocking——字体异步加载会有
-      FOUT（系统字体先 paint 后切到 Inter，字距/字重轻微跳变），用户
-      明确不接受。同源加载不再有跨域握手。
+    - design.css：普通 render-blocking 样式表。以前另有一条指向同一文件的
+      <link rel="preload" fetchpriority="high">，紧挨着 stylesheet 本身，浏览器
+      本来就会立即以最高优先级请求它，preload 没有任何作用，已删。
+    - 不再加载 Inter：所有应用页都是 body.mail-page，inbox.css 把字体设成系统
+      字体栈，Inter 从未被用到（逐页检查过，没有元素用它、也没有字体文件被下载），
+      那张 render-blocking 的 inter.css 只是白白挡住首屏。要恢复 Inter，先改
+      .mail-page 的 font-family，再加回 static/vendor/inter/inter.css。
+    - Bootstrap Icons：自托管（static/vendor），页面不向 jsDelivr 等第三方发请求
+      ——那会把访客 IP 交给第三方。
   #}
-  <link rel="preload" href="{{ asset('design.css') }}" as="style" fetchpriority="high">
   <link rel="stylesheet" href="{{ asset('design.css') }}">
-
-  {# 字体和图标放在自己的服务器上（static/vendor），页面不向 Google Fonts / jsDelivr
-     发请求——那会把访客 IP 交给第三方，隐私政策里也不再需要列它们。 #}
-  <link rel="stylesheet" href="{{ asset('vendor/inter/inter.css') }}">
   <link rel="stylesheet" href="{{ asset('vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
 
   {% block head %}{% endblock %}

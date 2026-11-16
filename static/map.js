@@ -203,7 +203,8 @@
     const detail=document.getElementById('mail-detail'); detail.hidden=false;
     detail.querySelector('[data-close-detail]')?.focus({preventScroll:true});
     const selected=markerData.find(item => item.ids.includes(activeID()));
-    if (selected && map) map.panTo({lat:selected.lat,lng:selected.lng});
+    // panTo 是平滑移动；用户要求减少动态效果时直接跳过去
+    if (selected && map) map[matchMedia('(prefers-reduced-motion: reduce)').matches ? 'setCenter' : 'panTo']({lat:selected.lat,lng:selected.lng});
     highlight();
   });
   document.addEventListener('inbox:detail-closed',() => {

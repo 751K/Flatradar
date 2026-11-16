@@ -92,8 +92,11 @@
   }
   const tooltip = c => ({backgroundColor: c.surface, titleColor: c.muted, bodyColor: c.text, borderColor: c.grid, borderWidth: 1, padding: 10, displayColors: false});
 
+  // Chart.js 在 canvas 上画增长动画，CSS 的 prefers-reduced-motion 管不到，要在这里关
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   function draw(canvas, spec) {
     charts.get(canvas)?.destroy();
+    if (reduceMotion.matches) spec = {...spec, options: {...spec.options, animation: false}};
     charts.set(canvas, new Chart(canvas, spec));
   }
 

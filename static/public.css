@@ -153,3 +153,13 @@ a{color:var(--accent)}
 .guide-note{padding:14px 16px;border-radius:8px;background:var(--field);color:var(--text)}
 @media(max-width:600px){.guide h2{font-size:18px}.guide th,.guide td{padding-right:10px}.guide td:first-child{white-space:normal;word-break:keep-all}}
 @media (forced-colors: active){.login-field input:focus{outline:2px solid Highlight}}
+
+/* iOS Safari 在聚焦字号小于 16px 的输入框时会放大整页。触屏设备上把可输入
+   控件提到至少 16px（桌面保持原来的紧凑字号）。:is() 取参数里最高的优先级
+   (0,3,1)，select / textarea 也一起压过 .admin-input、.mail-search input 之类的 13px 规则。 */
+@media (pointer: coarse){
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){font-size:max(16px,1em)}
+}
+/* 弹窗里滚到底时，别把滚动传给后面的页面；不支持的浏览器（Safari）照旧 */
+dialog:modal{overscroll-behavior:contain}
+dialog::backdrop{overflow:hidden;overscroll-behavior:contain}
