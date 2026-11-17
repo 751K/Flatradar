@@ -123,10 +123,12 @@ class _Session:
     def __init__(self, pages: dict[int, _Resp]):
         self.pages = pages
         self.calls: list[int] = []
+        self.params: list[dict] = []
 
     def get(self, url, params=None, **kw):
         n = int((params or {}).get("page", 1))
         self.calls.append(n)
+        self.params.append(dict(params or {}))
         return self.pages[n]
 
     def __enter__(self):
@@ -228,3 +230,17 @@ def test_registered_as_codomo():
     from scrapers import SCRAPER_REGISTRY
     assert SCRAPER_REGISTRY["codomo"] is CodomoScraper
     assert "holland2stay" not in SCRAPER_REGISTRY
+
+
+def test_every_page_request_uses_a_fixed_sort():
+    """默认排序在同日入住的房源之间不稳定，翻页会重复一套、漏一套。"""
+    from scrapers import codomo
+
+    p4 = _page("codomo_nl_p4.html.gz")
+    p6 = _page("codomo_nl_p6.html.gz")
+    sess = _Session({1: _Resp(200, p4), **{i: _Resp(200, p6) for i in range(2, 7)}})
+    s = _scraper_with(sess)
+    with s.batch_session():
+        s.scrape(_task())
+    assert len(sess.params) > 1, "应当翻了好几页"
+    assert all(p.get("sort") == codomo._SORT for p in sess.params)

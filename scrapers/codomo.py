@@ -63,6 +63,12 @@ BASE_URL = "https://codomo.eu"
 _HOST = "codomo.eu"
 LIST_PATH = "/homes/nl/en"
 
+#: 固定排序。站点默认按「最早可入住」排，同一天入住的房源很多，它们之间的先后
+#: 每次请求都不一样——翻页时同一套会在两页各出现一次，另一套被挤掉。2026-11-17
+#: 生产上约两成轮次因此差 1–2 套、判不完整。``newest`` 是站点排序下拉里的选项，
+#: 本地连扫两遍都是 150/150、无重复。
+_SORT = "newest"
+
 #: 站点每页固定 25 条。只用来估算页数上限，真正的页数以分页控件与总数为准。
 _PAGE_SIZE = 25
 #: 翻页安全上限：全国 ~150 条只有 6 页，40 页够容纳 1000 条。
@@ -182,7 +188,7 @@ class CodomoScraper(AbstractScraper):
 
     def _get(self, session, page: int) -> str:
         url = BASE_URL + LIST_PATH
-        params = {"page": page} if page > 1 else None
+        params = {"sort": _SORT, "page": page} if page > 1 else {"sort": _SORT}
         for attempt in range(len(RATE_LIMIT_BACKOFF) + 1):
             try:
                 resp = session.get(url, params=params, timeout=30, headers={
