@@ -130,3 +130,34 @@ def test_storage_runs_it_once(tmp_path):
     st = Storage(db)
     assert _one(st.conn, "SELECT source FROM listings WHERE id='x'")[0] == "holland2stay"
     st.close()
+
+
+def test_v2_purges_underscore_joined_h2s_state():
+    """v1 的整词匹配认不出 ``_holland2stay`` 这类下划线拼接的键。"""
+    from mstorage._codomo_rename import purge_h2s_runtime_state
+
+    conn = _db()
+    rename_holland2stay(conn)
+    # 生产库里 v1 之后仍留着这些键（v1 认不出，或是旧进程退出前又写回来的）
+    conn.executemany("INSERT INTO meta VALUES (?, ?)", [
+        ("pacing_mult_holland2stay", "1.0"),
+        ("backoff:circuit_holland2stay:until", "1"),
+        ("backoff:h2s_login_block:until", "1"),
+        ("backoff:throttle_h2s_long_block:streak", "0"),
+        ("watchdog_fired:stale_full_scan:holland2stay", ""),
+        ("backoff:circuit_codomo:until", "1"),
+    ])
+    assert purge_h2s_runtime_state(conn) == 5
+    keys = {k for (k,) in conn.execute("SELECT key FROM meta")}
+    assert "backoff:circuit_codomo:until" in keys
+    assert "pacing_mult:codomo" in keys and "other" in keys
+    assert not any("holland2stay" in k or "h2s_" in k for k in keys)
+
+
+def test_storage_marks_cleanup(tmp_path):
+    from mstorage._codomo_rename import CLEANUP_KEY
+    from storage import Storage
+
+    st = Storage(tmp_path / "t.db")
+    assert st.get_meta(CLEANUP_KEY, default="")
+    st.close()

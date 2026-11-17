@@ -352,12 +352,13 @@ class ListingOps:
                             """UPDATE listings
                                SET name=?, price_raw=?, available_from=?,
                                    features=?, area_value=?, energy_rank=?,
-                                   last_seen=?, source=?
+                                   last_seen=?, source=?,
+                                   url=COALESCE(NULLIF(?, ''), url)
                                WHERE id=?""",
                             (
                                 listing.name, listing.price_raw, listing.available_from,
                                 features_json, area_value, energy_rank_value,
-                                now, listing.source, listing.id,
+                                now, listing.source, listing.url or "", listing.id,
                             ),
                         )
                         continue
@@ -366,18 +367,22 @@ class ListingOps:
                     # 撤销之前 mark_stale_listings 可能打过的"推测"标记。
                     # source 在 UPDATE 时也带上——理论上 listing 的 source 永不变，
                     # 但显式写入更稳（防止历史数据 backfill 默认值不一致）。
+                    # url 也跟着刷新：平台换域名时（2026-11 Holland2Stay → codomo.eu）
+                    # 老房源的链接否则永远停在旧站。空串不覆盖。
                     cur.execute(
                         """UPDATE listings
                            SET name=?, status=?, price_raw=?, available_from=?,
                                features=?, area_value=?, energy_rank=?,
                                last_seen=?, last_status=?,
-                               status_is_inferred=0, status_hold_until='', source=?
+                               status_is_inferred=0, status_hold_until='', source=?,
+                               url=COALESCE(NULLIF(?, ''), url)
                            WHERE id=?""",
                         (
                             listing.name, listing.status, listing.price_raw,
                             listing.available_from,
                             features_json, area_value, energy_rank_value,
-                            now, listing.status, listing.source, listing.id,
+                            now, listing.status, listing.source, listing.url or "",
+                            listing.id,
                         ),
                     )
                     if old_status != listing.status:

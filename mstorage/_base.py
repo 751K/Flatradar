@@ -529,13 +529,19 @@ class StorageBase:
         """平台 key ``holland2stay`` → ``codomo``，只跑一次。见 mstorage/_codomo_rename.py。"""
         from ._codomo_rename import MIGRATION_KEY, rename_holland2stay
 
-        if self.get_meta(MIGRATION_KEY, default=""):
-            return
-        stats = rename_holland2stay(self._conn)
-        self.set_meta(MIGRATION_KEY, _dt.now(_tz.utc).isoformat())
-        if any(stats.values()):
-            logger.info("平台改名 holland2stay → codomo：%s",
-                        ", ".join(f"{k} {v}" for k, v in stats.items() if v))
+        from ._codomo_rename import CLEANUP_KEY, purge_h2s_runtime_state
+
+        if not self.get_meta(MIGRATION_KEY, default=""):
+            stats = rename_holland2stay(self._conn)
+            self.set_meta(MIGRATION_KEY, _dt.now(_tz.utc).isoformat())
+            if any(stats.values()):
+                logger.info("平台改名 holland2stay → codomo：%s",
+                            ", ".join(f"{k} {v}" for k, v in stats.items() if v))
+        if not self.get_meta(CLEANUP_KEY, default=""):
+            n = purge_h2s_runtime_state(self._conn)
+            self.set_meta(CLEANUP_KEY, _dt.now(_tz.utc).isoformat())
+            if n:
+                logger.info("清除旧 H2S 运行状态：%d 个 meta 键", n)
 
     #: 一次性迁移的标记 key。见 ``_retire_legacy_notification_backlog``。
     _BACKLOG_MIGRATION_KEY = "notified_backlog_retired_at"

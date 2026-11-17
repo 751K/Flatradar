@@ -500,3 +500,26 @@ class TestResetAll:
         assert temp_db.get_recent_changes(hours=24) == []
         assert temp_db.count_unread_notifications() == 0
         assert temp_db.get_meta("foo", default="GONE") == "GONE"
+
+
+class TestDiffRefreshesUrl:
+    """平台换域名（2026-11 Holland2Stay → codomo.eu）后老房源的链接要跟上。"""
+
+    def _url(self, temp_db, id_):
+        return temp_db.conn.execute(
+            "SELECT url FROM listings WHERE id=?", (id_,)).fetchone()[0]
+
+    def test_same_status_updates_url(self, temp_db):
+        temp_db.diff([_l("a", url="https://www.holland2stay.com/residences/a.html")])
+        temp_db.diff([_l("a", url="https://codomo.eu/homes/nl/en/eindhoven/x/a")])
+        assert self._url(temp_db, "a") == "https://codomo.eu/homes/nl/en/eindhoven/x/a"
+
+    def test_status_change_updates_url(self, temp_db):
+        temp_db.diff([_l("a", status="Available in lottery", url="https://old/a")])
+        temp_db.diff([_l("a", url="https://new/a")])
+        assert self._url(temp_db, "a") == "https://new/a"
+
+    def test_empty_url_does_not_erase(self, temp_db):
+        temp_db.diff([_l("a", url="https://old/a")])
+        temp_db.diff([_l("a", url="")])
+        assert self._url(temp_db, "a") == "https://old/a"

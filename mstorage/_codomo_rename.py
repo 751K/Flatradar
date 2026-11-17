@@ -19,7 +19,8 @@
 
 房源 id 不改：仍是 URL 末段 slug，与 Codomo 的 URL 同形，新旧房源自然接上。
 
-只跑一次，靠 meta 标记 ``codomo_rename_v1``。
+只跑一次，靠 meta 标记 ``codomo_rename_v1``。v1 漏掉的旧 H2S 运行状态由
+``purge_h2s_runtime_state`` 另行清除（标记 ``codomo_cleanup_v2``）。
 """
 from __future__ import annotations
 
@@ -196,3 +197,24 @@ def rename_holland2stay(conn: sqlite3.Connection) -> dict[str, int]:
                     n += 1
             stats["meta"] = n
     return stats
+
+
+CLEANUP_KEY = "codomo_cleanup_v2"
+
+#: v1 漏掉的旧 H2S 运行状态。v1 的整词匹配把 ``_`` 当成词的一部分，所以
+#: ``pacing_mult_holland2stay``、``backoff:circuit_holland2stay:*`` 这类下划线
+#: 拼接的键没被认出来；``h2s_login_block`` / ``throttle_h2s_long_block`` 则只
+#: 属于旧站的预登录与长封锁。它们描述的是旧站的熔断 / 节流 / 告警状态，搬给
+#: Codomo 没有意义（新站是另一套反爬），直接删掉。
+_H2S_META_PATTERN = re.compile(r"holland2stay|(?<![a-z0-9])h2s_", re.IGNORECASE)
+
+
+def purge_h2s_runtime_state(conn: sqlite3.Connection) -> int:
+    """删除 meta 里旧 H2S 的运行状态，返回删了几行。调用方负责打标。"""
+    if not _table_exists(conn, "meta"):
+        return 0
+    keys = [k for (k,) in conn.execute("SELECT key FROM meta").fetchall()
+            if _H2S_META_PATTERN.search(k or "")]
+    with conn:
+        conn.executemany("DELETE FROM meta WHERE key=?", [(k,) for k in keys])
+    return len(keys)
