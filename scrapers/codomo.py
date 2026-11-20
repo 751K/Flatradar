@@ -77,7 +77,15 @@ _SORT = "newest"
 #: 本轮判不完整（2026-11-20 复现，sort=newest 也一样）。同一轮所有页带同一个
 #: ``r=<轮次时间戳>``，整轮都从源站取同一时刻的数据；下一轮换值。连扫 3 轮都是
 #: 124/124、5 页总数一致、全部 MISS。
+#:
+#: 但源站本身也不一致（同日从服务器上测：全部 MISS 的同一轮里，各页总数仍在
+#: 124 / 125 之间跳，像是多个后端副本的数据不同步）。所以某页自报总数与第 1 页
+#: 不同时，换一个缓存键重取这一页，最多 ``_PAGE_RETRIES`` 次；对上了就说明这页与
+#: 第 1 页出自同一份数据，边界能接上。
 _ROUND_PARAM = "r"
+_PAGE_RETRIES = 4
+#: 单页重试仍对不上时（第 1 页本身是少数派），整轮最多重来几次。
+_ROUND_ATTEMPTS = 2
 
 #: 站点每页固定 25 条。只用来估算页数上限，真正的页数以分页控件与总数为准。
 _PAGE_SIZE = 25
@@ -244,40 +252,65 @@ class CodomoScraper(AbstractScraper):
                 f"Codomo 列表第 {page} 页返回 HTTP {status}（站点可能改版，检查 {LIST_PATH}）")
         raise RateLimitError("Codomo 持续 429")  # pragma: no cover
 
+    def _fetch_pages(self, session, round_key: str):
+        """按同一个缓存键翻完全部页，返回 (cards, total, last_page, unresolved, totals_seen)。"""
+        cards: dict[str, CodomoCard] = {}
+        total: Optional[int] = None
+        last_page = 1
+        unresolved = 0
+        totals_seen: set[int] = set()
+        page = 1
+        while page <= min(last_page, _MAX_PAGES):
+            if page > 1:
+                time.sleep(_PAGE_SPACING)
+            parsed = parse_listing_page(self._get(session, page, round_key))
+            retries = 0
+            while (page > 1 and total is not None and parsed.total is not None
+                   and parsed.total != total and retries < _PAGE_RETRIES):
+                retries += 1
+                time.sleep(_PAGE_SPACING)
+                parsed = parse_listing_page(
+                    self._get(session, page, f"{round_key}-{retries}"))
+            if retries:
+                logger.info("Codomo 第 %d 页总数与第 1 页不一致，重取 %d 次（最终 %s / %s）",
+                            page, retries, parsed.total, total)
+            unresolved += parsed.unresolved_placeholders
+            if parsed.total is not None:
+                totals_seen.add(parsed.total)
+            if page == 1:
+                total = parsed.total
+                by_count = math.ceil(total / _PAGE_SIZE) if total else 1
+                last_page = max(parsed.max_page or 1, by_count)
+            new = 0
+            for c in parsed.cards:
+                if c.slug not in cards:
+                    cards[c.slug] = c
+                    new += 1
+            if page > 1 and new == 0:
+                # 超出范围的页号可能回第 1 页或空页；没有新卡片就别再翻
+                break
+            page += 1
+
+        return cards, total, last_page, unresolved, totals_seen
+
     def _fetch_all(self) -> tuple[dict[str, list[Listing]], bool]:
         """抓全国列表，返回 ({城市: listings}, 是否完整)。
 
         完整的判据：所有页都取到，且去重后的卡片数等于页面自报的总数。任何一条
         不满足都标不完整——不完整的结果不参与「消失即下架」的收敛。
         """
-        cards: dict[str, CodomoCard] = {}
-        total: Optional[int] = None
-        last_page = 1
-        unresolved = 0
-        round_key = str(int(time.time()))
-        totals_seen: set[int] = set()
+        # 第 1 页本身可能来自少数派副本（之后各页都对不上它）。这时整轮换个缓存键
+        # 重来一次，而不是带着对不上的边界判不完整。
         with self._session() as session:
-            page = 1
-            while page <= min(last_page, _MAX_PAGES):
-                if page > 1:
-                    time.sleep(_PAGE_SPACING)
-                parsed = parse_listing_page(self._get(session, page, round_key))
-                unresolved += parsed.unresolved_placeholders
-                if parsed.total is not None:
-                    totals_seen.add(parsed.total)
-                if page == 1:
-                    total = parsed.total
-                    by_count = math.ceil(total / _PAGE_SIZE) if total else 1
-                    last_page = max(parsed.max_page or 1, by_count)
-                new = 0
-                for c in parsed.cards:
-                    if c.slug not in cards:
-                        cards[c.slug] = c
-                        new += 1
-                if page > 1 and new == 0:
-                    # 超出范围的页号可能回第 1 页或空页；没有新卡片就别再翻
+            for attempt in range(_ROUND_ATTEMPTS):
+                round_key = f"{int(time.time())}{'r' * attempt}"
+                cards, total, last_page, unresolved, totals_seen = self._fetch_pages(
+                    session, round_key)
+                if len(totals_seen) <= 1:
                     break
-                page += 1
+                if attempt + 1 < _ROUND_ATTEMPTS:
+                    logger.info("Codomo 各页总数仍不一致 %s，整轮重取", sorted(totals_seen))
+                    time.sleep(_PAGE_SPACING)
 
         complete = True
         if len(totals_seen) > 1:

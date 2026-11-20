@@ -295,3 +295,62 @@ def test_inconsistent_page_totals_mark_round_incomplete():
     """各页自报总数不一样 = 不是同一时刻的数据，翻页边界对不上。"""
     _, complete = _run_round(_two_page_round(+1))
     assert complete is False
+
+
+def test_page_from_another_backend_state_is_refetched():
+    """源站副本不同步：第 2 页先拿到另一份数据（总数 +1），换缓存键重取后对上。"""
+    from scrapers import codomo
+
+    good = _two_page_round(0)
+    bad_p2 = _two_page_round(+1)[2]
+    served = iter(["p1", "p2-bad", "p2"])
+
+    class _Flaky(_Session):
+        def get(self, url, params=None, **kw):
+            self.params.append(dict(params or {}))
+            return _Resp(200, next(served))
+
+    sess = _Flaky({})
+    s = _scraper_with(sess)
+    pick = {"p1": good[1], "p2-bad": bad_p2, "p2": good[2]}
+    with patch("scrapers.codomo.time.time", return_value=500.0), \
+            patch("scrapers.codomo.parse_listing_page", side_effect=lambda h: pick[h]), \
+            s.batch_session():
+        _, complete = s._fetch_all()
+    assert complete is True
+    keys = [p[codomo._ROUND_PARAM] for p in sess.params]
+    assert keys == ["500", "500", "500-1"], "重取要换缓存键，否则拿回的是同一份缓存"
+
+
+def test_retries_are_bounded():
+    from scrapers import codomo
+
+    sess, complete = _run_round(_two_page_round(+1))
+    assert complete is False
+    assert len(sess.params) == codomo._ROUND_ATTEMPTS * (2 + codomo._PAGE_RETRIES)
+
+
+def test_minority_first_page_restarts_the_round():
+    """第 1 页本身来自少数派副本时，后面各页都对不上它——整轮换键重来。"""
+    from scrapers import codomo
+
+    good = _two_page_round(0)
+    from dataclasses import replace
+    minority_p1 = replace(good[1], total=good[1].total - 1)
+    served = iter(["p1-min"] + ["p2"] * (1 + codomo._PAGE_RETRIES) + ["p1", "p2"])
+
+    class _Flaky(_Session):
+        def get(self, url, params=None, **kw):
+            self.params.append(dict(params or {}))
+            return _Resp(200, next(served))
+
+    sess = _Flaky({})
+    s = _scraper_with(sess)
+    pick = {"p1-min": minority_p1, "p1": good[1], "p2": good[2]}
+    with patch("scrapers.codomo.time.time", return_value=700.0), \
+            patch("scrapers.codomo.parse_listing_page", side_effect=lambda h: pick[h]), \
+            s.batch_session():
+        _, complete = s._fetch_all()
+    assert complete is True
+    keys = [p[codomo._ROUND_PARAM] for p in sess.params]
+    assert keys[0] == "700" and keys[-2:] == ["700r", "700r"]
