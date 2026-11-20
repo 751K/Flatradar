@@ -17,7 +17,7 @@ Codomo 覆盖荷兰、奥地利、西班牙、葡萄牙，本项目只抓荷兰
 | 项 | 说明 |
 |---|---|
 | 入口 | `scrapers/codomo.py` 的 `CodomoScraper`，纯 HTTP（curl_cffi），不需要浏览器 |
-| 数据来源 | `https://codomo.eu/homes/nl/en?sort=newest&page=N`，每页 25 条，服务端渲染的 HTML。必须固定排序：默认排序在同日入住的房源之间不稳定，翻页会重复一套、漏一套 |
+| 数据来源 | `https://codomo.eu/homes/nl/en?sort=newest&r=<轮次时间戳>&page=N`，每页 25 条，服务端渲染的 HTML。必须固定排序：默认排序在同日入住的房源之间不稳定，翻页会重复一套、漏一套。`r` 让同一轮的各页绕开 Cloudflare 的逐页缓存、取同一时刻的数据，否则各页是不同时刻的快照，边界同样会重复和遗漏 |
 | 解析 | `scrapers/codomo_parse.py`，只依赖标准库 |
 | 批次 | 与 Magis / Plaza 相同：每批次抓一遍全国列表，各城市 task 从同一份结果里切分 |
 | 城市表 | `mcore/registry.py` 的 `KNOWN_CODOMO_CITIES`，订阅键 `CODOMO_CITIES` |

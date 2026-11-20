@@ -65,9 +65,19 @@ LIST_PATH = "/homes/nl/en"
 
 #: 固定排序。站点默认按「最早可入住」排，同一天入住的房源很多，它们之间的先后
 #: 每次请求都不一样——翻页时同一套会在两页各出现一次，另一套被挤掉。2026-11-17
-#: 生产上约两成轮次因此差 1–2 套、判不完整。``newest`` 是站点排序下拉里的选项，
-#: 本地连扫两遍都是 150/150、无重复。
+#: 生产上约两成轮次因此差 1–2 套、判不完整。``newest`` 是站点排序下拉里的选项。
+#: 固定排序之后仍有轮次差 1–2 套，真正的原因是分页缓存，见 ``_ROUND_PARAM``。
 _SORT = "newest"
+
+#: 每轮一个的缓存键参数名。
+#:
+#: Cloudflare 按完整 URL 分别缓存每一页（``cf-cache-status: HIT``，``age`` 各页
+#: 不同），于是同一轮里拿到的 5 页是不同时刻的快照：各页自报总数一会儿 124、
+#: 一会儿 125 / 126，翻页边界上同一套房在相邻两页各出现一次，另一套被挤掉，
+#: 本轮判不完整（2026-11-20 复现，sort=newest 也一样）。同一轮所有页带同一个
+#: ``r=<轮次时间戳>``，整轮都从源站取同一时刻的数据；下一轮换值。连扫 3 轮都是
+#: 124/124、5 页总数一致、全部 MISS。
+_ROUND_PARAM = "r"
 
 #: 站点每页固定 25 条。只用来估算页数上限，真正的页数以分页控件与总数为准。
 _PAGE_SIZE = 25
@@ -186,9 +196,13 @@ class CodomoScraper(AbstractScraper):
         proxies = {"http": proxy, "https": proxy} if proxy else NO_PROXY_CURL
         return req.Session(impersonate=get_impersonate(), proxies=proxies)
 
-    def _get(self, session, page: int) -> str:
+    def _get(self, session, page: int, round_key: str = "") -> str:
         url = BASE_URL + LIST_PATH
-        params = {"sort": _SORT, "page": page} if page > 1 else {"sort": _SORT}
+        params = {"sort": _SORT}
+        if round_key:
+            params[_ROUND_PARAM] = round_key
+        if page > 1:
+            params["page"] = page
         for attempt in range(len(RATE_LIMIT_BACKOFF) + 1):
             try:
                 resp = session.get(url, params=params, timeout=30, headers={
@@ -240,13 +254,17 @@ class CodomoScraper(AbstractScraper):
         total: Optional[int] = None
         last_page = 1
         unresolved = 0
+        round_key = str(int(time.time()))
+        totals_seen: set[int] = set()
         with self._session() as session:
             page = 1
             while page <= min(last_page, _MAX_PAGES):
                 if page > 1:
                     time.sleep(_PAGE_SPACING)
-                parsed = parse_listing_page(self._get(session, page))
+                parsed = parse_listing_page(self._get(session, page, round_key))
                 unresolved += parsed.unresolved_placeholders
+                if parsed.total is not None:
+                    totals_seen.add(parsed.total)
                 if page == 1:
                     total = parsed.total
                     by_count = math.ceil(total / _PAGE_SIZE) if total else 1
@@ -262,6 +280,12 @@ class CodomoScraper(AbstractScraper):
                 page += 1
 
         complete = True
+        if len(totals_seen) > 1:
+            # 各页不是同一时刻的数据（缓存没绕开，或翻页途中有房源上下架），
+            # 页与页的边界对不上，去重后的数量也就不可信。
+            logger.warning("Codomo 各页自报总数不一致 %s，本轮标记不完整",
+                           sorted(totals_seen))
+            complete = False
         if total is None:
             logger.warning("Codomo 列表页读不到「N residences」总数，本轮标记不完整")
             complete = False

@@ -244,3 +244,54 @@ def test_every_page_request_uses_a_fixed_sort():
         s.scrape(_task())
     assert len(sess.params) > 1, "应当翻了好几页"
     assert all(p.get("sort") == codomo._SORT for p in sess.params)
+
+
+# ── Cloudflare 分页缓存：同一轮各页要是同一时刻的数据（2026-11-20）─────
+
+def _two_page_round(second_total_delta: int):
+    """两页、共 n 张卡片的一轮；第 2 页自报总数可以偏一点，模拟另一时刻的缓存。"""
+    from dataclasses import replace
+
+    base = parse_listing_page(_page("codomo_nl_p6.html.gz"))
+    half = len(base.cards) // 2
+    n = len(base.cards)
+    p1 = replace(base, cards=base.cards[:half], total=n, max_page=2)
+    p2 = replace(base, cards=base.cards[half:], total=n + second_total_delta, max_page=2)
+    return {1: p1, 2: p2}
+
+
+def _run_round(pages):
+    sess = _Session({1: _Resp(200, "p1"), 2: _Resp(200, "p2")})
+    s = _scraper_with(sess)
+    with patch("scrapers.codomo.parse_listing_page",
+               side_effect=lambda html: pages[1 if html == "p1" else 2]), \
+            s.batch_session():
+        by_city, complete = s._fetch_all()
+    return sess, complete
+
+
+def test_all_pages_of_a_round_share_one_cache_key():
+    """Cloudflare 按完整 URL 缓存每一页；同一轮带同一个 r=，整轮都绕开缓存。"""
+    from scrapers import codomo
+
+    with patch("scrapers.codomo.time.time", return_value=1795183363.4):
+        sess, complete = _run_round(_two_page_round(0))
+    keys = {p.get(codomo._ROUND_PARAM) for p in sess.params}
+    assert keys == {"1795183363"}
+    assert complete is True
+
+
+def test_cache_key_changes_between_rounds():
+    from scrapers import codomo
+
+    with patch("scrapers.codomo.time.time", return_value=100.0):
+        a, _ = _run_round(_two_page_round(0))
+    with patch("scrapers.codomo.time.time", return_value=250.0):
+        b, _ = _run_round(_two_page_round(0))
+    assert a.params[0][codomo._ROUND_PARAM] != b.params[0][codomo._ROUND_PARAM]
+
+
+def test_inconsistent_page_totals_mark_round_incomplete():
+    """各页自报总数不一样 = 不是同一时刻的数据，翻页边界对不上。"""
+    _, complete = _run_round(_two_page_round(+1))
+    assert complete is False
