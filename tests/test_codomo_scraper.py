@@ -291,12 +291,6 @@ def test_cache_key_changes_between_rounds():
     assert a.params[0][codomo._ROUND_PARAM] != b.params[0][codomo._ROUND_PARAM]
 
 
-def test_inconsistent_page_totals_mark_round_incomplete():
-    """各页自报总数不一样 = 不是同一时刻的数据，翻页边界对不上。"""
-    _, complete = _run_round(_two_page_round(+1))
-    assert complete is False
-
-
 def test_page_from_another_backend_state_is_refetched():
     """源站副本不同步：第 2 页先拿到另一份数据（总数 +1），换缓存键重取后对上。"""
     from scrapers import codomo
@@ -323,34 +317,35 @@ def test_page_from_another_backend_state_is_refetched():
 
 
 def test_retries_are_bounded():
+    """源站副本不同步时只重取一次碰运气，不为凑齐总数每轮多打十几个请求。"""
     from scrapers import codomo
 
-    sess, complete = _run_round(_two_page_round(+1))
-    assert complete is False
-    assert len(sess.params) == codomo._ROUND_ATTEMPTS * (2 + codomo._PAGE_RETRIES)
+    sess, _ = _run_round(_two_page_round(+1))
+    assert len(sess.params) == 2 + codomo._PAGE_RETRIES
 
 
-def test_minority_first_page_restarts_the_round():
-    """第 1 页本身来自少数派副本时，后面各页都对不上它——整轮换键重来。"""
-    from scrapers import codomo
-
-    good = _two_page_round(0)
+def _round_with_cards(drop: int, total_delta: int = 0):
+    """一页的轮次：自报总数 = 卡片数 + drop（模拟翻页边界挤掉 drop 套）。"""
     from dataclasses import replace
-    minority_p1 = replace(good[1], total=good[1].total - 1)
-    served = iter(["p1-min"] + ["p2"] * (1 + codomo._PAGE_RETRIES) + ["p1", "p2"])
 
-    class _Flaky(_Session):
-        def get(self, url, params=None, **kw):
-            self.params.append(dict(params or {}))
-            return _Resp(200, next(served))
-
-    sess = _Flaky({})
+    base = parse_listing_page(_page("codomo_nl_p6.html.gz"))
+    page = replace(base, total=len(base.cards) + drop, max_page=1)
+    # 第 2 页起返回同一份卡片 = 没有新卡片，翻页就此停下
+    sess = _Session({i: _Resp(200, "p1") for i in range(1, 4)})
     s = _scraper_with(sess)
-    pick = {"p1-min": minority_p1, "p1": good[1], "p2": good[2]}
-    with patch("scrapers.codomo.time.time", return_value=700.0), \
-            patch("scrapers.codomo.parse_listing_page", side_effect=lambda h: pick[h]), \
-            s.batch_session():
+    with patch("scrapers.codomo.parse_listing_page", return_value=page), s.batch_session():
         _, complete = s._fetch_all()
-    assert complete is True
-    keys = [p[codomo._ROUND_PARAM] for p in sess.params]
-    assert keys[0] == "700" and keys[-2:] == ["700r", "700r"]
+    return complete
+
+
+def test_boundary_jitter_within_tolerance_counts_as_complete():
+    """差 1–2 套是翻页边界抖动：下架看 last_seen 是否超过 30 分钟，被挤掉的
+    房源下一轮就回来，不会被误判，所以照常参与收敛。"""
+    assert _round_with_cards(1) is True
+    assert _round_with_cards(2) is True
+    assert _round_with_cards(-1) is True   # 多出一套（同一套跨页重复的反面）同理
+
+
+def test_missing_a_page_is_still_incomplete():
+    """差一整页（25 套）是没抓到，不是抖动，必须挡住收敛。"""
+    assert _round_with_cards(25) is False

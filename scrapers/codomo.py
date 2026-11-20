@@ -78,14 +78,23 @@ _SORT = "newest"
 #: ``r=<轮次时间戳>``，整轮都从源站取同一时刻的数据；下一轮换值。连扫 3 轮都是
 #: 124/124、5 页总数一致、全部 MISS。
 #:
-#: 但源站本身也不一致（同日从服务器上测：全部 MISS 的同一轮里，各页总数仍在
-#: 124 / 125 之间跳，像是多个后端副本的数据不同步）。所以某页自报总数与第 1 页
-#: 不同时，换一个缓存键重取这一页，最多 ``_PAGE_RETRIES`` 次；对上了就说明这页与
-#: 第 1 页出自同一份数据，边界能接上。
+#: 但源站本身也不一致（同日从服务器上测：全部 MISS 的同一轮里，各页总数在
+#: 123 / 124 / 125 之间跳，像是多个后端副本的数据不同步）。v2.3.2 曾经按页重取
+#: 最多 4 次、必要时整轮重来，部署后仍只有约一半轮次能凑齐，每轮还多出 10–20 个
+#: 请求。所以现在只重取一次碰碰运气，凑不齐就交给 ``_MISS_TOLERANCE``。
 _ROUND_PARAM = "r"
-_PAGE_RETRIES = 4
-#: 单页重试仍对不上时（第 1 页本身是少数派），整轮最多重来几次。
-_ROUND_ATTEMPTS = 2
+_PAGE_RETRIES = 1
+
+#: 去重后的卡片数与自报总数差多少仍算完整。
+#:
+#: 完整性门槛存在的理由是下架收敛：只有完整的轮次才去老化没出现的房源。但老化
+#: 看的是 ``last_seen`` 有多久没刷新（30 分钟转 Reserved，见 mcore/stale.py），
+#: 不是「这一轮有没有它」。翻页边界被挤掉的那一两套，下一轮几乎必然回来，离
+#: 30 分钟差得远——它们不会被误判。真正需要挡住的是「大面积没抓到」：某页没取到、
+#: 卡片结构变了、被带去了维护页。那些情况差的是一整页（25 套）甚至全部，远超这个
+#: 容差。所以差 1–2 套照样放行收敛，比为了凑出精确相等而每轮多打十几个请求划算。
+_MISS_TOLERANCE_ABS = 2
+_MISS_TOLERANCE_RATIO = 0.02
 
 #: 站点每页固定 25 条。只用来估算页数上限，真正的页数以分页控件与总数为准。
 _PAGE_SIZE = 25
@@ -296,37 +305,30 @@ class CodomoScraper(AbstractScraper):
     def _fetch_all(self) -> tuple[dict[str, list[Listing]], bool]:
         """抓全国列表，返回 ({城市: listings}, 是否完整)。
 
-        完整的判据：所有页都取到，且去重后的卡片数等于页面自报的总数。任何一条
-        不满足都标不完整——不完整的结果不参与「消失即下架」的收敛。
+        完整的判据：所有页都取到，且去重后的卡片数与页面自报的总数相差不超过
+        容差（见 ``_MISS_TOLERANCE_ABS``）。不完整的结果不参与「消失即下架」的收敛。
         """
-        # 第 1 页本身可能来自少数派副本（之后各页都对不上它）。这时整轮换个缓存键
-        # 重来一次，而不是带着对不上的边界判不完整。
         with self._session() as session:
-            for attempt in range(_ROUND_ATTEMPTS):
-                round_key = f"{int(time.time())}{'r' * attempt}"
-                cards, total, last_page, unresolved, totals_seen = self._fetch_pages(
-                    session, round_key)
-                if len(totals_seen) <= 1:
-                    break
-                if attempt + 1 < _ROUND_ATTEMPTS:
-                    logger.info("Codomo 各页总数仍不一致 %s，整轮重取", sorted(totals_seen))
-                    time.sleep(_PAGE_SPACING)
+            cards, total, last_page, unresolved, totals_seen = self._fetch_pages(
+                session, str(int(time.time())))
 
         complete = True
-        if len(totals_seen) > 1:
-            # 各页不是同一时刻的数据（缓存没绕开，或翻页途中有房源上下架），
-            # 页与页的边界对不上，去重后的数量也就不可信。
-            logger.warning("Codomo 各页自报总数不一致 %s，本轮标记不完整",
-                           sorted(totals_seen))
-            complete = False
         if total is None:
             logger.warning("Codomo 列表页读不到「N residences」总数，本轮标记不完整")
             complete = False
         elif len(cards) != total:
-            logger.warning(
-                "Codomo 自报 %d 套，实际解析出 %d 套（%d 页），本轮标记不完整",
-                total, len(cards), last_page)
-            complete = False
+            gap = abs(total - len(cards))
+            tolerance = max(_MISS_TOLERANCE_ABS, math.ceil(total * _MISS_TOLERANCE_RATIO))
+            if gap <= tolerance:
+                # 源站副本不同步造成的翻页边界抖动（各页总数 %s），见 _MISS_TOLERANCE_ABS
+                logger.info(
+                    "Codomo 自报 %d 套，解析出 %d 套，差 %d 在容差 %d 内（各页总数 %s），按完整处理",
+                    total, len(cards), gap, tolerance, sorted(totals_seen))
+            else:
+                logger.warning(
+                    "Codomo 自报 %d 套，实际解析出 %d 套（%d 页），本轮标记不完整",
+                    total, len(cards), last_page)
+                complete = False
         if total and not cards:
             logger.warning("Codomo 自报 %d 套但一张卡片都没解析出来——卡片结构可能变了", total)
             complete = False
