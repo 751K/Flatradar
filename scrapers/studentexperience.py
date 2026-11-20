@@ -86,7 +86,7 @@ incomplete；认得出来则说明 DOM 还是我们认识的那个，此时「0 
   are exclusively available for students」，签约前必须上传在读证明。这是整个
   source 的事实、不按户型变，所以走 ``SOURCE_ASSUMED_FEATURES``，与 xior 同一
   处理。合格身份含 study programme / internship / **PhD research**——与
-  OurCampus 相反（那边 PhD 与博后明确不合格）。
+  Canvas 相反（那边 PhD 与博后明确不合格）。
 - ``type`` 登记：站点全部产品都是 studio，四个档位名（Signature / Essential /
   Prestige / Comfort）是价位分层不是房型。只在类型名里出现 "studio" 时才写
   ``Type: Studio``，认不出就不写。
@@ -108,7 +108,7 @@ Minervahaven 短租线要求：临时居留（≤1 年）、荷兰境外常住�
 不做自动预订
 ------------
 FAQ 明确「first-come, first-served」——这正是接入本平台的理由，也意味着下单窗口
-很短。但下单流程未做侦察，也未评估 ToS 暴露面。与 OurCampus / Magis 一致：
+很短。但下单流程未做侦察，也未评估 ToS 暴露面。与 Canvas / Magis 一致：
 只通知，不预订。
 
 规模与节奏

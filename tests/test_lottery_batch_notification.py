@@ -76,11 +76,11 @@ class TestSplit:
         assert [x.id for x in batched] == ["a", "b"]
         assert {x.id for x in singles} == {"x", "o"}
 
-    def test_ourcampus_lottery_is_sent_one_by_one(self):
-        """OurCampus **有**抽签，而且一样快：2026-09-15 #2301（Join Lottery）
+    def test_canvas_lottery_is_sent_one_by_one(self):
+        """Canvas **有**抽签，而且一样快：2026-09-15 #2301（Join Lottery）
         挂了 48 分钟就没了。「抽签不急、可以聚合」是 Codomo（原 H2S）的实测结论，不是抽签
         的通性——聚合的闸必须按平台开，不能按状态开。"""
-        ms = [_l("o1", source="ourcampus"), _l("o2", source="ourcampus"), _l("o3", source="ourcampus")]
+        ms = [_l("o1", source="canvas"), _l("o2", source="canvas"), _l("o3", source="canvas")]
         batched, singles = _split_batchable(ms)
         assert batched == []
         assert [x.id for x in singles] == ["o1", "o2", "o3"]

@@ -221,7 +221,7 @@ def _submit_standard_bookings(user, notifier, candidates, context: BookingSubmis
     """把 Plaza 之外的候选按「主候选 + race_lost 回退」整体提交一次。
 
     目前 ``AUTO_BOOK_SOURCES`` 里只有 plaza，这条路径在线上不会被走到；保留它是
-    因为 Xior / OurDomain / OurCampus 的 booker 已注册，开放其中任何一个时不必
+    因为 Xior / OurDomain / Canvas 的 booker 已注册，开放其中任何一个时不必
     再补提交逻辑。它们的成功结果止于存草稿 / 开始申请，不需要 Plaza 那种持久化
     应征保护。
     """

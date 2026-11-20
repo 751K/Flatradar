@@ -71,7 +71,7 @@ class TestFailClosed:
 
     @pytest.mark.parametrize("source", [
         "codomo", "plaza", "xior", "ourdomain",
-        "magis", "studentexperience", "ourcampus"])
+        "magis", "studentexperience", "canvas"])
     def test_every_current_source_supports_it(self, source):
         """七个平台都写 Building（生产实测 835/836），所以都该受约束。"""
         assert _source_supports_dim(source, "building")

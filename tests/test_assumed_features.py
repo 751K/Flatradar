@@ -54,14 +54,14 @@ class TestDeclaration:
         """
         assert "Tenant: student only" in assumed_features("xior")
 
-    def test_ourcampus_is_not_declared(self):
-        """OurCampus 至今没返回过任何单元，装修档位无从核实。
+    def test_canvas_is_not_declared(self):
+        """Canvas 至今没返回过任何单元，装修档位无从核实。
 
         它复用 OurDomain 的解析器，很容易顺手一起写上——但那等于登记一个没验证
         过的事实。宁可让它继续走 fail-open。
         """
-        assert assumed_features("ourcampus") == []
-        assert "ourcampus" not in sources_supporting_dim("finishing")
+        assert assumed_features("canvas") == []
+        assert "canvas" not in sources_supporting_dim("finishing")
 
     def test_h2s_declares_nothing(self):
         """H2S 自己上报装修档位，不能拿声明去覆盖抓来的数据。"""
@@ -112,11 +112,11 @@ class TestFilterBehaviour:
             f = ListingFilter(allowed_finishing=[tier])
             assert not f.passes(_listing("x", "xior")), tier
 
-    def test_ourcampus_still_fails_open(self):
+    def test_canvas_still_fails_open(self):
         """没声明的平台维持原样：条件对它整体跳过。"""
         for tier in ("Furnished", "Unfurnished"):
             f = ListingFilter(allowed_finishing=[tier])
-            assert f.passes(_listing("c", "ourcampus"))
+            assert f.passes(_listing("c", "canvas"))
 
 
 class TestScrapersEmitIt:
@@ -156,7 +156,7 @@ class TestScrapersEmitIt:
         )
         assert "Finishing: Furnished" in l.features
 
-    def test_ourcampus_reuses_the_parser_but_gets_nothing(self):
+    def test_canvas_reuses_the_parser_but_gets_nothing(self):
         """同一个解析函数按 source 取声明，不能写死成 OurDomain 那份。"""
         from scrapers.ourdomain import _to_listing
 
@@ -166,8 +166,8 @@ class TestScrapersEmitIt:
              "status": "Available to book", "avail_date": "2026-09-01",
              "fp_ids": []},
             base_url="https://x.test/fp.aspx",
-            city_display="OurCampus Amsterdam Diemen",
-            source="ourcampus",
+            city_display="Canvas Amsterdam Diemen",
+            source="canvas",
             id_prefix="oc_",
         )
         assert not any(f.startswith("Finishing: ") for f in l.features)

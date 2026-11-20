@@ -77,11 +77,11 @@ class TestEmptyNeedsConfirmation:
         assert _confirm_empty_result("ourdomain:south-east", 0) is False
 
     def test_sources_are_counted_separately(self):
-        """OurCampus 继承这套实现，两个 source 不能串。"""
+        """Canvas 继承这套实现，两个 source 不能串。"""
         need = _zero_rounds_to_confirm()
         for _ in range(need):
             _confirm_empty_result("ourdomain:diemen", 0)
-        assert _confirm_empty_result("ourcampus:diemen", 0) is False
+        assert _confirm_empty_result("canvas:diemen", 0) is False
 
 
 class TestThresholdConfig:

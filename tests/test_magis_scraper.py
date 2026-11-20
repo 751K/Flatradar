@@ -157,7 +157,7 @@ class TestAllInPrice:
         """报到手价，与 H2S / Xior 同一口径。
 
         卡片同时给出基础租金和服务费的确切金额，12 条实测全都有——不像
-        OurDomain / OurCampus 那样只能标注。只报基础租金会让同一个租金上限下，
+        OurDomain / Canvas 那样只能标注。只报基础租金会让同一个租金上限下，
         Magis 的房源显得比实际便宜两三百欧。
         """
         by_id = {l.id: l for l in _all_listings()}

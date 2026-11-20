@@ -200,9 +200,9 @@ class TestRotatingSession:
 #
 #     holland2stay   浏览器一建用 2 小时（_BROWSER_MAX_AGE）  → 一直在好线路上，没事
 #     xior           浏览器 15 分钟重建                        → 重建撞上冷却到期就中招
-#     ourcampus      curl，每轮现取                            → 每轮都可能中招
+#     canvas      curl，每轮现取                            → 每轮都可能中招
 #
-# 实测遥测：09:34 两家都 ok，09:39 ourcampus 挂，09:44 起两家全挂——而 H2S 全程正常。
+# 实测遥测：09:34 两家都 ok，09:39 canvas 挂，09:44 起两家全挂——而 H2S 全程正常。
 #
 # 判据为什么只认 402/407
 # ----------------------

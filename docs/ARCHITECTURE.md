@@ -94,7 +94,7 @@ flowchart TD
 
 平台标识、显示名、抓取器入口和基础能力统一登记在
 [mcore/sources.py](../mcore/sources.py) 的 `SourceSpec`；抓取器注册表和展示名称由其
-派生。目前，注册表包含 Codomo（原 Holland2Stay，2026-11 更名）、OurDomain、OurCampus、Xior、Magis、Student
+派生。目前，注册表包含 Codomo（原 Holland2Stay，2026-11 更名）、OurDomain、Canvas、Xior、Magis、Student
 Experience 和 Plaza。新增平台时，开发者仍需实现抓取器，并按需接入城市配置和过滤规则。
 
 [config.py](../config.py) 生成平台和城市或楼盘组成的 `ScrapeTask`；

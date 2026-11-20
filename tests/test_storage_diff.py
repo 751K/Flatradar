@@ -256,7 +256,7 @@ class TestMarkStaleListings:
 
 class TestBookingHoldStatus:
     @pytest.mark.parametrize(
-        "source", ["xior", "ourcampus", "ourdomain"]
+        "source", ["xior", "canvas", "ourdomain"]
     )
     def test_booking_success_marks_listing_reserved(self, temp_db, source):
         temp_db.diff([_l(f"{source}-a", status="Available to book", source=source)])

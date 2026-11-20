@@ -16,7 +16,7 @@ codomo           CodomoScraper        （无）              品牌迁移后旧�
 xior             XiorScraper          XiorBooker          半自动到「存草稿」，未开
 ourdomain        OurDomainScraper     OurDomainBooker     半自动到「存草稿」，未开
 plaza            PlazaScraper         PlazaBooker         已开，用户侧默认关
-ourcampus        OurCampusScraper     OurCampusBooker     已注册，**未开**，止于开始申请
+canvas        CanvasScraper     CanvasBooker     已注册，**未开**，止于开始申请
 magis            MagisScraper         （无）              没探过预订流程
 studentexperience StudentExperience…  （无）              没探过预订流程
 ===============  ===================  ==================  =========================
@@ -34,12 +34,12 @@ studentexperience StudentExperience…  （无）              没探过预订�
 要在面板里显式打开。多这一道是因为 Plaza 的应征一次 POST 就落地，中间没有付款或
 存草稿那样的人工关卡。见 ``docs/PLAZA.md`` §6。
 
-**OurCampus 未开的理由又不同。** 它 2026-09-17 起已注册、面板上也有入口（填得了
+**Canvas 未开的理由又不同。** 它 2026-09-17 起已注册、面板上也有入口（填得了
 凭据），但不在 ``_AUTO_BOOK_SOURCES`` 里，所以用户侧这条路是关的。原先不注册是因为
 「开始申请能占住单元」没实测——那个问题已经有答案：**站点自己写明提交只进抽签池、
 不锁房**，OC 2026-09 起全站抽签。现在挡着它的是另一件事：**登录之后落到 Applicant
 Info 这一段还没走通**（实测登录成功，但兜底的「重选单元」会让服务端回
-``Unit is not available``）。查法见 ``tools/ourcampus_booker_probe.py --diagnose``。
+``Unit is not available``）。查法见 ``tools/canvas_booker_probe.py --diagnose``。
 
 **改这张表时同步改代码**：它上一次和现实脱节是因为 ``OurDomainBooker`` 加进
 ``BOOKER_REGISTRY`` 时没人回来改这段，于是文档写着「（无）」而代码里明明有
@@ -61,14 +61,14 @@ from typing import Optional
 
 from .base import AbstractBooker, BookingRequest, BookingResult
 from .plaza import PlazaBooker
-from .rentcafe import XiorBooker, OurCampusBooker, OurDomainBooker
+from .rentcafe import XiorBooker, CanvasBooker, OurDomainBooker
 
 
 BOOKER_REGISTRY: dict[str, type[AbstractBooker]] = {
     cls.source: cls for cls in [
         XiorBooker,
         OurDomainBooker,
-        OurCampusBooker,
+        CanvasBooker,
         PlazaBooker,
     ]
 }
@@ -90,7 +90,7 @@ def dispatch_book(request: BookingRequest) -> BookingResult:
     按 ``request.listing.source`` 路由到对应 Booker。
 
     未注册的 source 返回 ``phase="unsupported"``——这是**正常**结果，不是错误。
-    例如 OurCampus 用户收到新房源通知后应自己点链接去申请；把这条路径走出来
+    例如 Canvas 用户收到新房源通知后应自己点链接去申请；把这条路径走出来
     比抛异常更友好（上层不需要 try/except）。
     """
     source = (request.listing.source or "").strip().lower()

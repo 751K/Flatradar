@@ -58,9 +58,9 @@ from config import assumed_features, get_proxy_url
 from models import Listing
 
 from ._browser_backed import BrowserBackedScraper
-# floorplans.aspx 在 *.securerc.co.uk 上，和 OurDomain / OurCampus 同一套
+# floorplans.aspx 在 *.securerc.co.uk 上，和 OurDomain / Canvas 同一套
 # RentCafe + Cloudflare。取数打法（浏览器 header、同 session 403 重试、TLS 指纹
-# 冷却状态机）都在那边，直接复用——ourcampus 也是这么接的。
+# 冷却状态机）都在那边，直接复用——canvas 也是这么接的。
 from .ourdomain import _get_text, _headers_for
 from .rentcafe_fingerprint import (
     _impersonate_attempts,
@@ -657,7 +657,7 @@ def _fetch_bookable_floorplan_ids(url: str) -> Optional[set[int]]:
 
     为什么走 OurDomain 那套而不是单发一次
     -----------------------------------
-    这个页面在 ``*.securerc.co.uk`` 上，和 OurDomain / OurCampus 打的是同一套
+    这个页面在 ``*.securerc.co.uk`` 上，和 OurDomain / Canvas 打的是同一套
     RentCafe + Cloudflare。原实现是「浏览器的 sticky 出口 IP + 默认指纹 + 单发、
     不带 header」，2026-08-25 复盘：**生产日志里 10 次尝试 10 次失败**（5 次
     403、5 次 challenge 页），0 次成功——这道「权威闸门」自上线起就一直敞着，
@@ -675,7 +675,7 @@ def _fetch_bookable_floorplan_ids(url: str) -> Optional[set[int]]:
     差别在三件事，缺一不可：**浏览器风格 header**、**同 session 内 403 重试**
     （CF 首次 403 会顺手下发 cf_clearance，第二次同 URL 往往就软通过）、
     **每次尝试换出口 IP + 换 TLS 指纹**。这正是 ``ourdomain._get_text`` 和
-    它的指纹状态机，直接复用而不是抄一遍——``ourcampus`` 也是这么做的。
+    它的指纹状态机，直接复用而不是抄一遍——``canvas`` 也是这么做的。
 
     指纹的冷却状态是模块级、跨 source 共享的：三个 source 打的是同一个
     SecureRC 集群，某个指纹被烧对谁都一样，所以这里也如实记账。

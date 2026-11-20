@@ -49,7 +49,7 @@ docker compose up -d</pre>
   <tbody>
   <tr><td><strong>Codomo</strong> (formerly Holland2Stay)</td><td>Configurable Dutch cities</td><td>Unit: room number, rent, area</td><td>Notifications only</td></tr>
   <tr><td><strong>OurDomain</strong></td><td>Amsterdam (Diemen, South-East)</td><td>Unit: number, area, floor, view</td><td>Notifications only</td></tr>
-  <tr><td><strong>OurCampus</strong></td><td>Amsterdam Diemen (one building)</td><td>Unit, as OurDomain</td><td>Notifications only</td></tr>
+  <tr><td><strong>Canvas</strong></td><td>Amsterdam Diemen (one building)</td><td>Unit, as OurDomain</td><td>Notifications only</td></tr>
   <tr><td><strong>Xior</strong></td><td>30 buildings in 14 cities</td><td>Unit: number, area, rent, deposit</td><td>Notifications only</td></tr>
   <tr><td><strong>Magis</strong></td><td>17 buildings in 5 cities, 9 in Eindhoven</td><td>Unit: rent, area, floor, energy label</td><td>Notifications only</td></tr>
   <tr><td><strong>Student Experience</strong></td><td>Amsterdam and Leiden</td><td>Room type: starting rent, area range</td><td>Notifications only</td></tr>
@@ -114,12 +114,12 @@ docker compose up -d</pre>
   <tbody>
   <tr><td>Max rent</td><td>€1200</td><td>All (see “What rent means” below)</td></tr>
   <tr><td>Min area</td><td>25 m²</td><td>All</td></tr>
-  <tr><td>Min floor</td><td>1</td><td>Codomo, OurDomain, OurCampus, Magis, Plaza</td></tr>
+  <tr><td>Min floor</td><td>1</td><td>Codomo, OurDomain, Canvas, Magis, Plaza</td></tr>
   <tr><td>Cities</td><td>Eindhoven, Amsterdam</td><td>All</td></tr>
   <tr><td>Platforms</td><td>Codomo, Xior</td><td>All</td></tr>
   <tr><td>Tenant</td><td>Students only</td><td>All except Magis and Codomo</td></tr>
   <tr><td>Type</td><td>Studio</td><td>All except Xior</td></tr>
-  <tr><td>Occupancy</td><td>Single</td><td>Codomo, OurDomain, OurCampus</td></tr>
+  <tr><td>Occupancy</td><td>Single</td><td>Codomo, OurDomain, Canvas</td></tr>
   <tr><td>Furnishing</td><td>Furnished</td><td>Codomo, OurDomain, Xior, Magis</td></tr>
   <tr><td>Min energy label</td><td>B</td><td>Magis only</td></tr>
   <tr><td>Neighbourhood, building</td><td>Centrum</td><td>Follow the cities you picked</td></tr>
@@ -127,7 +127,7 @@ docker compose up -d</pre>
   </tbody>
 </table>
 </div>
-<p>When a platform does not publish a field, that filter is skipped for the platform instead of hiding all its listings. “Min energy label: B” therefore does not mean everything you receive is rated B: Xior, OurDomain and OurCampus never went through that check. Each filter in your settings carries the same scope label.</p>
+<p>When a platform does not publish a field, that filter is skipped for the platform instead of hiding all its listings. “Min energy label: B” therefore does not mean everything you receive is rated B: Xior, OurDomain and Canvas never went through that check. Each filter in your settings carries the same scope label.</p>
 
 <h3>What rent means per platform</h3>
 <div class="guide-table">
@@ -137,13 +137,14 @@ docker compose up -d</pre>
   <tr><td>Codomo</td><td>All-in: service costs and utility prepayment included</td></tr>
   <tr><td>Xior</td><td>All-in: base rent plus that building's monthly advance charges</td></tr>
   <tr><td>Magis</td><td>All-in: base rent plus the service costs on each listing</td></tr>
-  <tr><td>OurDomain, OurCampus</td><td>Base rent; service costs are charged separately</td></tr>
+  <tr><td>Canvas</td><td>All-in: base rent plus each unit's service, utility and administration charges</td></tr>
+  <tr><td>OurDomain</td><td>Base rent; service costs are charged separately</td></tr>
   <tr><td>Plaza</td><td>Total rent from the platform; net rent shown separately when available</td></tr>
   <tr><td>Student Experience</td><td>Starting price for the room type</td></tr>
   </tbody>
 </table>
 </div>
-<p>OurDomain and OurCampus do not say which unit has which service costs, so an all-in price cannot be worked out. Their listings show the building's service-cost range under the price, and notifications carry the same note. Leave some headroom in Max rent for those two, or filter them separately by platform.</p>
+<p>OurDomain does not say which unit has which service costs, so an all-in price cannot be worked out. Its listings show the building's service-cost range under the price, and notifications carry the same note. Leave some headroom in Max rent for OurDomain, or filter it separately by platform.</p>
 
 <h2 id="autobook">Auto-booking and applications</h2>
 <p>Only Plaza supports automatic applications. Codomo (formerly Holland2Stay) is notifications only: its new site requires a sign-in to book and auto-booking has not been built for it.</p>

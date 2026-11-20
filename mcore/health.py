@@ -56,7 +56,7 @@ STALE_FULL_SCAN_SECONDS = _env_int("HEALTH_STALE_FULL_SCAN_SECONDS", 5400)
 # 而现在「全站 0 条」本来就是常态——
 #
 #   各平台 feed 只列可订/登记中的房源，平台上没有可订房源时正确地返回 0
-#   OurCampus 官网自述排队 16–18 个月，三个月抓到 1 条
+#   Canvas 官网自述排队 16–18 个月，三个月抓到 1 条
 #   Xior 常态零可订
 #
 # 于是高峰期六分钟就报一次「全局连续零房源」。2026-08-25 当天报了两次，
@@ -199,7 +199,7 @@ def _judge(h: SourceHealth) -> None:
             + (f" ({h.last_error})" if h.last_error else "")
         )
 
-    # 「抓到 0 条」单独看没有意义——Xior 常态零可订，OurCampus 官网自述排队
+    # 「抓到 0 条」单独看没有意义——Xior 常态零可订，Canvas 官网自述排队
     # 16–18 个月，把它们钉在告警上只会让真信号被噪音淹掉。
     #
     # 加上「该 source 自己在窗口内出现过非零」这个前提，规则就变成了

@@ -4,7 +4,7 @@
 应对方式。实现以 [`scrapers/xior.py`](../scrapers/xior.py) 为准，本文描述的是该实现
 依赖的外部事实；平台行为可能变化，历史实测不代表当前线上状态。
 
-自动预订部分见 [RENTCAFE.md](RENTCAFE.md)：Xior、OurDomain、OurCampus 共用同一套
+自动预订部分见 [RENTCAFE.md](RENTCAFE.md)：Xior、OurDomain、Canvas 共用同一套
 RENTCafe 流程，本文只记录 Xior 特有的入口差异。
 
 ## 1. 平台概况

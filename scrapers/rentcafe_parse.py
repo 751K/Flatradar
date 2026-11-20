@@ -1,6 +1,6 @@
 """RENTCafe 页面解析：floorplan 列表、单元表格、单元状态。
 
-OurDomain / OurCampus 的抓取器和 RentCafe 预订器（bookers/rentcafe.py）都靠它读
+OurDomain / Canvas 的抓取器和 RentCafe 预订器（bookers/rentcafe.py）都靠它读
 同一种页面。「这个单元能不能订」的判据必须两边一致，所以只能有一份实现。
 
 从 scrapers/ourdomain.py 拆出；那边保留旧的名字作别名。纯函数，不触网、无状态。
@@ -181,7 +181,7 @@ _KNOWN_AVAIL_CLASSES = ("success", "warning", "muted", "danger")
 
 
 #: 下单按钮上的文字。**同一个按钮、同一个 ApplyNowClick，文字决定点下去是什么**：
-#: ``Book Now`` 是先到先得，``Join Lottery`` 是进抽签池。OurCampus 两种并存
+#: ``Book Now`` 是先到先得，``Join Lottery`` 是进抽签池。Canvas 两种并存
 #: （2026-09-15 首次见到后者，见 ``_extract_status``）。
 _CONTROL_LABEL_RE = re.compile(
     r"<input\b(?=[^>]*(?:UnitSelect|ApplyNowClick))[^>]*?\bvalue\s*=\s*[\"']([^\"']*)[\"']",
@@ -190,6 +190,13 @@ _CONTROL_LABEL_RE = re.compile(
 
 
 _LOTTERY_LABEL_WORDS = ("lottery", "loting", "loterij")
+
+#: ``Contact`` 按钮（``data-function='contactUsLink'``）。2026-11-20 Canvas
+#: （原 Canvas）Diemen 的 31 套全是它，租金列一律 ``Call for Details``；下一步
+#: 的租约页原话是 “submitting this application enters you into the lottery for
+#: this unit; it does not reserve the apartment”。点它拿不到房，只能进抽签，
+#: 所以与 ``Join Lottery`` 同档。见 docs/CANVAS.md。
+_CONTACT_LABELS = ("contact", "contact us")
 
 
 #: 见过并且确认是「直接订」的按钮文字。其余文字放行并告警。
@@ -216,7 +223,7 @@ def _extract_status(avail_html: str, row_html: str = "") -> str:
     为什么改（2026-08-27）
     ---------------------
     原实现只看状态格里第一个 span 的 class：``success`` → 可订，``warning`` →
-    抽签，**其余一律 Occupied**。而 OurCampus 当天列出的单元是这样的：
+    抽签，**其余一律 Occupied**。而 Canvas 当天列出的单元是这样的：
 
         <span class='muted'>31-8-2026</span>
         <input class='UnitSelect btn btn-primary' value='Book Now'
@@ -239,7 +246,7 @@ def _extract_status(avail_html: str, row_html: str = "") -> str:
 
     按钮文字（2026-09-15）
     ---------------------
-    上面那次修正把「有按钮」当成了「能直接订」。OurCampus 当天挂出的行::
+    上面那次修正把「有按钮」当成了「能直接订」。Canvas 当天挂出的行::
 
         <span class='muted'>30-9-2026</span>
         <input class='UnitSelect btn btn-primary' value ='Join Lottery'
@@ -274,14 +281,14 @@ def _extract_status(avail_html: str, row_html: str = "") -> str:
     label = _control_label(row_html) if bookable else ""
 
     # 按钮文字写着抽签，就是抽签——不管状态格是什么样式。
-    if any(w in label for w in _LOTTERY_LABEL_WORDS):
+    if any(w in label for w in _LOTTERY_LABEL_WORDS) or label in _CONTACT_LABELS:
         return "Available in lottery"
 
     if bookable and label and label not in _KNOWN_BOOK_LABELS:
         # 放行并告警：Join Lottery 当初就是一个「没见过的文字」被默默当成了
         # Book Now。放行是因为漏报比误报贵；告警是为了下一个新文字别再默默过去。
         logger.warning(
-            "OurDomain/OurCampus 下单按钮出现没见过的文字 %r——按可订放行。"
+            "OurDomain/Canvas 下单按钮出现没见过的文字 %r——按可订放行。"
             "若它其实是抽签 / 等位 / 订不到，会误报一条可订房源", label[:40],
         )
 
@@ -292,7 +299,7 @@ def _extract_status(avail_html: str, row_html: str = "") -> str:
             # 放行并告警，与 scrapers/xior.py 对未知按钮文字的处理一致：
             # 漏报真房源比误报贵，但不能再让「没见过」悄悄变成 Occupied。
             logger.warning(
-                "OurDomain/OurCampus 状态格出现没见过的样式 %r（文本 %r），"
+                "OurDomain/Canvas 状态格出现没见过的样式 %r（文本 %r），"
                 "但行内有可下单按钮——按可订放行。若它其实代表订不到，"
                 "会误报一条房源", classes[:60], text[:40],
             )

@@ -1,4 +1,4 @@
-"""bookers/rentcafe.py — RENTCafe automated booking for Xior / OurDomain / OurCampus.
+"""bookers/rentcafe.py — RENTCafe automated booking for Xior / OurDomain / Canvas.
 
 Targets the securerc.co.uk multi-step form flow (oleapplication.aspx →
 register/guestlogin → rcformsave.ashx → terms → lease creation).
@@ -231,9 +231,9 @@ class RentCafeSession:
     def fetch_post(self, url: str, data, *, referer: str = "", ajax: bool = False) -> str:
         """POST 取一个片段，返回 HTML。头部与 :meth:`fetch` 同一套。
 
-        OurCampus 的 availableunits 只认 POST + ``floorPlans[]`` 表单体（照抄它
+        Canvas 的 availableunits 只认 POST + ``floorPlans[]`` 表单体（照抄它
         自己前端的 ``$.load(url, {floorPlans: names})``，见
-        ``scrapers.ourcampus._fetch_units_html``）。``ajax=True`` 的理由同
+        ``scrapers.canvas._fetch_units_html``）。``ajax=True`` 的理由同
         :meth:`fetch`：``rcLoadContent.ashx`` 缺 ``X-Requested-With`` 一律 403。
         """
         resp = self._post(
@@ -1066,7 +1066,7 @@ _TERMS_NOTICE_RE = re.compile(
 
 #: RENTCafe 的服务端消息。它不用 HTTP 状态码说话，也不渲染成页面文字，而是回一段
 #: ``$.showMessage({type:"error",text:"…"})`` 的 JS 让前端弹出来。
-#: 2026-09-17 OurCampus 实测：登录后重选单元被拒，整个响应只有 1237 字节，正文里
+#: 2026-09-17 Canvas 实测：登录后重选单元被拒，整个响应只有 1237 字节，正文里
 #: 没有任何可读文字，全部信息都在这段 JS 里——不解析它就只剩「不知道为什么失败」。
 _SERVER_MESSAGE_RE = re.compile(
     r"""showMessage\(\{[^}]*?\btext\s*:\s*(['"])(?P<text>.*?)\1""",
@@ -1462,11 +1462,11 @@ class OurDomainBooker(RentCafeBooker):
         )
         html = session.current_page_html()
         if parse_applicant_form(html) is None:
-            # ⚠️ 重选单元有副作用：2026-09-17 OurCampus 实测，登录后重选同一个单元，
+            # ⚠️ 重选单元有副作用：2026-09-17 Canvas 实测，登录后重选同一个单元，
             # 服务端回「Unit is not available. Please select another unit.」，而同一
             # 时刻抓取侧仍然列着这套房——**是这个动作本身把上下文弄坏了**，不是单元
             # 没了。留着它是因为「登录后落哪儿」这一段还没查清楚（下一批房源出来时
-            # 用 tools/ourcampus_booker_probe.py --diagnose 查）；查清之前，至少要把
+            # 用 tools/canvas_booker_probe.py --diagnose 查）；查清之前，至少要把
             # 服务端的原话带出来，别让它表现成「不知道为什么失败」。
             logger.info("%s 登录后不在 Applicant Info，重选一次单元（这一步可能反而"
                         "破坏上下文，见代码注释）", self.platform)
@@ -1503,10 +1503,10 @@ class OurDomainBooker(RentCafeBooker):
             return listing.url
 
 
-class OurCampusBooker(OurDomainBooker):
-    """OurCampus：流程与 OurDomain 相同，**只做到「开始申请」**。
+class CanvasBooker(OurDomainBooker):
+    """Canvas：流程与 OurDomain 相同，**只做到「开始申请」**。
 
-    **已注册，但用户侧关着**：``ourcampus`` 不在 ``monitor._AUTO_BOOK_SOURCES``
+    **已注册，但用户侧关着**：``canvas`` 不在 ``monitor._AUTO_BOOK_SOURCES``
     里，所以面板上填得了凭据、不会自动跑。见下面「还差什么」。
 
     为什么只做到开始申请
@@ -1528,13 +1528,13 @@ class OurCampusBooker(OurDomainBooker):
     没通：**登录之后落到 Applicant Info**。登录成功后当前页上解析不出申请表，于是
     走兜底「重选单元」，服务端回 ``Unit is not available. Please select another
     unit.``——而同一时刻抓取侧仍列着这套房，**是这个兜底动作本身把上下文弄坏的**。
-    下一批房出来时用 ``tools/ourcampus_booker_probe.py --diagnose`` 把登录后的页面
+    下一批房出来时用 ``tools/canvas_booker_probe.py --diagnose`` 把登录后的页面
     摊开（疑似是 RENTCAFE.md §4 说的外壳页，内容要按 ProspectId 走 rcLoadContent 拉）。
 
     与 OurDomain 的差别（均有实证）
     -------------------------------
     - 单元表只认 **POST + ``floorPlans[]``**，与抓取侧
-      ``OurCampusScraper._fetch_units_html`` 同一个形状——那是生产上一直在用的。
+      ``CanvasScraper._fetch_units_html`` 同一个形状——那是生产上一直在用的。
     - 条款页 reCAPTCHA 与 Xior / OurDomain 逐字相同（2026-09-15 抓 OC 的
       ``termsandotheritems.aspx`` 核对：标准 v3、``start_application``、同一对
       sitekey、同一个回退字段）。
@@ -1542,25 +1542,25 @@ class OurCampusBooker(OurDomainBooker):
       ``Join Lottery`` 由 :meth:`_check_still_direct_booking` 拦下。
     """
 
-    source = "ourcampus"
-    platform = "OurCampus"
+    source = "canvas"
+    platform = "Canvas"
     id_prefix = "oc_"
     stop_at_applicant_info = True
 
     @staticmethod
     def _scraper_cls():
-        from scrapers.ourcampus import OurCampusScraper
-        return OurCampusScraper
+        from scrapers.canvas import CanvasScraper
+        return CanvasScraper
 
     def _account_for(self, ab, building_key: str) -> tuple[str, str]:
-        return (ab.ourcampus_email or "", ab.ourcampus_password or "")
+        return (ab.canvas_email or "", ab.canvas_password or "")
 
     def _fetch_units_html(
         self, session, *, fp_id: str, move_in: str, property_id: str, floorplans_url: str,
     ) -> str:
         """POST + ``floorPlans[]``，``MoveInDate`` / ``myolePropertyID`` 不传。
 
-        照抄 ``OurCampusScraper._fetch_units_html``。OurDomain 那条 GET 形状在
+        照抄 ``CanvasScraper._fetch_units_html``。OurDomain 那条 GET 形状在
         OC 上**从来没验证过**，而这条 POST 是抓取侧每天几百轮在用的。
         """
         return session.fetch_post(

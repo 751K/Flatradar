@@ -1,13 +1,13 @@
-"""ourcampus_booker_probe.py — 用真实单元验一次 OurCampusBooker
+"""canvas_booker_probe.py — 用真实单元验一次 CanvasBooker
 ================================================================
 **在你自己的终端里跑。密码用 getpass 读，不落盘、不进 shell 历史、不回显。**
 
-    python tools/ourcampus_booker_probe.py --listing oc_456556            # 默认：只预检
-    python tools/ourcampus_booker_probe.py --listing oc_456556 --start    # 真的开始申请
+    python tools/canvas_booker_probe.py --listing oc_456556            # 默认：只预检
+    python tools/canvas_booker_probe.py --listing oc_456556 --start    # 真的开始申请
 
 ``tools/`` 不在镜像里。要用服务器的代理池和 ``CAPTCHA_API_KEY``，就临时拷进容器::
 
-    docker compose cp tools/ourcampus_booker_probe.py h2s:/tmp/probe.py
+    docker compose cp tools/canvas_booker_probe.py h2s:/tmp/probe.py
     docker compose exec -it -e PYTHONPATH=/app h2s python /tmp/probe.py --listing oc_XXXX
 
 房源 id 只在 OC 放房时存在，没有默认值。
@@ -31,7 +31,7 @@ Applicant Info 停下。服务端会在你的账号下建出一份申请（Prosp
 
 跑完之后要做的两件事（这才是 --start 的目的）
 --------------------------------------------
-1. 记下时间，对照 ``data/ourcampus_capture.txt`` 看这个单元什么时候从匿名列表
+1. 记下时间，对照 ``data/canvas_capture.txt`` 看这个单元什么时候从匿名列表
    消失、会不会再出现——回答「开始申请能不能占住单元」。
 2. 换一台设备登录 OC，看这份申请在不在、能不能续填。
 """
@@ -55,13 +55,13 @@ def _preflight(listing) -> int:
     import functools
 
     from bookers.rentcafe import (
-        OurCampusBooker, RentCafeNotBookableError, RentCafeSession, _extract_form_fields,
+        CanvasBooker, RentCafeNotBookableError, RentCafeSession, _extract_form_fields,
         terms_page_notices,
     )
     from bookers.rentcafe_units import find_unit, parse_apply_now_options
     from captcha.rentcafe_pages import RENTCAFE_PAGES
 
-    booker = OurCampusBooker()
+    booker = CanvasBooker()
     building = booker._building(listing)
     session = RentCafeSession("", source=booker.source)
 
@@ -126,7 +126,7 @@ def _preflight(listing) -> int:
 
 def _start(listing, *, even_if_lottery: bool = False) -> int:
     from bookers.base import BookingRequest
-    from bookers.rentcafe import OurCampusBooker
+    from bookers.rentcafe import CanvasBooker
     from config import AutoBookConfig
     from users import UserConfig
 
@@ -178,12 +178,12 @@ def _start(listing, *, even_if_lottery: bool = False) -> int:
             print("   " + html.strip().replace("\n", "\n   ")[:2500])
             print("   ── 原文结束 ──")
 
-    booker_cls = OurCampusBooker
+    booker_cls = CanvasBooker
     if even_if_lottery:
         # OC 2026-09 起全站抽签，booker 在登录**之前**就会停下——那样验证不到登录。
         # 只在探针里摘掉这道闸：booker 本身不动，被绕过的判据只影响这一次运行。
         # 仍然只走到 Applicant Info，不提交；按站点的说法「提交申请」才算进抽签池。
-        class booker_cls(OurCampusBooker):  # noqa: N801
+        class booker_cls(CanvasBooker):  # noqa: N801
             def _check_still_direct_booking(self, html, unit):
                 return None
 
@@ -195,7 +195,7 @@ def _start(listing, *, even_if_lottery: bool = False) -> int:
         print("没有 CAPTCHA_API_KEY，条款页那一步必然失败。到服务器容器里跑。")
         return 1
 
-    print("OurCampus 账号")
+    print("Canvas 账号")
     email = input("  邮箱: ").strip()
     password = getpass.getpass("  密码（不回显）: ")
     if not (email and password):
@@ -211,7 +211,7 @@ def _start(listing, *, even_if_lottery: bool = False) -> int:
 
     user = UserConfig(name="probe")
     user.auto_book = AutoBookConfig(
-        enabled=True, dry_run=False, ourcampus_email=email, ourcampus_password=password)
+        enabled=True, dry_run=False, canvas_email=email, canvas_password=password)
 
     # 抓住 session：失败时要看落地页，而 book() 只返回一句话。
     holder: dict = {}
@@ -248,7 +248,7 @@ def _start(listing, *, even_if_lottery: bool = False) -> int:
     if result.phase == "application_started":
         print(
             "\n接下来两件事：\n"
-            f"  1. 对照 data/ourcampus_capture.txt，看 {listing.id} 在 "
+            f"  1. 对照 data/canvas_capture.txt，看 {listing.id} 在 "
             f"{ended.strftime('%H:%M:%S')} UTC 之后是否从列表里消失、会不会再出现\n"
             "  2. 换一台设备登录 OC，看这份申请在不在、能不能续填"
         )
@@ -280,7 +280,7 @@ def _diagnose(listing) -> int:
     _MSG_RE = _re.compile(r'showMessage\(\{[^}]*text:\s*"([^"]+)"')
 
     from bookers.rentcafe import (
-        OurCampusBooker, RentCafeSession, _extract_form_fields,
+        CanvasBooker, RentCafeSession, _extract_form_fields,
     )
     from bookers.rentcafe_form import parse_applicant_form
     from bookers.rentcafe_units import find_unit, parse_apply_now_options
@@ -290,7 +290,7 @@ def _diagnose(listing) -> int:
         print("没有 CAPTCHA_API_KEY。到服务器容器里跑。")
         return 1
 
-    print("OurCampus 账号")
+    print("Canvas 账号")
     email = input("  邮箱: ").strip()
     password = getpass.getpass("  密码（不回显）: ")
     if not (email and password):
@@ -320,9 +320,9 @@ def _diagnose(listing) -> int:
         if msgs:
             print("   服务端消息=" + str(msgs))
 
-    booker = OurCampusBooker()
+    booker = CanvasBooker()
     building = booker._building(listing)
-    session = RentCafeSession(os.environ["CAPTCHA_API_KEY"], source="ourcampus")
+    session = RentCafeSession(os.environ["CAPTCHA_API_KEY"], source="canvas")
     session.open(booker._floorplans_url(building))
 
     parser = functools.partial(parse_apply_now_options, id_prefix=booker.id_prefix)
@@ -383,7 +383,7 @@ def _diagnose(listing) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="OurCampusBooker 真实单元验证")
+    ap = argparse.ArgumentParser(description="CanvasBooker 真实单元验证")
     ap.add_argument("--listing", required=True, help="房源 id（带 oc_ 前缀）")
     ap.add_argument("--start", action="store_true",
                     help="真的开始申请（解验证码 + 登录）。不加则只预检，不需要账号")
@@ -404,14 +404,14 @@ def main() -> int:
         return 1
 
     from models import Listing
-    from scrapers.ourcampus import OurCampusScraper
+    from scrapers.canvas import CanvasScraper
 
-    meta = OurCampusScraper.BUILDINGS["diemen"]
+    meta = CanvasScraper.BUILDINGS["diemen"]
     listing = Listing(
         id=args.listing, name=f"probe {args.listing}", status="Available to book",
         price_raw="", available_from=None, features=[],
-        url=f"{OurCampusScraper.BASE}/{meta['slug']}/floorplans.aspx",
-        city=meta["display"], source="ourcampus")
+        url=f"{CanvasScraper.BASE}/{meta['slug']}/floorplans.aspx",
+        city=meta["display"], source="canvas")
 
     if args.diagnose:
         return _diagnose(listing)

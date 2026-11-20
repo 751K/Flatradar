@@ -161,10 +161,10 @@ def test_applies_to_every_platform(temp_db):
     """今天只有 H2S 会产生空值（其余三个线上 0 条），但「未知不该覆盖已知」
     和平台无关。写成 H2S 专属是在赌上游行为不变。"""
     st = temp_db
-    for src in ("codomo", "xior", "ourdomain", "ourcampus"):
+    for src in ("codomo", "xior", "ourdomain", "canvas"):
         st.diff([_l(lid=f"x-{src}", avail="2026-09-01", source=src)])
         st.diff([_l(lid=f"x-{src}", status="Reserved", avail=None, source=src)])
 
     rows = {r["id"]: r for r in st.get_all_listings()}
-    for src in ("codomo", "xior", "ourdomain", "ourcampus"):
+    for src in ("codomo", "xior", "ourdomain", "canvas"):
         assert rows[f"x-{src}"]["available_from"] == "2026-09-01", src

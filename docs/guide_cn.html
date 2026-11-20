@@ -48,7 +48,7 @@ docker compose up -d</pre>
   <tbody>
   <tr><td><strong>Codomo</strong>（原 Holland2Stay）</td><td>可选的荷兰城市</td><td>单套：房号、租金、面积</td><td>仅通知</td></tr>
   <tr><td><strong>OurDomain</strong></td><td>阿姆斯特丹（Diemen、South-East）</td><td>单套：房号、面积、楼层、朝向</td><td>仅通知</td></tr>
-  <tr><td><strong>OurCampus</strong></td><td>阿姆斯特丹 Diemen（一栋楼）</td><td>单套，同 OurDomain</td><td>仅通知</td></tr>
+  <tr><td><strong>Canvas</strong></td><td>阿姆斯特丹 Diemen（一栋楼）</td><td>单套，同 OurDomain</td><td>仅通知</td></tr>
   <tr><td><strong>Xior</strong></td><td>14 个城市的 30 栋楼</td><td>单套：房号、面积、租金、押金</td><td>仅通知</td></tr>
   <tr><td><strong>Magis</strong></td><td>5 个城市的 17 栋楼，其中 9 栋在埃因霍温</td><td>单套：租金、面积、楼层、能耗标签</td><td>仅通知</td></tr>
   <tr><td><strong>Student Experience</strong></td><td>阿姆斯特丹和莱顿</td><td>房型：起始租金、面积范围</td><td>仅通知</td></tr>
@@ -113,12 +113,12 @@ docker compose up -d</pre>
   <tbody>
   <tr><td>最高租金</td><td>€1200</td><td>全部（见下方「各平台的租金口径」）</td></tr>
   <tr><td>最小面积</td><td>25 m²</td><td>全部</td></tr>
-  <tr><td>最低楼层</td><td>1</td><td>Codomo、OurDomain、OurCampus、Magis、Plaza</td></tr>
+  <tr><td>最低楼层</td><td>1</td><td>Codomo、OurDomain、Canvas、Magis、Plaza</td></tr>
   <tr><td>城市</td><td>Eindhoven、Amsterdam</td><td>全部</td></tr>
   <tr><td>平台</td><td>Codomo、Xior</td><td>全部</td></tr>
   <tr><td>租客资格</td><td>仅限学生</td><td>除 Magis、Codomo 外</td></tr>
   <tr><td>房型</td><td>Studio</td><td>除 Xior 外</td></tr>
-  <tr><td>入住人数</td><td>单人</td><td>Codomo、OurDomain、OurCampus</td></tr>
+  <tr><td>入住人数</td><td>单人</td><td>Codomo、OurDomain、Canvas</td></tr>
   <tr><td>装修</td><td>带家具</td><td>Codomo、OurDomain、Xior、Magis</td></tr>
   <tr><td>最低能耗标签</td><td>B</td><td>仅 Magis</td></tr>
   <tr><td>片区、楼盘</td><td>Centrum</td><td>跟随所选城市</td></tr>
@@ -126,7 +126,7 @@ docker compose up -d</pre>
   </tbody>
 </table>
 </div>
-<p>平台不提供某个字段时，这条条件对该平台整体跳过，而不是把它的房源全部过滤掉。所以「最低能耗标签：B」并不代表你收到的都是 B 级：Xior、OurDomain 和 OurCampus 的房源根本没经过这一关。账号设置里每条条件旁都标着同样的适用范围。</p>
+<p>平台不提供某个字段时，这条条件对该平台整体跳过，而不是把它的房源全部过滤掉。所以「最低能耗标签：B」并不代表你收到的都是 B 级：Xior、OurDomain 和 Canvas 的房源根本没经过这一关。账号设置里每条条件旁都标着同样的适用范围。</p>
 
 <h3>各平台的租金口径</h3>
 <div class="guide-table">
@@ -136,13 +136,14 @@ docker compose up -d</pre>
   <tr><td>Codomo</td><td>全包：含服务费和水电预付</td></tr>
   <tr><td>Xior</td><td>全包：基础租金加该楼每月预付费用</td></tr>
   <tr><td>Magis</td><td>全包：基础租金加每条房源标出的服务费</td></tr>
-  <tr><td>OurDomain、OurCampus</td><td>基础租金，服务费另计</td></tr>
+  <tr><td>Canvas</td><td>全包：基础租金加该单元的服务费、水电暖和管理费</td></tr>
+  <tr><td>OurDomain</td><td>基础租金，服务费另计</td></tr>
   <tr><td>Plaza</td><td>平台给出的总租金；有净租金时另行显示</td></tr>
   <tr><td>Student Experience</td><td>房型的起始价格</td></tr>
   </tbody>
 </table>
 </div>
-<p>OurDomain 和 OurCampus 不说明哪一套对应哪档服务费，算不出全包价。它们的房源会在价格下方注明该楼的服务费区间，通知里也带同样的说明。给这两个平台设最高租金时请留出余量，或者用平台条件把它们分开。</p>
+<p>OurDomain 不说明哪一套对应哪档服务费，算不出全包价。它的房源会在价格下方注明该楼的服务费区间，通知里也带同样的说明。给 OurDomain 设最高租金时请留出余量，或者用平台条件把它分开。</p>
 
 <h2 id="autobook">自动预订与申请</h2>
 <p>目前只有 Plaza 支持自动申请。Codomo（原 Holland2Stay）仅提供通知：新站预订需要登录，尚未做自动预订。</p>

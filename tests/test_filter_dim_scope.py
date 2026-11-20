@@ -52,7 +52,7 @@ class TestSupportMatrix:
         就又回到「勾了就收不到」的那个坑里。
         """
         assert sources_supporting_dim("tenant") == [
-            "ourdomain", "ourcampus", "xior", "studentexperience", "plaza",
+            "ourdomain", "canvas", "xior", "studentexperience", "plaza",
         ]
 
     def test_tenant_badge_says_codomo_and_magis_are_excluded(self):
@@ -70,7 +70,7 @@ class TestSupportMatrix:
         # 说明句列的是「哪些平台生效」，被排除的那个由徽标点名
         assert "Magis" not in dim_scope_note("tenant")
         assert "Codomo" not in dim_scope_note("tenant")
-        for name in ("OurDomain", "OurCampus", "Xior"):
+        for name in ("OurDomain", "Canvas", "Xior"):
             assert name in dim_scope_note("tenant"), name
 
     def test_finishing_is_not_single_platform(self):
@@ -124,7 +124,7 @@ class TestScopeNote:
 
     def test_partial_support_note_lists_all(self):
         note = dim_scope_note("occupancy")
-        for name in ("Codomo", "OurDomain", "OurCampus"):
+        for name in ("Codomo", "OurDomain", "Canvas"):
             assert name in note
         assert "Xior" not in note
 
@@ -169,7 +169,7 @@ class TestScopeNote:
     def test_badge_prefers_the_unfolded_side_when_both_are_long(self):
         """两边都长时，优先选不需要折叠的那边；都要折叠才比字数。
 
-        finishing 现在是 4 支持 / 3 不支持（缺 OurCampus、Student Experience、
+        finishing 现在是 4 支持 / 3 不支持（缺 Canvas、Student Experience、
         Plaza），两边都超过 _BADGE_MAX_NAMES，于是都折叠、按字数取短——支持方
         30 字胜过缺失方。floor 则是 5 支持 / 2 不支持，缺失方两个名字不用折叠，
         直接胜出。
@@ -280,8 +280,8 @@ class TestTenantFiltersEveryPlatform:
         od = _listing("ourdomain", Tenant="student and employed")
         assert ListingFilter(allowed_tenant=["student and employed"]).passes(od)
 
-    def test_ourcampus_is_student_only(self):
-        oc = _listing("ourcampus", Tenant="student only")
+    def test_canvas_is_student_only(self):
+        oc = _listing("canvas", Tenant="student only")
         assert ListingFilter(allowed_tenant=["student only"]).passes(oc)
         assert not ListingFilter(allowed_tenant=["employed only"]).passes(oc)
 

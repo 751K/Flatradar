@@ -74,7 +74,7 @@ def _status(st, lid):
 OD = ("ourdomain", "Amsterdam Diemen")
 CD = ("codomo", "Eindhoven")
 XIOR = ("xior", "Amsterdam Naritaweg")
-OC = ("ourcampus", "OurCampus Amsterdam Diemen")
+OC = ("canvas", "Canvas Amsterdam Diemen")
 SCOPE = [OD, CD, XIOR, OC]
 
 
@@ -203,7 +203,7 @@ class TestScope:
         _add(store, "od", source="ourdomain", city="Amsterdam Diemen", hours_ago=3)
 
         store.mark_stale_listings(
-            source_city_pairs=[("ourcampus", "Amsterdam Diemen")],
+            source_city_pairs=[("canvas", "Amsterdam Diemen")],
         )
 
         assert _status(store, "od") == ("Available to book", 0)
@@ -450,8 +450,8 @@ class TestNoFriendlyFire:
         _add_days(store, "od-diemen", source="ourdomain", city="Amsterdam Diemen", days_ago=90)
 
         n = store.mark_stale_listings(
-            source_city_pairs=[("ourcampus", "Amsterdam Diemen")],
-            monitored_pairs=[("ourcampus", "Amsterdam Diemen")],
+            source_city_pairs=[("canvas", "Amsterdam Diemen")],
+            monitored_pairs=[("canvas", "Amsterdam Diemen")],
             orphan_days=30,
         )
 
@@ -592,9 +592,9 @@ class TestFullLifecycleSource:
 
 
 class TestOtherSourcesUnchanged:
-    """Xior / OurDomain / OurCampus 的 feed 只列可订单元，判据不变。"""
+    """Xior / OurDomain / Canvas 的 feed 只列可订单元，判据不变。"""
 
-    @pytest.mark.parametrize("source", ["xior", "ourdomain", "ourcampus"])
+    @pytest.mark.parametrize("source", ["xior", "ourdomain", "canvas"])
     def test_two_step_inference_preserved(self, db, source):
         _add_lifecycle(db, "s1", source, hours_ago=1.0)
         db.mark_stale_listings(cities=["Eindhoven"],

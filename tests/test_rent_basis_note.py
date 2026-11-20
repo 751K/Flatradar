@@ -1,8 +1,8 @@
-"""OurDomain / OurCampus 的价格是基础租金，必须标注出来。
+"""OurDomain / Canvas 的价格是基础租金，必须标注出来。
 
 这两家的 RentCafe ``Rent`` 列不含服务费：OurDomain 官网逐户型分开列 "Base rent"
-与 "Service costs"，OurCampus 写明 "excluding service costs and utility advances"。
-服务费的量级不小——OurDomain €192–380、OurCampus €282–401——用户看到 €1.563 会
+与 "Service costs"，Canvas 写明 "excluding service costs and utility advances"。
+服务费的量级不小——OurDomain €192–380、Canvas €282–401——用户看到 €1.563 会
 以为那就是到手价。
 
 为什么不像 Xior 那样并进价格：服务费按户型变，而 RentCafe 的 feed 给不出单元的
@@ -24,7 +24,7 @@ from scrapers.ourdomain import (
 
 OD = "Amsterdam Diemen"
 SE = "Amsterdam South-East"
-OC = "OurCampus Amsterdam Diemen"
+OC = "Canvas Amsterdam Diemen"
 
 
 def _listing(source: str, features: list[str]) -> Listing:
@@ -104,8 +104,8 @@ class TestScraperAttachesTheFeature:
         l = self._build(SE)
         assert "Service costs: €174–204 excl." in l.features
 
-    def test_ourcampus_listing_gets_its_own_range(self):
-        l = self._build(OC, source="ourcampus")
+    def test_canvas_listing_gets_its_own_range(self):
+        l = self._build(OC, source="canvas")
         assert "Service costs: €282–401 excl." in l.features
 
     def test_unregistered_building_gets_no_feature(self):

@@ -57,7 +57,7 @@ class TestContent:
         for key in ("login_title", "login_meta_description"):
             for lang in ("zh", "en"):
                 v = TRANSLATIONS[key][lang].lower()
-                for brand in ("holland2stay", "ourdomain", "ourcampus", "xior"):
+                for brand in ("holland2stay", "ourdomain", "canvas", "xior"):
                     assert brand not in v, f"{key}/{lang} 点名了 {brand}"
 
     def test_description_says_what_it_does(self):

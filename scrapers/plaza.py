@@ -93,7 +93,7 @@ Arnhem）与当时实际在架的十个城市取并集。两份清单本来就�
 - ``floor``：``floor.localizedName`` 是荷兰语序数——``Begane grond`` = 0、
   ``Ne verdieping`` = N。认不出就不写。
 - ``tenant``：来自每条房源自己的 ``doelgroepen``，**不是** ``SOURCE_ASSUMED_FEATURES``
-  的整站断言。这比 Xior / OurCampus 那种一刀切可靠——同一批里 student 与 regulier
+  的整站断言。这比 Xior / Canvas 那种一刀切可靠——同一批里 student 与 regulier
   并存（2026-09-02：39 / 16）。只有明确标 student 的才写 ``student only``。
 - ``energy`` **不登记**：``energyLabel`` 53 条全是 ``{"icon": null, "id": null}``。
 - ``finishing`` / ``occupancy`` / ``contract`` 站点不给（``typeContract`` 53 条全
@@ -111,7 +111,7 @@ Accommodation，只对被 Utrecht University 邀请的国际硕士生开放。
 
 不做自动预订
 ------------
-应征需要付费账号，且流程未侦察、ToS 暴露面未评估。与 OurCampus / Magis /
+应征需要付费账号，且流程未侦察、ToS 暴露面未评估。与 Canvas / Magis /
 Student Experience 一致：只通知，不预订。
 """
 from __future__ import annotations

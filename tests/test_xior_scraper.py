@@ -613,7 +613,7 @@ def test_xior_building_lookup():
 class TestFloorplanCheckUsesTheRentCafePlaybook:
     """``floorplans.aspx`` 要按 OurDomain 那套打，而不是单发一次。
 
-    这个页面在 ``*.securerc.co.uk`` 上，和 OurDomain / OurCampus 是同一套
+    这个页面在 ``*.securerc.co.uk`` 上，和 OurDomain / Canvas 是同一套
     RentCafe + Cloudflare。原实现绑在浏览器的 sticky 出口 IP 上、用默认指纹、
     单发一次、不带 header——2026-08-25 复盘生产日志：**10 次尝试 10 次失败**
     （5 次 403、5 次 challenge 页），0 次成功。这道闸门一直是敞的，所有 Xior

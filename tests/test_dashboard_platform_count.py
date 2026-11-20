@@ -1,10 +1,10 @@
 """仪表盘「支持平台」那格必须与 config.KNOWN_SOURCES 一致。
 
-2026-09-01 反馈：线上启用了 holland2stay / ourcampus / xior / magis 四个平台，
+2026-09-01 反馈：线上启用了 holland2stay / canvas / xior / magis 四个平台，
 那格显示的却是「2 · 共 3」。
 
 成因是 dashboard_service.py 里另立了一份手写清单
-``SUPPORTED_SOURCES = ("codomo", "ourdomain", "xior")``。接入 OurCampus 时
+``SUPPORTED_SOURCES = ("codomo", "ourdomain", "xior")``。接入 Canvas 时
 没跟上，接入 Magis 时又没跟上。**两个数都错**：分母是这份清单的长度，分子是「已
 启用」与它的交集——被漏掉的平台连分子都进不去。
 
@@ -70,7 +70,7 @@ class TestCounts:
     def test_the_reported_production_case(self, monkeypatch):
         """线上那四个：显示「4 · 共 5」，而不是「2 · 共 3」。"""
         got = self._scope(
-            monkeypatch, ["codomo", "ourcampus", "xior", "magis"])
+            monkeypatch, ["codomo", "canvas", "xior", "magis"])
         assert got["enabled_platforms"] == 4
         assert got["supported_platforms"] == len(KNOWN_SOURCES)
 

@@ -15,7 +15,7 @@ monitor 双进程架构。
 
 v2.1.0 按 Web 改版发布。v2.2.0 应对 Holland2Stay 改名 Codomo：抓取改为纯 HTTP，
 平台 key 改为 `codomo`，去掉了对 H2S 的特殊处理，H2S 自动预订随旧接口一并删除。
-变更见 [CHANGELOG.md](CHANGELOG.md)。原定的 OurDomain、OurCampus 与 Xior 预订验证
+变更见 [CHANGELOG.md](CHANGELOG.md)。原定的 OurDomain、Canvas 与 Xior 预订验证
 顺延到 v2.3。后续开发以实际验收问题、性能瓶颈和明确的功能需求为依据。
 
 ### 已实现的 Web 能力
@@ -56,12 +56,12 @@ Plaza 应征已有验证记录，是当前唯一在 [SourceSpec](../mcore/source
 可自动预订的平台，且需要用户单独启用。Holland2Stay 的预订链路随 2026-11 改名 Codomo
 失效并已删除；Codomo 新站的预订流程（需登录）尚未侦察，见 [CODOMO.md](CODOMO.md#6-自动预订)。
 
-OurDomain、OurCampus 与 Xior 的验证从 v2.1 顺延到 v2.3，Web 改版完成不代表这些链路
+OurDomain、Canvas 与 Xior 的验证从 v2.1 顺延到 v2.3，Web 改版完成不代表这些链路
 已经验证。各平台需要完成以下工作：
 
 | 平台 | 已有记录与剩余验证 |
 |---|---|
-| OurCampus | 已走通选中单元、条款、开始申请及登录；登录后的 Applicant Info 流程尚未完成，需要重做后续填写和提交，并核实申请结果。开始申请不表示锁定房源。 |
+| Canvas | 已走通选中单元、条款、开始申请及登录；登录后的 Applicant Info 流程尚未完成，需要重做后续填写和提交，并核实申请结果。开始申请不表示锁定房源。 |
 | OurDomain | 已走通申请入口；登录后的填写、提交与结果确认需要真实账号验证。 |
 | Xior | 已使用真实账号推进至申请表并保存草稿；证件保存和后续申请步骤仍需验证。草稿不表示锁定房源。 |
 

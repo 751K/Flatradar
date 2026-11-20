@@ -57,14 +57,14 @@ KNOWN_CODOMO_CITIES: list[dict] = [
 ]
 
 # ``city`` 是该地点所属的城市，与 ``name``（平台自己的楼盘叫法）分开。
-# 两者混用过：`city` 列里 Codomo 存的是真城市，Xior / OurDomain / OurCampus 存的
+# 两者混用过：`city` 列里 Codomo 存的是真城市，Xior / OurDomain / Canvas 存的
 # 是楼盘名，而筛选是精确匹配——勾「Amsterdam」收不到「Amsterdam Diemen」，
 # 2026-08-05 查出线上 14 个用户因此长期漏收通知。见 canonical_city()。
 #
 # Diemen 行政上是独立市镇，这里仍归 Amsterdam：平台按 Amsterdam 卖，用户也
 # 是按 Amsterdam 找房。改归属只需改这一处。
-KNOWN_OURCAMPUS_CITIES: list[dict] = [
-    {"name": "OurCampus Amsterdam Diemen", "key": "diemen", "city": "Amsterdam"},
+KNOWN_CANVAS_CITIES: list[dict] = [
+    {"name": "Canvas Amsterdam Diemen", "key": "diemen", "city": "Amsterdam"},
 ]
 
 
@@ -189,7 +189,8 @@ class TargetSpec:
     #: 一次请求就拿到全站的平台（Magis / Student Experience / Plaza）多订几个城市
     #: 不产生额外请求，留空全收是合理默认；Xior 是历史约定。
     all_when_empty: bool = False
-    #: 改名前用过的订阅键（只有 Codomo：旧 Holland2Stay 叫 ``CITIES``）。``.env``
+    #: 改名前用过的订阅键（Codomo：旧 Holland2Stay 叫 ``CITIES``；Canvas：旧
+    #: OurCampus 叫 ``OURCAMPUS_CITIES``）。``.env``
     #: 里还写着旧键时照样认，见 config._load_targets。
     legacy_env_key: str = ""
 
@@ -201,9 +202,9 @@ TARGET_SPECS: dict[str, TargetSpec] = {
     "ourdomain": TargetSpec(
         "ourdomain", "OURDOMAIN_CITIES", KNOWN_OURDOMAIN_CITIES, "ourdomain_cities",
         default_raw="Amsterdam Diemen,diemen"),
-    "ourcampus": TargetSpec(
-        "ourcampus", "OURCAMPUS_CITIES", KNOWN_OURCAMPUS_CITIES, "ourcampus_cities",
-        default_raw="OurCampus Amsterdam Diemen,diemen"),
+    "canvas": TargetSpec(
+        "canvas", "CANVAS_CITIES", KNOWN_CANVAS_CITIES, "canvas_cities",
+        default_raw="Canvas Amsterdam Diemen,diemen", legacy_env_key="OURCAMPUS_CITIES"),
     "xior": TargetSpec(
         "xior", "XIOR_CITIES", KNOWN_XIOR_CITIES, "xior_cities",
         all_when_empty=True),
@@ -240,7 +241,7 @@ def _build_city_alias_map() -> dict[str, str]:
             continue
         display = c.get("name") or f"{city} {bldg}".strip()
         alias[display.lower()] = city
-    for group in (KNOWN_OURDOMAIN_CITIES, KNOWN_OURCAMPUS_CITIES):
+    for group in (KNOWN_OURDOMAIN_CITIES, KNOWN_CANVAS_CITIES):
         for c in group:
             city = (c.get("city") or "").strip()
             if city and c.get("name"):
@@ -255,7 +256,7 @@ def canonical_city(value: str) -> str:
     """把 `city` 字段归一到真正的城市名。
 
     存在的理由：`city` 这一列在四个平台上存的不是同一种东西——Codomo 存真城市
-    （Eindhoven），Xior / OurDomain / OurCampus 存楼盘名（Utrecht Willem
+    （Eindhoven），Xior / OurDomain / Canvas 存楼盘名（Utrecht Willem
     Dreeslaan、Amsterdam Diemen）。而 `allowed_cities` 是精确匹配，于是勾了
     「Utrecht」的用户永远收不到 Xior 在 Utrecht 那 25 套房的通知，面板上也
     看不出任何异常。

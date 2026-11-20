@@ -132,7 +132,7 @@ def build() -> Image.Image:
     # 36px 而不是更大：右侧通知卡从 x=700 起，42px 时这行会被压在卡片下面。
     d.text((PAD, 372), "Instant alerts for Dutch rental listings",
            font=_font(36, "Medium"), fill=TEXT2)
-    d.text((PAD, 430), "Codomo · Xior · OurDomain · OurCampus",
+    d.text((PAD, 430), "Codomo · Xior · OurDomain · Canvas",
            font=_font(27, "Regular"), fill=TEXT2)
 
     domain = "flatradar.app"

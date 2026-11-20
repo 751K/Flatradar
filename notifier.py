@@ -117,7 +117,7 @@ class BaseNotifier(ABC):
 
         这类房源不急：进抽签池不是先到先得，晚看半小时不影响结果。可直接
         预订的房源相反，仍然逐条发。**这是 Codomo 的结论，不是抽签的通性**——
-        OurCampus 的 Join Lottery（2026-09-15 #2301）挂 48 分钟就撤了，所以
+        Canvas 的 Join Lottery（2026-09-15 #2301）挂 48 分钟就撤了，所以
         它照样逐条发，见 ``monitor._split_batchable``。
         """
         if not listings:
@@ -1466,7 +1466,7 @@ def _tl(text: str, lang: str) -> str:
 def _rent_note(l: Listing, lang: str) -> str:
     """租金后面的口径说明，形如 ``"（基础租金，服务费 €192–380 另计）"``。
 
-    只有 OurDomain / OurCampus 会返回非空——它们报的是基础租金。不加这句的话，
+    只有 OurDomain / Canvas 会返回非空——它们报的是基础租金。不加这句的话，
     用户看到 €1.563 会以为那就是到手价，而实际还要再加两三百。
     """
     note = l.rent_basis_note

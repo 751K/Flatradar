@@ -197,7 +197,7 @@ class TestAutoBookGate:
 
     def test_unknown_source_is_rejected(self):
         from monitor import _can_auto_book
-        assert _can_auto_book(_user(), _listing("ourcampus")) is False
+        assert _can_auto_book(_user(), _listing("canvas")) is False
 
 
 # ── 表单解析 ────────────────────────────────────────────────────────

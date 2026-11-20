@@ -39,36 +39,36 @@ class _Cfg:
 
 class TestDropShadowSources:
     def test_no_shadow_is_passthrough(self):
-        new = [_listing("a", source="ourcampus")]
-        sc = [(_listing("b", source="ourcampus"), "Occupied", "Available to book")]
+        new = [_listing("a", source="canvas")]
+        sc = [(_listing("b", source="canvas"), "Occupied", "Available to book")]
         kn, ks = _drop_shadow_sources(_Cfg([]), new, sc)
         assert kn is new and ks is sc, "未配置影子时应零开销直接返回原对象"
 
     def test_filters_only_shadow_source(self):
-        new = [_listing("a", source="ourcampus"), _listing("b", source="codomo")]
+        new = [_listing("a", source="canvas"), _listing("b", source="codomo")]
         sc = [
-            (_listing("c", source="ourcampus"), "Occupied", "Available to book"),
+            (_listing("c", source="canvas"), "Occupied", "Available to book"),
             (_listing("d", source="ourdomain"), "Occupied", "Available to book"),
         ]
-        kn, ks = _drop_shadow_sources(_Cfg(["ourcampus"]), new, sc)
+        kn, ks = _drop_shadow_sources(_Cfg(["canvas"]), new, sc)
         assert [l.id for l in kn] == ["b"]
         assert [t[0].id for t in ks] == ["d"]
 
     def test_source_match_is_case_insensitive(self):
-        new = [_listing("a", source="OurCampus")]
-        kn, _ = _drop_shadow_sources(_Cfg(["ourcampus"]), new, [])
+        new = [_listing("a", source="Canvas")]
+        kn, _ = _drop_shadow_sources(_Cfg(["canvas"]), new, [])
         assert kn == []
 
     def test_multiple_shadow_sources(self):
-        new = [_listing(s, source=s) for s in ("ourcampus", "xior", "codomo")]
-        kn, _ = _drop_shadow_sources(_Cfg(["ourcampus", "xior"]), new, [])
+        new = [_listing(s, source=s) for s in ("canvas", "xior", "codomo")]
+        kn, _ = _drop_shadow_sources(_Cfg(["canvas", "xior"]), new, [])
         assert [l.id for l in kn] == ["codomo"]
 
     def test_missing_attr_is_tolerated(self):
         """cfg 没有 shadow_sources 属性时不能炸（旧配置对象 / 测试桩）。"""
         class _Bare:
             pass
-        new = [_listing("a", source="ourcampus")]
+        new = [_listing("a", source="canvas")]
         kn, _ = _drop_shadow_sources(_Bare(), new, [])
         assert kn is new
 
@@ -77,15 +77,15 @@ class TestDropShadowSources:
 
 class TestShadowConfig:
     def test_parsed_from_env(self, monkeypatch):
-        monkeypatch.setenv("SOURCES", "codomo,ourcampus")
-        monkeypatch.setenv("SHADOW_SOURCES", "ourcampus")
+        monkeypatch.setenv("SOURCES", "codomo,canvas")
+        monkeypatch.setenv("SHADOW_SOURCES", "canvas")
         import config
-        assert config.load_config().shadow_sources == ["ourcampus"]
+        assert config.load_config().shadow_sources == ["canvas"]
 
     def test_entries_not_in_sources_are_dropped(self, monkeypatch):
         """影子列表必须是 SOURCES 的子集——不在里面就压根不会抓，写了是笔误。"""
         monkeypatch.setenv("SOURCES", "codomo")
-        monkeypatch.setenv("SHADOW_SOURCES", "ourcampus,typo")
+        monkeypatch.setenv("SHADOW_SOURCES", "canvas,typo")
         import config
         assert config.load_config().shadow_sources == []
 
@@ -132,7 +132,7 @@ def _cfg(tmp_path, shadow) -> Config:
         codomo_cities=[TargetFilter(name="C", key="29")],
         db_path=Path(tmp_path) / "t.db",
         log_level="WARNING",
-        sources=["codomo", "ourcampus"],
+        sources=["codomo", "canvas"],
         shadow_sources=shadow,
     )
 
@@ -152,8 +152,8 @@ class TestRunOnceShadow:
     def test_shadow_listing_is_stored_but_not_notified(self, tmp_path):
         storage = Storage(Path(tmp_path) / "t.db", timezone_str="UTC")
         try:
-            n = _round(tmp_path, storage, ["ourcampus"], [
-                _listing("oc_1", source="ourcampus"),
+            n = _round(tmp_path, storage, ["canvas"], [
+                _listing("oc_1", source="canvas"),
                 _listing("cd_1", source="codomo"),
             ])
             # 通知只发了非影子的那条
@@ -161,17 +161,17 @@ class TestRunOnceShadow:
             # 但两条都进了库
             assert storage.get_listing("oc_1") is not None
             assert storage.get_listing("cd_1") is not None
-            assert sorted(storage.get_distinct_sources()) == ["codomo", "ourcampus"]
+            assert sorted(storage.get_distinct_sources()) == ["canvas", "codomo"]
         finally:
             storage.close()
 
     def test_shadow_status_change_is_recorded_but_not_notified(self, tmp_path):
         storage = Storage(Path(tmp_path) / "t.db", timezone_str="UTC")
         try:
-            _round(tmp_path, storage, ["ourcampus"],
-                   [_listing("oc_1", source="ourcampus", status="Occupied")])
-            n = _round(tmp_path, storage, ["ourcampus"],
-                       [_listing("oc_1", source="ourcampus", status="Available to book")])
+            _round(tmp_path, storage, ["canvas"],
+                   [_listing("oc_1", source="canvas", status="Occupied")])
+            n = _round(tmp_path, storage, ["canvas"],
+                       [_listing("oc_1", source="canvas", status="Available to book")])
             assert n.status_changes == [], "影子 source 的状态变更不该通知"
             # 但库里的状态确实更新了
             assert storage.get_listing("oc_1")["status"] == "Available to book"
@@ -187,10 +187,10 @@ class TestRunOnceShadow:
         """
         storage = Storage(Path(tmp_path) / "t.db", timezone_str="UTC")
         try:
-            _round(tmp_path, storage, ["ourcampus"],
-                   [_listing("oc_1", source="ourcampus", status="Occupied")])
-            _round(tmp_path, storage, ["ourcampus"],
-                   [_listing("oc_1", source="ourcampus",
+            _round(tmp_path, storage, ["canvas"],
+                   [_listing("oc_1", source="canvas", status="Occupied")])
+            _round(tmp_path, storage, ["canvas"],
+                   [_listing("oc_1", source="canvas",
                              status="Available to book")])
 
             # 还原成「入库了、还没标记」的崩溃现场
@@ -198,8 +198,8 @@ class TestRunOnceShadow:
             storage.conn.execute("UPDATE status_changes SET notified=0")
             storage.conn.commit()
 
-            n = _round(tmp_path, storage, ["ourcampus"], [
-                _listing("oc_1", source="ourcampus",
+            n = _round(tmp_path, storage, ["canvas"], [
+                _listing("oc_1", source="canvas",
                          status="Available to book"),
             ])
             assert n.new_listings == [], "影子新房源被重放路径投递了"
@@ -214,7 +214,7 @@ class TestRunOnceShadow:
         storage = Storage(Path(tmp_path) / "t.db", timezone_str="UTC")
         try:
             n = _round(tmp_path, storage, [], [
-                _listing("oc_1", source="ourcampus"),
+                _listing("oc_1", source="canvas"),
                 _listing("cd_1", source="codomo"),
             ])
             assert sorted(n.new_listings) == ["cd_1", "oc_1"]
@@ -225,8 +225,8 @@ class TestRunOnceShadow:
         """last_scrape_count 回答「抓到多少」，不是「通知了多少」。"""
         storage = Storage(Path(tmp_path) / "t.db", timezone_str="UTC")
         try:
-            _round(tmp_path, storage, ["ourcampus"], [
-                _listing("oc_1", source="ourcampus"),
+            _round(tmp_path, storage, ["canvas"], [
+                _listing("oc_1", source="canvas"),
                 _listing("cd_1", source="codomo"),
             ])
             assert storage.get_meta("last_scrape_count") == "2"
@@ -239,12 +239,12 @@ class TestRunOnceShadow:
 # 2026-08-04 线上实况：
 #
 #     SOURCES=codomo,ourdomain,xior
-#     SHADOW_SOURCES=ourcampus,xior
+#     SHADOW_SOURCES=canvas,xior
 #
-# 看上去像「ourcampus 在影子模式下跑着」。实际上 ``load_config`` 会把不在
-# ``sources`` 里的影子项静默丢掉，所以 ourcampus 既没被抓，也不会出现在数据
+# 看上去像「canvas 在影子模式下跑着」。实际上 ``load_config`` 会把不在
+# ``sources`` 里的影子项静默丢掉，所以 canvas 既没被抓，也不会出现在数据
 # 健康面板的最近轮次里——而配置文件读起来完全正常。这个状态是从设置面板
-# 保存一次无声造成的（旧版白名单漏了 ourcampus，保存即从 SOURCES 删除）。
+# 保存一次无声造成的（旧版白名单漏了 canvas，保存即从 SOURCES 删除）。
 #
 # 静默丢弃本身是对的（影子名单不该反过来把 source 打开），要补的是那条
 # WARNING：配置读起来像开着、实际是关着，这种落差必须有地方能看见。
@@ -252,7 +252,7 @@ class TestRunOnceShadow:
 @pytest.fixture
 def _shadow_env(monkeypatch):
     """只留下这几个键，其余清空，免得被开发机 .env 干扰。"""
-    for key in ("SOURCES", "SHADOW_SOURCES", "OURCAMPUS_CITIES",
+    for key in ("SOURCES", "SHADOW_SOURCES", "CANVAS_CITIES",
                 "OURDOMAIN_CITIES", "XIOR_CITIES", "CITIES"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("CITIES", "Eindhoven,29")
@@ -262,24 +262,24 @@ def _shadow_env(monkeypatch):
 class TestDanglingShadowSource:
     def test_warns_when_shadow_source_is_not_in_sources(self, _shadow_env, caplog):
         _shadow_env.setenv("SOURCES", "codomo,ourdomain")
-        _shadow_env.setenv("SHADOW_SOURCES", "ourcampus")
+        _shadow_env.setenv("SHADOW_SOURCES", "canvas")
 
         with caplog.at_level(logging.WARNING, logger="config"):
             cfg = load_config()
 
         assert cfg.shadow_sources == []
-        assert any("ourcampus" in r.getMessage() for r in caplog.records), \
+        assert any("canvas" in r.getMessage() for r in caplog.records), \
             "配置读起来像开着、实际关着，必须有 WARNING"
 
     def test_message_names_every_dangling_source(self, _shadow_env, caplog):
         _shadow_env.setenv("SOURCES", "codomo")
-        _shadow_env.setenv("SHADOW_SOURCES", "ourcampus,xior")
+        _shadow_env.setenv("SHADOW_SOURCES", "canvas,xior")
 
         with caplog.at_level(logging.WARNING, logger="config"):
             load_config()
 
         text = " ".join(r.getMessage() for r in caplog.records)
-        assert "ourcampus" in text and "xior" in text
+        assert "canvas" in text and "xior" in text
 
     def test_silent_when_shadow_sources_are_all_enabled(self, _shadow_env, caplog):
         """正常配置不该刷警告——否则日志里全是噪音，真出事时看不见。"""
@@ -307,10 +307,10 @@ class TestShadowStillFiltersProperly:
     def test_dangling_entry_never_enables_the_source(self, _shadow_env):
         """警告归警告，影子名单不能反过来把一个没启用的平台打开。"""
         _shadow_env.setenv("SOURCES", "codomo")
-        _shadow_env.setenv("SHADOW_SOURCES", "ourcampus")
+        _shadow_env.setenv("SHADOW_SOURCES", "canvas")
 
         cfg = load_config()
 
-        assert "ourcampus" not in cfg.sources
-        assert "ourcampus" not in cfg.shadow_sources
-        assert "ourcampus" not in {t.source for t in cfg.scrape_tasks_v2()}
+        assert "canvas" not in cfg.sources
+        assert "canvas" not in cfg.shadow_sources
+        assert "canvas" not in {t.source for t in cfg.scrape_tasks_v2()}

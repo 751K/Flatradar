@@ -327,7 +327,7 @@ class ListingFilter:
 
         if self.allowed_cities:
             # 两边都先归一。房源侧的 city 可能是楼盘名（Xior / OurDomain /
-            # OurCampus），用户侧的存量配置里也可能存着楼盘名——归一之后
+            # Canvas），用户侧的存量配置里也可能存着楼盘名——归一之后
             # 「Utrecht」与「Utrecht Willem Dreeslaan」才落在同一个值上。
             # 只归一一侧仍然会漏，这也是本处原先的写法。
             city = canonical_city(listing.city or "").lower()
@@ -482,13 +482,13 @@ class AutoBookConfig:
     ourdomain_email: str = ""
     ourdomain_password: str = ""
 
-    # ── OurCampus（RENTCafe，与 OurDomain 同一套流程，另一个租户）──
+    # ── Canvas（RENTCafe，与 OurDomain 同一套流程，另一个租户）──
     #
-    # **面板还没有入口**：``OurCampusBooker`` 写好了但未注册，要等「开始申请能
+    # **面板还没有入口**：``CanvasBooker`` 写好了但未注册，要等「开始申请能
     # 不能占住名额」实测过再开（见 bookers/__init__.py）。字段先加上，是为了让
     # booker 和探针有正经的出处；表单保存时原样保留，不会被清空。
-    ourcampus_email: str = ""
-    ourcampus_password: str = ""
+    canvas_email: str = ""
+    canvas_password: str = ""
 
     # ── Plaza（Zig/Hexia 门户，用户名不是邮箱）──
     #

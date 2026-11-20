@@ -623,7 +623,7 @@ TRANSLATIONS = {
     "user_form_rentcafe_hint": {"zh": "请先在浏览器中手动注册 RENTCafe 账号，再填写下方信息", "en": "Register your RENTCafe account in a browser first, then fill in below"},
     "user_form_ab_xior":      {"zh": "Xior 账号",             "en": "Xior account"},
     "user_form_ab_ourdomain": {"zh": "OurDomain 账号",        "en": "OurDomain account"},
-    "user_form_ab_ourcampus": {"zh": "OurCampus 账号",        "en": "OurCampus account"},
+    "user_form_ab_canvas": {"zh": "Canvas 账号",        "en": "Canvas account"},
     "user_form_buildings":  {"zh": "楼盘",                   "en": "Building"},
     "user_form_ab_plaza":   {"zh": "Plaza 账号",             "en": "Plaza account"},
     # 用「申请」不用「注册」：后者会被读成「系统替我注册 Plaza 账号」，而系统不做
@@ -847,7 +847,7 @@ TRANSLATIONS = {
         "zh": "完整使用说明",
         "en": "Full guide",
     },
-    #: 价格右上角那个星号的 tooltip。只有 OurDomain / OurCampus 会出现。
+    #: 价格右上角那个星号的 tooltip。只有 OurDomain / Canvas 会出现。
     "rent_basis_hint": {
         "zh": "此价格为基础租金，服务费另计：",
         "en": "Base rent; service costs are charged separately:",

@@ -13,7 +13,7 @@ from app.process_ctrl import monitor_pid
 
 #: 仪表盘「支持平台」那格用 config.KNOWN_SOURCES，**不另立一份**。
 #:
-#: 这里原先是手写的 ``("holland2stay", "ourdomain", "xior")``，接入 OurCampus 时
+#: 这里原先是手写的 ``("holland2stay", "ourdomain", "xior")``，接入 Canvas 时
 #: 没跟上，接入 Magis 时又没跟上——于是那格显示「2 / 共 3」，而线上实际启用了四个。
 #: 两个数都错：分母是这份清单的长度，分子是「启用的」与它的交集，被漏掉的平台连
 #: 分子都进不去。而且它不会报错，只是一直少报。

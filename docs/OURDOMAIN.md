@@ -4,7 +4,7 @@
 实现以 [`scrapers/ourdomain.py`](../scrapers/ourdomain.py) 为准，本文描述的是该实现
 依赖的外部事实；平台行为可能变化，历史实测不代表当前线上状态。
 
-自动预订部分见 [RENTCAFE.md](RENTCAFE.md)：OurDomain 与 Xior、OurCampus 共用同一套
+自动预订部分见 [RENTCAFE.md](RENTCAFE.md)：OurDomain 与 Xior、Canvas 共用同一套
 RENTCafe 流程，本文只记录 OurDomain 特有的入口差异与验证进度。
 
 ## 1. 平台概况
@@ -179,7 +179,7 @@ GET {base}/rcLoadContent.ashx
 时记录 WARNING，便于确认哪些主题仍需补充 label 匹配。
 
 `available_from` 自 `ApplyNowClick(...)` 的 `DD-MM-YYYY` 参数提取，**不取「Date
-Available」那一格**。两者经常不一致（OurCampus 08-27：格子 `31-8-2026`、回调
+Available」那一格**。两者经常不一致（Canvas 08-27：格子 `31-8-2026`、回调
 `10-9-2026`），经确认回调里的才是实际入住日期。
 
 ### 3.3 单元会重复出现在多个 FP 下
@@ -207,7 +207,7 @@ Family），FP 名称仅在 `sqft` 缺失时作为备选。
 `muted` 日期格 + `Book Now` 是「自该日起可订」（v1.26.0 前被判成 Occupied）；
 `muted` 日期格 + `Join Lottery` 是抽签（2026-09-15 前被判成可订）。
 
-实测过的按钮文字：OurDomain South-East `Book now`、OurCampus `Book Now` /
+实测过的按钮文字：OurDomain South-East `Book now`、Canvas `Book Now` /
 `Join Lottery`。其余文字按可订放行并打 WARNING——漏报比误报贵，但新文字不能再默默
 过去（`Join Lottery` 当初就是这么过去的）。
 
@@ -262,7 +262,7 @@ Listing(
 |---|---|---|
 | OurDomain Diemen | Superior Studio：1-person max.，Students (with Guarantors) & Young Professionals；Executive / Superior Plus：2-person max.，Young Professionals only | 按面积切，见下 |
 | OurDomain South East | 全篇无学生条款；须 fixed-hour 雇佣合同（满 3 个月）或 KvK 注册满一年的 ZZP，个人月毛收入 ≥ 3× base rent（双人合计 4×） | `employed only` |
-| OurCampus Diemen | 须 MBO / HBO / 大学在校证明（限荷兰院校），PhD 与博后明确不符合；无收入要求。页脚标注「Young professionals book at: OurDomain」 | `student only` |
+| Canvas Diemen | 须 MBO / HBO / 大学在校证明（限荷兰院校），PhD 与博后明确不符合；无收入要求。页脚标注「Young professionals book at: OurDomain」 | `student only` |
 
 Diemen 需在单元级区分户型，而 §3.3 已说明 FP → unit 映射不可用；生产数据亦印证其
 噪声：#7343（34.43 m²）挂有 Superior Studio 的 FP ID，#6387（33.78 m²）反而没有。
@@ -303,7 +303,7 @@ Superior Plus Studio  33 – 49 m²   Free Market   Young Professionals only
 ## 7. 自动预订
 
 实现位于 [`bookers/rentcafe.py`](../bookers/rentcafe.py) 的 `OurDomainBooker`，与
-Xior、OurCampus 共用 [RENTCAFE.md](RENTCAFE.md) 描述的整套流程。`monitor._AUTO_BOOK_SOURCES`
+Xior、Canvas 共用 [RENTCAFE.md](RENTCAFE.md) 描述的整套流程。`monitor._AUTO_BOOK_SOURCES`
 中**不含 `ourdomain`**，该链路对用户关闭。
 
 ### 7.1 与 Xior 的差异：入口

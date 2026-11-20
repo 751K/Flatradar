@@ -143,7 +143,7 @@ def is_proxy_error(exc: BaseException) -> bool:
 #:
 #: 2026-08-26 生产：webshare 两个账号同时 402，而冷却统一是 10 分钟，于是每 10
 #: 分钟就有一段窗口，各 source 重新去敲那个明知欠费的代理，Xior（15 分钟重建）
-#: 和 OurCampus（每轮现取）反复中招。
+#: 和 Canvas（每轮现取）反复中招。
 _PROXY_ACCOUNT_ERROR_CODES = frozenset({402, 407})
 
 #: **瞬时**服务端异常：网关抽风、后端过载。这类可能几分钟后自己好，值得早点回去试。

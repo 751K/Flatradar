@@ -7,7 +7,7 @@ scrapers/_browser_backed.py — 浏览器型 scraper 的共享生命周期
 ``SiteProfile``、活多久、创建成功后要不要额外重置点什么。
 
 放在独立模块而不是 ``scrapers/base.py``：``base`` 是 source-agnostic 的抽象层，
-Codomo / OurDomain / OurCampus 走纯 HTTP，不该因为别家用浏览器就被拖进对
+Codomo / OurDomain / Canvas 走纯 HTTP，不该因为别家用浏览器就被拖进对
 ``browser_fetcher`` 的依赖。
 
 线程模型

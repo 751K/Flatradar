@@ -206,7 +206,7 @@ def _autobook_rows(ab, zh):
         _row('xior', 'Xior', _t(zh, f'{xior} 栋楼', f'{xior} building(s)') if xior else _t(zh, '每栋楼一个账号', 'One account per building'),
              *_configured(xior, zh)),
         _row('ourdomain', 'OurDomain', ab.ourdomain_email or _t(zh, '邮箱登录', 'Email sign-in'), *_configured(ab.ourdomain_email, zh)),
-        _row('ourcampus', 'OurCampus', ab.ourcampus_email or _t(zh, '邮箱登录', 'Email sign-in'), *_configured(ab.ourcampus_email, zh)),
+        _row('canvas', 'Canvas', ab.canvas_email or _t(zh, '邮箱登录', 'Email sign-in'), *_configured(ab.canvas_email, zh)),
         _row('plaza', 'Plaza', ab.plaza_username or _t(zh, '用户名登录', 'Username sign-in'),
              *((_t(zh, '自动应征', 'Auto-apply'), 'ok') if ab.plaza_enabled and ab.plaza_username
                else _configured(ab.plaza_username, zh) if not ab.plaza_enabled else (_t(zh, '已开启，缺账号', 'On, no account'), 'attention'))),

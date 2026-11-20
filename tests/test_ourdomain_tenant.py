@@ -1,4 +1,4 @@
-"""OurDomain / OurCampus 的租户资格分类（``Tenant`` feature）。
+"""OurDomain / Canvas 的租户资格分类（``Tenant`` feature）。
 
 平台把房源分成「学生可租」和「必须有收入」两类，但 **RentCafe 租赁门户完全
 不带这个信息**——unit 行只有面积、租金、押金、楼层。判据只存在于平台自己的
@@ -9,7 +9,7 @@
                           Executive Studio:     2-person max., Young Professionals only
                           Superior Plus Studio: 2-person max., Young Professionals only
     OurDomain South East  全篇无学生条款；要雇佣合同或 ZZP，收入 3–4× base rent
-    OurCampus Diemen      须在校证明（MBO/HBO/大学），PhD 与博后明确不符合；
+    Canvas Diemen      须在校证明（MBO/HBO/大学），PhD 与博后明确不符合；
                           页脚「Young professionals book at: [OurDomain]」
 
 落到单元级只能靠面积——FP→unit 映射不可用（docs/OURDOMAIN.md §3.3），生产
@@ -28,14 +28,14 @@ from __future__ import annotations
 
 import pytest
 
-from scrapers.ourcampus import OurCampusScraper
+from scrapers.canvas import CanvasScraper
 from scrapers.ourdomain import OurDomainScraper, _infer_tenant, _to_listing
 
 # 用 .get()：某栋楼漏配规则时，该由 TestEveryBuildingHasAPolicy 给出可读的
 # 失败信息，而不是在收集阶段抛 KeyError 让整个文件都跑不起来。
 DIEMEN = OurDomainScraper.BUILDINGS["diemen"].get("tenant_policy")
 SOUTH_EAST = OurDomainScraper.BUILDINGS["south-east"].get("tenant_policy")
-CAMPUS = OurCampusScraper.BUILDINGS["diemen"].get("tenant_policy")
+CAMPUS = CanvasScraper.BUILDINGS["diemen"].get("tenant_policy")
 
 # 生产库存实测到的面积（2026-08-08，24 个单元）
 STUDENT_SIZES = ["22,56", "27,86", "28,39", "29,27", "30,20"]
@@ -84,7 +84,7 @@ class TestWholeBuildingPolicies:
         assert _infer_tenant(SOUTH_EAST, sqft) == "employed only"
 
     @pytest.mark.parametrize("sqft", STUDENT_SIZES + INCOME_SIZES + [""])
-    def test_ourcampus_is_student_only_regardless_of_size(self, sqft):
+    def test_canvas_is_student_only_regardless_of_size(self, sqft):
         assert _infer_tenant(CAMPUS, sqft) == "student only"
 
     def test_no_policy_yields_nothing(self):
@@ -98,7 +98,7 @@ class TestEveryBuildingHasAPolicy:
         """新增楼栋必须显式声明资格规则。漏掉不会报错，只是整栋房源静默
         地少一个筛选维度——用户看不出区别，只会觉得筛选不准。"""
         missing = []
-        for cls in (OurDomainScraper, OurCampusScraper):
+        for cls in (OurDomainScraper, CanvasScraper):
             for key, b in cls.BUILDINGS.items():
                 if not b.get("tenant_policy"):
                     missing.append(f"{cls.source}:{key}")

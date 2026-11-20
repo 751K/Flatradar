@@ -1010,7 +1010,7 @@ Body 支持字段：
     "finishing": ["Furnished"],
     "energy": ["A+++", "A++", "A+", "A", "B", "C", "D", "E", "F"],
     "dim_sources": {
-      "source": ["codomo", "ourdomain", "ourcampus", "xior", "magis", "studentexperience", "plaza"],
+      "source": ["codomo", "ourdomain", "canvas", "xior", "magis", "studentexperience", "plaza"],
       "offer": ["codomo"],
       "energy": ["magis"]
     }

@@ -27,7 +27,7 @@ string，置 0 之后连 ``Not available`` 的单元一起返回（2026-09-01 �
 卡片同时给出基础租金和**服务费的确切金额**（"service costs, furniture,
 utilities, internet & TV amount to € 121,51 per month"，12 条实测全都有）。因此
 ``price_raw`` 直接报两者之和，与 Codomo / Xior 同一口径，而不是像
-OurDomain / OurCampus 那样只能标注——它们拿不到单元的户型，服务费按户型变，无法
+OurDomain / Canvas 那样只能标注——它们拿不到单元的户型，服务费按户型变，无法
 合成（见 models.rent_basis_note）。
 
 拆分保留在 features 的 ``Base rent`` / ``Service costs amount`` 两条里，不参与
@@ -50,7 +50,7 @@ Montgomerylaan / Woenselse Markt / Zernikestraat），正好是本项目的主�
 
 不做自动预订
 ------------
-站点有 Account / Login，但下单流程未做侦察，也未评估 ToS 暴露面。与 OurCampus
+站点有 Account / Login，但下单流程未做侦察，也未评估 ToS 暴露面。与 Canvas
 一致：只通知，不预订。
 """
 from __future__ import annotations

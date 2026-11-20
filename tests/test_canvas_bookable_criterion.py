@@ -2,7 +2,7 @@
 
 起因（2026-08-27 生产）
 ----------------------
-OurCampus Diemen 当天 11:22 挂出三套单元，我们全部报成 Occupied，一条通知都没
+Canvas Diemen 当天 11:22 挂出三套单元，我们全部报成 Occupied，一条通知都没
 发；12:19 之后它们从 feed 里消失——多半是被别人订走了。
 
 原实现只看状态格里第一个 span 的 class：``success`` → 可订，``warning`` → 抽签，
@@ -151,7 +151,7 @@ class TestWiredIntoExtraction:
 
 #: 生产留档里原样取出的整份 availableunits 响应（fp=1113259，单元 #2301）。
 _LOTTERY_HTML = (
-    Path(__file__).parent / "fixtures" / "ourcampus_availableunits_lottery.html"
+    Path(__file__).parent / "fixtures" / "canvas_availableunits_lottery.html"
 ).read_text(encoding="utf-8")
 LOTTERY_BUTTON = REAL_BUTTON.replace("Book Now", "Join Lottery")
 

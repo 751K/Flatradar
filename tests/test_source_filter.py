@@ -5,7 +5,7 @@
 解析它。而表单每次都是构造一个**全新的** ListingFilter，所以从面板保存一次，
 用户在手机上设过的平台过滤就被清空了。静默丢数据比没这功能更糟。
 
-同一天还发现 ourcampus 被漏了三次（前端 sourceLabel 的三份实现、monitoring
+同一天还发现 canvas 被漏了三次（前端 sourceLabel 的三份实现、monitoring
 页、全局设置的平台白名单），原因都一样：每处各自维护一份平台清单。所以加了
 ``config.KNOWN_SOURCES`` 作为唯一出处，这里也钉住它。
 """
@@ -51,8 +51,8 @@ class TestFormRoundTrip:
         return ImmutableMultiDict(items)
 
     def test_notification_filter_keeps_platforms(self):
-        u = build_user_from_form(self._form(ALLOWED_SOURCES=["xior", "ourcampus"]))
-        assert u.listing_filter.allowed_sources == ["xior", "ourcampus"]
+        u = build_user_from_form(self._form(ALLOWED_SOURCES=["xior", "canvas"]))
+        assert u.listing_filter.allowed_sources == ["xior", "canvas"]
 
     def test_auto_book_filter_keeps_platforms(self):
         u = build_user_from_form(self._form(AUTO_BOOK_ALLOWED_SOURCES=["codomo"]))
@@ -73,9 +73,9 @@ class TestFormRoundTrip:
 
 
 class TestKnownSourcesIsTheSingleSource:
-    def test_ourcampus_is_in_the_list(self):
+    def test_canvas_is_in_the_list(self):
         """它被漏过三次，各处都是自己维护一份清单。"""
-        assert "ourcampus" in KNOWN_SOURCES
+        assert "canvas" in KNOWN_SOURCES
 
     def test_every_source_has_a_display_name(self):
         for s in KNOWN_SOURCES:
@@ -85,10 +85,10 @@ class TestKnownSourcesIsTheSingleSource:
         """把未知 source 显示成某个已知平台，会让人以为数据是那边来的。"""
         got = source_display_name("brandnew")
         assert got == "Brandnew"
-        assert got not in ("Holland2Stay", "OurDomain", "OurCampus", "Xior")
+        assert got not in ("Holland2Stay", "OurDomain", "Canvas", "Xior")
 
     def test_settings_accepts_every_known_source(self):
-        """全局设置的白名单曾写死三个，勾了 OurCampus 会被静默丢弃。"""
+        """全局设置的白名单曾写死三个，勾了 Canvas 会被静默丢弃。"""
         import inspect
 
         from app.routes import settings as settings_mod

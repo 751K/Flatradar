@@ -505,7 +505,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* ── 平台显示名 ────────────────────────────────────────────────────
  * 原本 map / calendar / stats 各写了一份 sourceLabel，**三份都漏了
- * ourcampus**，于是它在界面上以裸的 source key 露出来（monitoring 页更
+ * canvas**，于是它在界面上以裸的 source key 露出来（monitoring 页更
  * 直接，连转换都没有，四个平台全是小写 key）。名称由服务端平台登记表注入。
  *
  */

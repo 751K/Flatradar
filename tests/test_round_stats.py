@@ -86,8 +86,8 @@ class TestQueries:
 
     def test_sources_include_removed_ones(self, st):
         """答的是「抓过什么」而不是「现在配置了什么」——排查时往往正是刚摘掉的那个。"""
-        _fill(st, "ourcampus", 1)
-        assert "ourcampus" in st.round_stats_sources()
+        _fill(st, "canvas", 1)
+        assert "canvas" in st.round_stats_sources()
 
 
 class TestGrouping:

@@ -277,10 +277,10 @@ class TestShadowSourcesStayShadowed:
         import monitor
 
         class _Cfg:
-            shadow_sources = ("ourcampus",)
+            shadow_sources = ("canvas",)
 
         shadow = _l("S1")
-        shadow.source = "ourcampus"
+        shadow.source = "canvas"
         normal = _l("N1")
         st.diff([shadow, normal])
 

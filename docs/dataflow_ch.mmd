@@ -3,7 +3,7 @@ flowchart TD
     B --> C["一轮开始：写入心跳并规划抓取"]
     C --> D["按平台统一调度<br/>熔断、限流、代理和故障隔离"]
     D --> E["Xior<br/>独立浏览器工作进程"]
-    D --> F["Codomo / OurDomain / OurCampus / Magis<br/>Student Experience / Plaza（纯 HTTP）"]
+    D --> F["Codomo / OurDomain / Canvas / Magis<br/>Student Experience / Plaza（纯 HTTP）"]
     E --> G["合并房源与完整性结果"]
     F --> G
     G --> H["对比并写库：新房源与状态变更"]

@@ -3,7 +3,7 @@
 编排层不再有任何平台特例：熔断、canary 恢复探测都走同一条通用路径。
 
 为什么每个 source 都要有：保留日志全量统计「整体抓取失败」次数里，xior 整源
-RateLimitError 147 次、ourdomain / ourcampus 网络失败各六十多次——当年只有一个
+RateLimitError 147 次、ourdomain / canvas 网络失败各六十多次——当年只有一个
 source 装了熔断，保护装在了最不需要它的那个上。
 
 策略按 source 配
@@ -43,7 +43,7 @@ class TestEverySourceGetsOne:
         assert p.base_cooldown > 0 and p.max_cooldown >= p.base_cooldown
 
     @pytest.mark.parametrize("source", [
-        "codomo", "xior", "ourdomain", "ourcampus",
+        "codomo", "xior", "ourdomain", "canvas",
     ])
     def test_all_registered_sources_have_a_circuit(self, source, cs, st):
         cs.trip(source, BlockedError("403"), storage=st)

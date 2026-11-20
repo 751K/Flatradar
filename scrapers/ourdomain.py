@@ -392,7 +392,7 @@ class OurDomainScraper(AbstractScraper):
 
         OurDomain 用 GET + query string（该 host 上 POST 会触发 403）。
         子类可覆盖——同为 RentCafe/SecureRC 的站点，这一步的请求形状并不统一，
-        取决于各自前端怎么调（见 ``OurCampusScraper``）。
+        取决于各自前端怎么调（见 ``CanvasScraper``）。
         """
         url = (
             f"{base}/rcLoadContent.ashx"
@@ -451,7 +451,7 @@ def _get_text(
     取文本，带 429 退避、403 Cloudflare 分类、**同 session 内 403 重试**。
 
     ``data`` 不为 None 时改发 POST（表单体）。OurDomain 自己一律用 GET——
-    它的 host 上 POST 会触发 403；但同为 SecureRC 的 OurCampus 前端就是用
+    它的 host 上 POST 会触发 403；但同为 SecureRC 的 Canvas 前端就是用
     POST 的，且实测不 403。WAF 策略按 host 配，所以这里做成可选而不是二选一。
 
     Same-session 403 retry
@@ -655,7 +655,7 @@ def _extract_floorplan_names(html: str) -> dict[str, str]:
 #     全篇没有学生条款。要求 fixed-hour 雇佣合同（满 3 个月）或 KvK 注册满
 #     一年的 ZZP，个人月毛收入 ≥ 3× base rent（双人合计 4×）。
 #
-# OurCampus Amsterdam Diemen — ourcampus.nl/en/criteria（见 ourcampus.py）
+# Canvas Amsterdam Diemen — ourcampus.nl/en/criteria（见 canvas.py）
 #     「Enrolled at an MBO, HBO, or university-level institution」+ 在校证明，
 #     PhD / 博后明确不符合。无收入要求。页脚写着「Young professionals book
 #     at: [OurDomain]」——它就是纯学生盘。
@@ -776,7 +776,7 @@ def _infer_occupancy(
 
 # RentCafe 的 availableunits 面板标题。无论有没有可用单元都会渲染，所以它能
 # 回答「这是不是一张有效的搜索结果页」，而 unitrow 的数量回答「有没有房」。
-# 两栋 OurDomain 楼 + OurCampus 的空响应实测都含且只含一次。
+# 两栋 OurDomain 楼 + Canvas 的空响应实测都含且只含一次。
 _AVAILABILITY_PANEL_MARKER = "Apartment Search Result"
 
 
@@ -799,7 +799,7 @@ def _merge_unit(all_units: dict[str, dict], unit: dict, fp_id: str) -> None:
 #: 为什么只标注、不像 Xior 那样并进价格
 #: -----------------------------------
 #: RentCafe 的 ``Rent`` 列是**基础租金**：OurDomain 官网逐个户型分开列
-#: "Base rent" 与 "Service costs"，OurCampus 则写明 "excluding service costs
+#: "Base rent" 与 "Service costs"，Canvas 则写明 "excluding service costs
 #: and utility advances"。两家都该像 Xior 一样报到手价，但它们做不到——
 #:
 #: 服务费**按户型变**，而我们拿不到单元的户型。``rcLoadContent.ashx`` 的
@@ -831,8 +831,8 @@ SERVICE_COST_RANGES: dict[str, dict] = {
     "Amsterdam Diemen":           {"range": (248, 361), "heating": 85},
     # OurDomain：家具型 €173.62–184.61、非家具 €183.81–204.31，取并集
     "Amsterdam South-East":       {"range": (174, 204)},
-    # OurCampus：Fitness €18.37 + Recoverable €264.48–383.04
-    "OurCampus Amsterdam Diemen": {"range": (282, 401)},
+    # Canvas：Fitness €18.37 + Recoverable €264.48–383.04
+    "Canvas Amsterdam Diemen": {"range": (282, 401)},
 }
 SERVICE_COSTS_DISCOVERED = "2026-08-28"
 
@@ -868,7 +868,7 @@ def _to_listing(
     id_prefix: str = "od_",
 ) -> Listing:
     apt = unit.get("apt") or f"#{unit['unit_id']}"
-    # detail 兜底用 source 而不是写死 "OurDomain"——本函数被 OurCampus 复用
+    # detail 兜底用 source 而不是写死 "OurDomain"——本函数被 Canvas 复用
     detail = unit.get("detail") or source
     sqft = unit.get("sqft") or ""
     listing_name = _format_listing_name(city_display, apt, building_label)
@@ -887,7 +887,7 @@ def _to_listing(
     features = [
         f"Unit: {apt}",
         f"Building: {city_display}",
-        # 见 config.SOURCE_ASSUMED_FEATURES。OurCampus 复用本解析器，但它的
+        # 见 config.SOURCE_ASSUMED_FEATURES。Canvas 复用本解析器，但它的
         # 装修档位没核实过，所以按 source 取而不是写死。
         *assumed_features(source),
     ]
@@ -915,7 +915,13 @@ def _to_listing(
         features.append(f"Deposit: {unit['deposit']}")
     # 价格口径：RentCafe 的 Rent 列是基础租金，服务费另计。见
     # SERVICE_COST_RANGES 的注释——为什么只标注不并进价格。
-    note = _service_cost_note(city_display)
+    # 拿到了单元级费用明细（Canvas 租约页，见 scrapers/canvas.py）时，
+    # rent 已经是到手价，再标一段区间反而会让展示层说「另有服务费」。
+    exact = bool(unit.get("base_rent"))
+    if exact:
+        features.append(f"Base rent: {unit['base_rent']}")
+        features.append(f"Service costs amount: {unit.get('service_charges') or '€0.00'}")
+    note = None if exact else _service_cost_note(city_display)
     if note:
         features.append(f"Service costs: {note}")
     if detail:

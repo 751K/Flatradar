@@ -5,7 +5,7 @@
 > English version: [README.md](README.md)
 
 FlatRadar 监控荷兰租房市场，提供托管服务 [flatradar.app](https://flatradar.app)，
-也可以自行部署。它同时追踪 Codomo（原 Holland2Stay）、OurDomain、OurCampus、Xior、
+也可以自行部署。它同时追踪 Codomo（原 Holland2Stay）、OurDomain、Canvas、Xior、
 Magis、Student Experience 与 Plaza 七个平台，一旦出现符合所设条件的房源，即通过
 所选渠道发出通知，通知中附有直达链接。Plaza 可在用户单独启用后自动提交应征。
 
@@ -36,7 +36,7 @@ Magis、Student Experience 与 Plaza 七个平台，一旦出现符合所设条�
 
 | | |
 |---|---|
-| **监控范围** | Codomo、OurDomain、OurCampus、Xior、Magis、Student Experience、Plaza 共七个平台；新房源集中上架的时段轮询更为频繁 |
+| **监控范围** | Codomo、OurDomain、Canvas、Xior、Magis、Student Experience、Plaza 共七个平台；新房源集中上架的时段轮询更为频繁 |
 | **通知渠道** | Web、Telegram、邮件、WhatsApp、iOS 推送、Android 推送、iMessage，可同时启用多个 |
 | **筛选条件** | 租金上限、面积下限、楼层下限、户型、入住人数、城市、街区、平台、合同类型、租客要求等 |
 | **浏览方式** | 列表、地图、日历、仪表盘、图表，界面支持中英文 |
@@ -50,7 +50,7 @@ Magis、Student Experience 与 Plaza 七个平台，一旦出现符合所设条�
 | Codomo（原 Holland2Stay） | 荷兰 26 个城市 | 2026-11 改名后改为纯 HTTP 抓取，为房源的主要来源 | 仅通知（旧预订流程随改名失效） |
 | OurDomain | Amsterdam Diemen / South-East | 稳定 | 仅通知（预订链路已实现，未开放）|
 | Xior | 14 个城市共 30 栋楼，可按需选择 | 稳定 | 仅通知（预订链路已实现，未开放）|
-| OurCampus | Amsterdam Diemen（1 栋） | 已用真实 markup 校准；出房极少 | 仅通知 |
+| Canvas | Amsterdam Diemen（1 栋） | 已用真实 markup 校准；出房极少 | 仅通知 |
 | Magis | 5 城 17 栋（Eindhoven 占 9 栋） | 已用真实数据验证；纯 HTTP，无反爬 | 仅通知 |
 | Student Experience | Amsterdam（4 处）与 Leiden | 已用真实数据验证；入住日期只在详情页，故每个单元多一次请求 | 仅通知 |
 | Plaza | 13 个荷兰城市 | 已用真实数据验证；付费账号（€27.50/年）是「能应征」的门槛，不是「能看见」的门槛 | 支持自动应征，默认关闭 |
@@ -373,7 +373,7 @@ Plaza：配置用户名和密码并单独开启 Plaza 自动应征后，系统�
 选择“已核实，恢复该房源应征”。核实前仅暂停同一账号对这套房源的自动应征，
 其他房源仍可正常应征；后台任务仍在运行时不能解除保护。
 
-Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
+Xior、OurDomain、Canvas 使用 RENTCafe，共用一份实现
 （[`bookers/rentcafe.py`](../bookers/rentcafe.py)）。验证码和部分申请流程已实现，
 但各平台端到端预订尚未验证，功能仍处于**关闭**状态。
 
@@ -381,7 +381,7 @@ Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
 |---|---|---|
 | Xior | 真实账号已推进至申请表并保存草稿（2026-08-03） | 系统代传证件后能否正常保存尚未确认。草稿**不锁定房源**；下一页需填写 IBAN/SWIFT。 |
 | OurDomain | 入口段已对真实站点走通（2026-08-04）：floorplans → 可用单元 → 条款页 POST | 登录之后的环节需要真实账号验证。找不到申请表时，代码会重选一次单元；仍不匹配则中止。 |
-| OurCampus | `OurCampusBooker` 已注册、面板上可填凭据，但**用户侧关闭**（不在 `_AUTO_BOOK_SOURCES`）。真实账号实测：选中单元、条款页、Start Application（v3 一次过）、登录均已跑通 | 登录之后落到 Applicant Info 这一段没通。另外「开始申请能占住单元」已被证伪：站点写明提交只进抽签池、不锁房 |
+| Canvas | `CanvasBooker` 已注册、面板上可填凭据，但**用户侧关闭**（不在 `_AUTO_BOOK_SOURCES`）。真实账号实测：选中单元、条款页、Start Application（v3 一次过）、登录均已跑通 | 登录之后落到 Applicant Info 这一段没通。另外「开始申请能占住单元」已被证伪：站点写明提交只进抽签池、不锁房 |
 | Magis | 无 | 预订流程尚未侦察 |
 
 > 线上演示环境对普通用户关闭了自动预订。如有需要请邮件联系，或[自行部署](#快速开始)。
@@ -409,7 +409,7 @@ Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
 | 某个平台持续返回 0 条 | 可能确无房源。先查看该轮是否被标记为完整扫描，参考[房源状态与完整性](ARCHITECTURE.md#status-convergence)。 |
 | 已出租的房源仍显示为「可订」 | 该城市未被完整扫描，因而未进入收敛范围。查看 `/monitoring` 轮次表格中的 `(完整/任务)`。 |
 | 一批房源同时转为 Occupied | 若均带**「推测」**徽标则属正常：这是老化收敛的补偿执行（阈值刚调整过，或停机后首轮恢复），该过程**不发送通知**。不带徽标者才是平台实际上报。 |
-| 日志反复出现 `抓到 0 个单元，第 N/3 轮` | 属正常行为。OurDomain / OurCampus 的空结果需连续 3 轮确认，以防单轮抖动收敛整栋楼。 |
+| 日志反复出现 `抓到 0 个单元，第 N/3 轮` | 属正常行为。OurDomain / Canvas 的空结果需连续 3 轮确认，以防单轮抖动收敛整栋楼。 |
 | 容器被 OOM 终止 | 调高 `mem_limit`。每个受 Cloudflare 保护的 source 会常驻一个浏览器。 |
 | 容器无法启动，日志中出现 `FATAL` | entrypoint 的安全预检未通过：或 `Caddyfile` 仍为 `your.domain.com`，或 `WEB_PASSWORD` 为空。两者均属于拒绝暴露无鉴权面板的保护措施。 |
 | 已设置 `WEB_PASSWORD` 但无法登录 | 用户名为 `admin`，除非另行设置 `WEB_USERNAME`。 |
@@ -429,7 +429,7 @@ Xior、OurDomain、OurCampus 使用 RENTCafe，共用一份实现
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构、关键故障边界与排障入口 |
 | [API.md](API.md) | 面向移动端与外部集成的后端契约 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本历史 |
-| [CODOMO.md](CODOMO.md) · [RENTCAFE.md](RENTCAFE.md) · [XIOR.md](XIOR.md) · [OURDOMAIN.md](OURDOMAIN.md) · [PLAZA.md](PLAZA.md) · [SCRAPING_RECON.md](SCRAPING_RECON.md) | 各平台抓取侦察；`RENTCAFE.md` 写 Xior / OurDomain / OurCampus 共用的预订流程，`PLAZA.md` 只写预订侧，抓取侧连同 Magis / Student Experience 都在 `SCRAPING_RECON.md` 里 |
+| [CODOMO.md](CODOMO.md) · [RENTCAFE.md](RENTCAFE.md) · [XIOR.md](XIOR.md) · [OURDOMAIN.md](OURDOMAIN.md) · [PLAZA.md](PLAZA.md) · [SCRAPING_RECON.md](SCRAPING_RECON.md) | 各平台抓取侦察；`RENTCAFE.md` 写 Xior / OurDomain / Canvas 共用的预订流程，`PLAZA.md` 只写预订侧，抓取侧连同 Magis / Student Experience 都在 `SCRAPING_RECON.md` 里 |
 | [iOS_README.md](https://github.com/751K/FlatRadar-iOS/blob/master/docs/iOS_README.md) | iOS 客户端 — 已迁至 [FlatRadar-iOS](https://github.com/751K/FlatRadar-iOS) |
 | [ANDROID_PLAN.md](https://github.com/751K/FlatRadar-Android/blob/master/docs/ANDROID_PLAN.md) | Android 客户端 — 已迁至 [FlatRadar-Android](https://github.com/751K/FlatRadar-Android) |
 | [dataflow_ch.mmd](dataflow_ch.mmd) · [dataflow_en.mmd](dataflow_en.mmd) | 完整抓取与通知流程的 Mermaid 图 |

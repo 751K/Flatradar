@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def env(monkeypatch):
     """给一组干净的 source/城市环境变量，避免读到开发机的真实配置。"""
     for k in ("SOURCES", "CITIES", "CODOMO_CITIES", "OURDOMAIN_CITIES",
-              "OURCAMPUS_CITIES", "XIOR_CITIES"):
+              "CANVAS_CITIES", "XIOR_CITIES"):
         monkeypatch.delenv(k, raising=False)
 
     def _set(**kw):

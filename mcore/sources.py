@@ -41,7 +41,7 @@ SPECS: dict[str, SourceSpec] = {
     # 侦察完并验证过再加。凭据判定（can_auto_book）已经就位，到时只改这里。
     "codomo": SourceSpec("codomo", "Codomo", "CD", "scrapers.codomo:CodomoScraper", proxyless_capable=True),
     "ourdomain": SourceSpec("ourdomain", "OurDomain", "OD", "scrapers.ourdomain:OurDomainScraper", proxyless_capable=True),
-    "ourcampus": SourceSpec("ourcampus", "OurCampus", "OC", "scrapers.ourcampus:OurCampusScraper", proxyless_capable=True),
+    "canvas": SourceSpec("canvas", "Canvas", "CV", "scrapers.canvas:CanvasScraper", proxyless_capable=True),
     "xior": SourceSpec("xior", "Xior", "XR", "scrapers.xior:XiorScraper", browser_transport=True),
     "magis": SourceSpec("magis", "Magis", "MG", "scrapers.magis:MagisScraper"),
     "studentexperience": SourceSpec("studentexperience", "Student Experience", "SE", "scrapers.studentexperience:StudentExperienceScraper"),
@@ -65,7 +65,7 @@ AUTO_BOOK_SOURCES: tuple[str, ...] = tuple(
 
 #: 系统支持的全部平台。**新增平台只改这里。**
 #:
-#: 这个常量是补出来的：原先每处各自维护一份平台清单，于是 ``ourcampus``
+#: 这个常量是补出来的：原先每处各自维护一份平台清单，于是 ``canvas``
 #: 被漏了三次——前端的 sourceLabel（三份实现都没有它）、monitoring 页（干脆
 #: 不转换）、以及全局设置的白名单（从面板保存一次就会把它从 SOURCES 里悄悄
 #: 删掉）。漏的都是同一个平台，因为它是最后加的那个。
@@ -115,11 +115,11 @@ _SOURCE_FILTER_DIMS: dict[str, frozenset] = {
     "ourdomain": _UNIVERSAL_FILTER_DIMS | {
         "floor", "occupancy", "type", "finishing", "tenant",
     },
-    # OurCampus 复用 OurDomain 的解析器，抓得到的维度完全相同；但它至今没返回过
+    # Canvas 复用 OurDomain 的解析器，抓得到的维度完全相同；但它至今没返回过
     # 任何单元，装修档位无从核实，所以不登记 finishing。
     # tenant 不同：它不依赖单元数据，整栋恒为 student only（官网 criteria 要求
     # 在校证明，PhD 与博后明确不符合），所以可以登记。
-    "ourcampus": _UNIVERSAL_FILTER_DIMS | {"floor", "occupancy", "type", "tenant"},
+    "canvas": _UNIVERSAL_FILTER_DIMS | {"floor", "occupancy", "type", "tenant"},
     # xior 的 tenant 来自 SOURCE_ASSUMED_FEATURES，每条房源都带，可安全登记。
     "xior": _UNIVERSAL_FILTER_DIMS | {"finishing", "tenant"},
     # magis 的卡片直接给出楼层、户型、装修档位与能耗标签，12/12 条实测都能解析出，
@@ -149,7 +149,7 @@ _SOURCE_FILTER_DIMS: dict[str, frozenset] = {
     # Plaza 的 feed 是结构化 JSON，房型、楼层、租客都是主键字段而不是散文，因此
     # 三个都登记。
     #
-    # tenant 与 Xior / OurCampus / Student Experience 不同：**不是**整站断言，是
+    # tenant 与 Xior / Canvas / Student Experience 不同：**不是**整站断言，是
     # 每条房源自己的 doelgroepen（2026-09-02 快照 student 39 / regulier 16 并存）。
     # 只有 doelgroepen 恰好等于 {student} 的才写 student only——混合标记的房源
     # 不写，让该维度对它们 fail-open，而不是替站点断言「学生也能租」。
@@ -194,7 +194,7 @@ def sources_supporting_dim(dim: str) -> list[str]:
 #: **这是运营方给的断言，不是抓来的数据。** 平台改了配置这里不会自动跟着变，
 #: 因此只登记「整栋楼统一、不随房源变化」的属性；随房源变化的一律要抓。
 #:
-#: OurCampus 不在其中：整栋楼的装修档位尚未核实，不登记未经验证的事实。
+#: Canvas 不在其中：整栋楼的装修档位尚未核实，不登记未经验证的事实。
 SOURCE_ASSUMED_FEATURES: dict[str, dict[str, str]] = {
     # Xior 是纯学生盘：品牌名就是 Xior Student Housing，官网通篇「Trusted by
     # 22,000+ students for their university journey」，全站没有任何收入或雇佣
@@ -224,8 +224,8 @@ SOURCE_ASSUMED_FEATURES: dict[str, dict[str, str]] = {
     # available for students」，签约前必须通过服务门户上传在读证明，入住时必须
     # 是在校注册状态。合格身份含 study programme / internship / PhD research。
     #
-    # ⚠️ 与 OurCampus 相反：那边的 criteria 明确排除 PhD 与博后。两处都写了
-    # student only，但含义不同——本平台收 PhD，OurCampus 不收。真出现按学位分档
+    # ⚠️ 与 Canvas 相反：那边的 criteria 明确排除 PhD 与博后。两处都写了
+    # student only，但含义不同——本平台收 PhD，Canvas 不收。真出现按学位分档
     # 的筛选需求时，这两个值不能合并处理。
     #
     # Finishing 不放这里：它按户型变（Signature 有规格行、Essential 的紧凑卡片

@@ -222,7 +222,7 @@ def _run(monkeypatch, exc, *, at_batch=False, n=2):
 
 class TestDispatcherRaisesProxyError:
     def test_per_task_network_failure(self, monkeypatch):
-        """curl 系 source（OurDomain / OurCampus）走这条。"""
+        """curl 系 source（OurDomain / Canvas）走这条。"""
         with pytest.raises(ProxyError):
             _run(monkeypatch, ScrapeNetworkError(REAL_CURL_402))
 
@@ -534,10 +534,10 @@ class TestDispatchRaisesProxyError:
 #     H2S 成功（浏览器建在好线路上，缓存 2 小时）
 #       → 整轮不算全灭 → 外层处理器不触发
 #       → 代理池永远不知道那个代理挂了
-#       → OurCampus / Xior 每轮现取代理，拿到没被冷却的死代理 → 402 → 循环
+#       → Canvas / Xior 每轮现取代理，拿到没被冷却的死代理 → 402 → 循环
 #
 # 当天 08 时（本地）的实测：source 级隔离 **176 次**，真正报给代理池只有 **4 次**；
-# 同一小时 holland2stay 163/167 成功，而 ourcampus 和 xior 是 **0/167**。
+# 同一小时 holland2stay 163/167 成功，而 canvas 和 xior 是 **0/167**。
 # **H2S 的健康恰恰是把另外两家钉死的原因**——它越顺，代理池越听不到坏消息。
 #
 # 判据因此换掉：冷却要回答的是「这个代理还能不能用」，原先却拿「整轮有没有全灭」
@@ -546,7 +546,7 @@ class TestDispatchRaisesProxyError:
 P1 = "http://u1-nl-111111:pw@p.webshare.io:80"
 P2 = "http://u2-nl-222222:pw@p.webshare.io:80"
 
-DEAD_402 = ("[OurCampus Amsterdam Diemen] ourcampus 抓取失败: Failed to perform, "
+DEAD_402 = ("[Canvas Amsterdam Diemen] canvas 抓取失败: Failed to perform, "
             "curl: (56) CONNECT tunnel failed, response 402.")
 
 
@@ -568,20 +568,20 @@ class TestReportingItself:
     def test_confirmed_failure_puts_the_proxy_into_cooldown(self, pool):
         e = ProxyError(DEAD_402)
         for _ in range(config._PROXY_FAILURE_CONFIRM_THRESHOLD):
-            monitor._report_source_proxy_failure("ourcampus", e)
+            monitor._report_source_proxy_failure("canvas", e)
         assert config.is_proxy_in_cooldown(P1), "报了两次仍没冷却，池子还是会把它派出去"
         assert config.get_proxy_url() == P2, "没有落到备用代理"
 
     def test_one_blip_does_not_cool_anything(self, pool):
         """既有的「连续两次确认」阈值挡误伤：单次抖动只留一个 mark。"""
-        monitor._report_source_proxy_failure("ourcampus", ProxyError(DEAD_402))
+        monitor._report_source_proxy_failure("canvas", ProxyError(DEAD_402))
         assert not config.is_proxy_in_cooldown(P1)
         assert config.get_proxy_url() == P1
 
     def test_account_level_gets_the_long_cooldown(self, pool):
         import time
         for _ in range(config._PROXY_FAILURE_CONFIRM_THRESHOLD):
-            monitor._report_source_proxy_failure("ourcampus", ProxyError(DEAD_402))
+            monitor._report_source_proxy_failure("canvas", ProxyError(DEAD_402))
         left = config._proxy_cooldown_until[P1] - time.monotonic()
         assert left > config._PROXY_COOLDOWN_SEC, "402 没走长冷却"
 
@@ -589,7 +589,7 @@ class TestReportingItself:
         import time
         e = ProxyError("CONNECT tunnel failed, response 502")
         for _ in range(config._PROXY_FAILURE_CONFIRM_THRESHOLD):
-            monitor._report_source_proxy_failure("ourcampus", e)
+            monitor._report_source_proxy_failure("canvas", e)
         left = config._proxy_cooldown_until[P1] - time.monotonic()
         assert left <= config._PROXY_COOLDOWN_SEC
 
@@ -609,7 +609,7 @@ class TestReportingItself:
         def _boom(*a, **k):
             raise RuntimeError("代理池炸了")
         monkeypatch.setattr(config, "report_proxy_failure", _boom)
-        monitor._report_source_proxy_failure("ourcampus", ProxyError(DEAD_402))  # 不抛即通过
+        monitor._report_source_proxy_failure("canvas", ProxyError(DEAD_402))  # 不抛即通过
 
 
 class TestWiredIntoTheIsolationBranch:
@@ -652,16 +652,16 @@ class TestWiredIntoTheIsolationBranch:
 
 class TestTheScenarioThatCausedIt:
     def test_a_healthy_source_no_longer_masks_a_dead_proxy(self, pool):
-        """重放 2026-08-27 08 时：H2S 一直成功，OurCampus 每轮 402。
+        """重放 2026-08-27 08 时：H2S 一直成功，Canvas 每轮 402。
 
         修复前：整轮不算全灭 → 外层处理器不触发 → 死代理永不冷却 → 循环 167 轮。
-        修复后：OurCampus 自己那两轮就把它冷却掉，第三轮起全员改用备用代理。
+        修复后：Canvas 自己那两轮就把它冷却掉，第三轮起全员改用备用代理。
         """
         e = ProxyError(DEAD_402)
         used = []
         for _ in range(4):
-            used.append(config.get_proxy_url())     # OurCampus 每轮现取
-            monitor._report_source_proxy_failure("ourcampus", e)
+            used.append(config.get_proxy_url())     # Canvas 每轮现取
+            monitor._report_source_proxy_failure("canvas", e)
 
         assert used[0] == P1 and used[1] == P1, "前两轮用主代理（攒确认）"
         assert used[2] == P2, "第三轮就该换掉，而不是继续撞 167 轮"

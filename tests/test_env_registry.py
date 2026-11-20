@@ -87,7 +87,7 @@ def _scan_source_keys() -> dict[str, set[str]]:
                 if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
                     note(node.slice.value, path)
             elif isinstance(node, ast.Assign):
-                # _CAPTURE_PATH_ENV = "OURCAMPUS_CAPTURE_PATH" 这类间接持有
+                # _CAPTURE_PATH_ENV = "CANVAS_CAPTURE_PATH" 这类间接持有
                 for t in node.targets:
                     if not isinstance(t, ast.Name):
                         continue

@@ -1,6 +1,6 @@
 """RENTCafe / SecureRC 的 TLS 指纹冷却状态。
 
-OurDomain、OurCampus、Xior 的抓取和 RentCafe 预订打的是同一个 SecureRC，指纹
+OurDomain、Canvas、Xior 的抓取和 RentCafe 预订打的是同一个 SecureRC，指纹
 是不是「被烧了」对两边是同一个事实，所以共用这一份进程内状态——一边记下的
 403，另一边下一次就会避开。
 
@@ -19,7 +19,7 @@ def _env_int(name: str, default: int, *, min_value: int, max_value: int) -> int:
     return env_int(name, default, minimum=min_value, maximum=max_value)
 
 
-# SecureRC（OurDomain / OurCampus / Xior 的 floorplans.aspx）专用 TLS 指纹池。
+# SecureRC（OurDomain / Canvas / Xior 的 floorplans.aspx）专用 TLS 指纹池。
 #
 # **按实测挑，不按「新」挑。** 2026-09-15 从生产容器经轮换代理实测（curl_cffi
 # 0.16.3），每个指纹 3 个独立会话，每个会话打 OC 页面 GET + 单元表 POST、

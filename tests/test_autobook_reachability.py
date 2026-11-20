@@ -131,7 +131,7 @@ class TestCandidateCollection:
         """source 级的闸仍在最前面，可达性翻不过它。"""
         u = _plaza_user()
         st = FakeStorage({"u1": [{"id": 1}]})
-        cands, _ = self._collect(u, FakeNotifier(True), st, _listing(source="ourcampus"))
+        cands, _ = self._collect(u, FakeNotifier(True), st, _listing(source="canvas"))
         assert cands["u1"] == []
 
 
@@ -177,7 +177,7 @@ class TestStartupSummary:
         """allowed_sources 可以写还没实现 booker 的平台。据此警告「没填凭据」
         会让人去填一个填了也没用的东西。"""
         u = _user()
-        u.auto_book.listing_filter.allowed_sources = ["ourcampus"]
+        u.auto_book.listing_filter.allowed_sources = ["canvas"]
         assert monitor._autobook_targets(u) == []
         assert monitor._autobook_credential_gaps(u) == []
 

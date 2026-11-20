@@ -39,7 +39,7 @@ from env_utils import env_get, env_int
 # 预订，以及通知渠道的 HTTP 会话。2026-09-15 实测这三个平台对 curl_cffi 0.16.3
 # 的全部候选都是 200，所以这里按「每个家族取最新的」来选。
 #
-# SecureRC（OurDomain / OurCampus / Xior 的 floorplans.aspx）**不用这个池**，
+# SecureRC（OurDomain / Canvas / Xior 的 floorplans.aspx）**不用这个池**，
 # 它此刻一律拒绝桌面 Chrome，有自己按实测挑的池——见
 # ``scrapers.ourdomain._DEFAULT_IMPERSONATES``。
 #
@@ -80,7 +80,7 @@ _PROXY_COOLDOWN_SEC = 600  # 10 分钟
 #:
 #: 为什么要和 10 分钟分开：账户级故障**不会自己好**，10 分钟一到就把死代理放回
 #: 候选，等于每小时自伤六次。2026-08-26 生产实况——webshare 两个账号同时 402，
-#: 每 10 分钟 Xior 和 OurCampus 就各丢一轮。
+#: 每 10 分钟 Xior 和 Canvas 就各丢一轮。
 #:
 #: 为什么是 1 小时而不是更长：判错的代价是「一个其实已经充上值的代理白等」。
 #: 10 分钟 → 1 小时已经把自伤从每小时 6 次压到 1 次，再往上（比如 4 小时）边际

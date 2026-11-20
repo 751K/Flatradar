@@ -18,7 +18,7 @@ webshare 两个账号（``qrrsiysu-nl-222900`` / ``fdtlrlbo-nl-790346``）同时
 
 第三件事是分级：Xior（以及当时的 Holland2Stay）在机房 IP 上被 Cloudflare 硬挡
 （实测挑战 90 秒未解开 ×3），它们的必然失败会让 ``dispatch_scrape_tasks`` 判定
-「全员失败」，把同一轮里本来能成的 OurDomain / OurCampus 一起掀掉。
+「全员失败」，把同一轮里本来能成的 OurDomain / Canvas 一起掀掉。
 
 2026-11-16 Holland2Stay 改名 Codomo，新站是纯 HTTP 列表页，在服务器原生 IP 上
 直连实测没遇到 WAF，因此进了直连名单。
@@ -57,19 +57,19 @@ class TestProxylessGate:
         assert _apply_proxyless_gate(tasks) == tasks
 
     def test_drops_only_what_cannot_work_direct(self, degraded):
-        tasks = [_T("codomo"), _T("xior"), _T("ourdomain"), _T("ourcampus")]
+        tasks = [_T("codomo"), _T("xior"), _T("ourdomain"), _T("canvas")]
         kept = _apply_proxyless_gate(tasks)
-        assert {t.source for t in kept} == {"codomo", "ourdomain", "ourcampus"}
+        assert {t.source for t in kept} == {"codomo", "ourdomain", "canvas"}
 
     def test_the_survivors_are_the_measured_ones(self):
         """名单是在服务器上实测出来的，不是猜的。
 
-        OurDomain / OurCampus 于 2026-08-26 实测；Codomo 于 2026-11-16 实测
+        OurDomain / Canvas 于 2026-08-26 实测；Codomo 于 2026-11-16 实测
         （纯 HTTP，原生 IP 直连没遇到 WAF）。改这张表意味着推翻那次测量——
         真要改，先重测一遍。
         """
         assert _PROXYLESS_CAPABLE_SOURCES == frozenset(
-            {"codomo", "ourdomain", "ourcampus"})
+            {"codomo", "ourdomain", "canvas"})
 
     def test_xior_is_not_in_it_but_codomo_is(self):
         """Xior 被 CF 硬挡（挑战 90 秒未解开 ×3），放进来等于每轮制造必然失败。

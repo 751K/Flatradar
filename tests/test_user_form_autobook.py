@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BOOKER_ROWS = {
     "xior": "xior",
     "ourdomain": "ourdomain",
-    "ourcampus": "ourcampus",
+    "canvas": "canvas",
     "plaza": "plaza",
 }
 
@@ -40,7 +40,7 @@ def test_every_registered_booker_has_an_entry(form_html):
 
 
 def test_every_credential_field_the_parser_reads_exists_in_the_form(form_html):
-    """2026-09-17 加 OurCampus 面板时把模板里的 name 改错一个字母，所有测试仍然全绿——
+    """2026-09-17 加 Canvas 面板时把模板里的 name 改错一个字母，所有测试仍然全绿——
     因为持久化测试是直接 POST 字段名，绕过了渲染出来的表单。"""
     src = (ROOT / "app" / "forms" / "user_form.py").read_text(encoding="utf-8")
     names = set(re.findall(r'["\'](AUTO_BOOK_[A-Z0-9_]*(?:EMAIL|PASSWORD|USERNAME))["\']', src))

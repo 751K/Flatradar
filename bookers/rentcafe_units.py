@@ -66,7 +66,7 @@ _APPLY_NOW_ROW_RE = re.compile(
 )
 _ATTR_RE = re.compile(r"\b(?P<k>name|id)=[\"'](?P<v>[^\"']*)[\"']", re.I)
 #: onclick 实参。**单双引号都得认**：OurDomain 写 ``ApplyNowClick('211053',…)``，
-#: OurCampus 写 ``ApplyNowClick("456556",…)``（2026-09-15 生产留档）。只认单引号
+#: Canvas 写 ``ApplyNowClick("456556",…)``（2026-09-15 生产留档）。只认单引号
 #: 时 OC 的每一行都解析不出参数，``find_unit`` 恒为 None，表现是「已被他人选走」
 #: ——一条看起来完全正常的竞争失败，而且会进重试队列反复失败。
 _ARG_RE = re.compile(r"'([^']*)'|\"([^\"]*)\"")
@@ -145,7 +145,7 @@ def parse_unit_options(html: str) -> list[UnitOption]:
 
 
 def parse_apply_now_options(html: str, *, id_prefix: str = "od_") -> list[UnitOption]:
-    """从 OurDomain / OurCampus 的 availableunits 表解析出全部带下单按钮的单元。
+    """从 OurDomain / Canvas 的 availableunits 表解析出全部带下单按钮的单元。
 
     数据源是抓取侧那张表（``rcLoadContent.ashx?contentclass=availableunits``），
     不是某个 aspx 页——OurDomain 的选房动作发生在申请流程**开始之前**。
@@ -156,7 +156,7 @@ def parse_apply_now_options(html: str, *, id_prefix: str = "od_") -> list[UnitOp
 
     解析失败一律返回空列表，理由同 :func:`parse_unit_options`。
 
-    ``id_prefix`` 按平台传（OurDomain ``od_`` / OurCampus ``oc_``），两者共用这张
+    ``id_prefix`` 按平台传（OurDomain ``od_`` / Canvas ``oc_``），两者共用这张
     表的模板。**这里只看有没有按钮，不看按钮上的字**——``Join Lottery`` 的行也会
     返回。「这是不是抽签」由调用方用 ``scrapers.ourdomain._extract_status`` 判，
     与抓取侧同一个判据，不在这里另写一份。

@@ -236,13 +236,13 @@
     </div>
     {% if not xior_buildings %}<p class="account-help">{{ _('user_form_xior_none_monitored') }}</p>{% endif %}
     {{ ui.save_actions(label=save_label) }}
-  {% elif s.key == 'autobook' and row.key in ('ourdomain', 'ourcampus') %}
+  {% elif s.key == 'autobook' and row.key in ('ourdomain', 'canvas') %}
     {% set key = row.key | upper %}
     <div class="account-fields">
       <label class="account-field"><span>{{ _('user_form_ab_email') }}</span><input type="email" name="AUTO_BOOK_{{ key }}_EMAIL" value="{{ ab[row.key ~ '_email'] }}"></label>
       <label class="account-field"><span>{{ _('user_form_ab_pass') }}</span><input type="password" name="AUTO_BOOK_{{ key }}_PASSWORD" placeholder="{{ _('user_form_pw_keep') if ab[row.key ~ '_password'] else '' }}" autocomplete="new-password"></label>
     </div>
-    {# OurCampus 不在 monitor._AUTO_BOOK_SOURCES 里：填了凭据也不会自动跑，入口只为验证方便 #}
+    {# Canvas 不在 monitor._AUTO_BOOK_SOURCES 里：填了凭据也不会自动跑，入口只为验证方便 #}
     <p class="account-help">{{ _('badge_wip') }} · {{ '申请人信息在「申请人档案」分组里填写。' if lang == 'zh' else 'Applicant details are under Applicant profile.' }}</p>
     {{ ui.save_actions(label=save_label) }}
   {% elif s.key == 'autobook' and row.key == 'plaza' %}

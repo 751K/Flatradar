@@ -1,8 +1,12 @@
 """
-scrapers/ourcampus.py — OurCampus scraper
+scrapers/canvas.py — Canvas（原 OurCampus）scraper
 ==========================================
 
-OurCampus 是 Greystar 的另一个学生住房品牌，与 OurDomain 同属一家、**同一套
+2026-11 OurCampus 并入 Greystar 的 Canvas 品牌，平台 key 由 ``ourcampus``
+改为 ``canvas``（迁移见 mstorage/_canvas_rename.py，侦察见 docs/CANVAS.md）。
+下文 2026-11 之前的观察都是在 OurCampus 门户上做的。
+
+Canvas 是 Greystar 的学生住房品牌，与 OurDomain 同属一家、**同一套
 后端**（Webflow 前台 + RentCafe/SecureRC 后台）。因此本 scraper 直接继承
 ``OurDomainScraper``，复用它的全部机制：
 
@@ -22,7 +26,7 @@ OurCampus 是 Greystar 的另一个学生住房品牌，与 OurDomain 同属一�
 ``Book Now``，09-15 挂出的是 ``Join Lottery``——同一个页面、同一种按钮，只差
 按钮上的字。所以状态要看按钮文字，见 ``scrapers/ourdomain._extract_status``。
 接入是**产品决策**，不是因为投入产出比划算——文档里对它的评估见
-``docs/SCRAPING_RECON.md`` 的 OurCampus 历史资料。
+``docs/SCRAPING_RECON.md`` 的 Canvas 历史资料。
 
 验证状态
 --------
@@ -43,7 +47,7 @@ OurCampus 是 Greystar 的另一个学生住房品牌，与 OurDomain 同属一�
 
 结构真的不同时，基类的完整性守卫会兜住：解析不出单元且响应又不像单元面板时
 标记 incomplete，而不是误报「没有房」。但如果结构不同却仍是合法面板，仍会静默
-返回 0 个单元，所以留档不能停——``data/ourcampus_capture.txt`` 在响应内容
+返回 0 个单元，所以留档不能停——``data/canvas_capture.txt`` 在响应内容
 **发生变化时**记一行摘要，并在**有单元或疑似解析失配时**附完整 HTML。
 """
 from __future__ import annotations
@@ -51,8 +55,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import curl_cffi.requests as req
 
@@ -63,7 +69,9 @@ from .ourdomain import (
     _headers_for,
     _looks_like_availability_panel,
 )
-from .rentcafe_parse import _CONTROL_LABEL_RE, _extract_units
+from models import parse_float
+
+from .rentcafe_parse import _CONTROL_LABEL_RE, _extract_units, _normalize_date
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +94,7 @@ logger = logging.getLogger(__name__)
 # 现在按 floorplan 记住上一次写下的内容签名（单元、状态、租金、按钮文字、
 # unitrow 痕迹），签名没变就整条不写。满了轮转一代（``.1``），不再停写——
 # 停写意味着证据恰好在最需要的时候断掉。
-_CAPTURE_PATH_ENV = "OURCAMPUS_CAPTURE_PATH"
+_CAPTURE_PATH_ENV = "CANVAS_CAPTURE_PATH"
 _CAPTURE_MAX_BYTES = 8 * 1024 * 1024
 _UNITROW_HINT = re.compile(r'id=["\']unitrow_(\d+)', re.IGNORECASE)
 _LAST_SIGNATURE: dict[str, tuple] = {}
@@ -106,7 +114,7 @@ def _capture_path() -> Path:
     if override:
         return Path(override)
     from config import DATA_DIR  # 延迟导入，避免 config ↔ scrapers 循环
-    return DATA_DIR / "ourcampus_capture.txt"
+    return DATA_DIR / "canvas_capture.txt"
 
 
 def _record_capture(fp_id: str, html: str) -> None:
@@ -140,12 +148,12 @@ def _record_capture(fp_id: str, html: str) -> None:
             )
             if parsed == 0:
                 logger.warning(
-                    "OurCampus 响应含 unitrow 但解析出 0 个单元——解析器可能与"
+                    "Canvas 响应含 unitrow 但解析出 0 个单元——解析器可能与"
                     "该主题不匹配，原始 HTML 已留档到 %s", path,
                 )
             else:
                 logger.info(
-                    "OurCampus 单元有变化（%d 个），原始 HTML 已留档到 %s",
+                    "Canvas 单元有变化（%d 个），原始 HTML 已留档到 %s",
                     parsed, path,
                 )
 
@@ -154,29 +162,105 @@ def _record_capture(fp_id: str, html: str) -> None:
             fh.write(head + body)
         _LAST_SIGNATURE[fp_id] = signature  # 写成功才记，写失败下一轮重试
     except Exception:
-        logger.debug("OurCampus 抓取留档失败（已忽略）", exc_info=True)
+        logger.debug("Canvas 抓取留档失败（已忽略）", exc_info=True)
 
 
-class OurCampusScraper(OurDomainScraper):
-    """Unit-level scraper for OurCampus (Greystar / RentCafe)."""
+# ── 单元租约页：实际费用 + 抽签说明 ────────────────────────────────
+#
+# Canvas 改版后单元表的租金列一律写 ``Call for Details``，按钮是 ``Contact``
+# （2026-11-20，31 套无一例外）。实际费用只在下一步的租约页上：
+#
+#     oleapplication.aspx?stepname=RentalOptions&myOlePropertyId=…&FloorPlanID=…&UnitID=…
+#
+# 页面右侧 ``LeaseInfoSummary`` 表逐项列出 Rent、SC Other、SC Electricity、
+# SC Heating、Administration fee、Water，加起来就是每月到手价。同一页写着
+# “submitting this application enters you into the lottery for this unit”，
+# 这是 ``Contact`` 实为抽签的直接证据。
+#
+# 每个单元一次请求。费用在一个单元挂出期间基本不变，所以按 unit 缓存
+# ``_RENTAL_TTL_SEC``，常态下每轮只为新出现的单元发请求。
+_RENTAL_TTL_SEC = 12 * 3600
+_RENTAL_MAX_PER_ROUND = 60
+_RENTAL_CACHE: dict[str, tuple[float, dict]] = {}
+_LEASE_SUMMARY_RE = re.compile(
+    r"id=[\"']LeaseInfoSummary[\"'](.*?)</table>", re.IGNORECASE | re.DOTALL,
+)
+_LEASE_ROW_RE = re.compile(
+    r"<tr>\s*<td>\s*([^<]+?)\s*</td>\s*<td>(.*?)</td>\s*</tr>",
+    re.IGNORECASE | re.DOTALL,
+)
+_NON_MONEY_ROWS = ("move-in date", "lease term")
+_LOTTERY_NOTICE = "into the lottery"
+_AVAILABILITY_RE = re.compile(
+    r"data-selenium-id\s*=\s*[\"']Availability[\"']\s*>\s*(\d{1,2}-\d{1,2}-\d{4})",
+    re.IGNORECASE,
+)
 
-    source = "ourcampus"
 
-    # 独立前缀：OurCampus（property 186609）与 OurDomain（184283 / 182801）
+def _parse_rental_options(html: str) -> Optional[dict]:
+    """从租约页取 ``{"rent", "charges", "lottery", "available"}``；结构对不上返回 None。
+
+    ``rent`` 是基础租金，``charges`` 是其余各项之和（服务费、水电暖、管理费）；
+    ``available`` 是可入住日期（ISO），Contact 按钮不像 ApplyNowClick 那样带日期，
+    只能从这里拿。
+    """
+    m = _LEASE_SUMMARY_RE.search(html or "")
+    if not m:
+        return None
+    rent: Optional[float] = None
+    charges = 0.0
+    for label, cell in _LEASE_ROW_RE.findall(m.group(1)):
+        key = " ".join(label.split()).lower()
+        if key in _NON_MONEY_ROWS:
+            continue
+        value = parse_float(re.sub(r"<[^>]+>", " ", cell))
+        if value is None:
+            continue
+        if key == "rent":
+            rent = value
+        else:
+            charges += value
+    if rent is None:
+        return None
+    avail = _AVAILABILITY_RE.search(html)
+    return {
+        "rent": rent,
+        "charges": round(charges, 2),
+        "lottery": _LOTTERY_NOTICE in (html or "").lower(),
+        "available": _normalize_date(avail.group(1)) if avail else None,
+    }
+
+
+def _has_amount(text: str) -> bool:
+    return bool(re.search(r"\d", text or ""))
+
+
+class CanvasScraper(OurDomainScraper):
+    """Unit-level scraper for Canvas (Greystar / RentCafe)."""
+
+    source = "canvas"
+
+    # 独立前缀：Canvas（property 186607）与 OurDomain（184283 / 182801）
     # 是不同的 RentCafe property，unit id 跨 property 是否唯一没有保证。
     ID_PREFIX = "oc_"
 
+    # 2026-11 Canvas 并入 Greystar 的 Canvas 品牌（canvas-world.com），
+    # RentCafe 门户随之换了 host、slug 和 property ID（旧 property 186609，
+    # 旧 host 已 403）。floorplan ID 每轮从 floorplans.aspx 发现，不写死。
+    # 侦察记录见 docs/CANVAS.md。
     BASE = (
-        "https://new-ourcampus-amsterdam-diemen-rentcafewebsiteuk"
+        "https://canvas-student-amsterdam-diemen-3p-rentcafewebsiteuk"
         ".securerc.co.uk/onlineleasing"
     )
 
     BUILDINGS: dict[str, dict[str, str]] = {
         "diemen": {
-            "slug": "new-ourcampus-amsterdam-diemen",
-            "display": "OurCampus Amsterdam Diemen",
-            "short_display": "OurCampus Diemen",
-            "property_id": "186609",
+            "slug": "shell-ourcampus-amsterdam-diemen-3p",
+            # 显示名随品牌改为 Canvas（2026-11）。库里旧房源的 city / name、
+            # 订阅串和用户筛选里的旧名由 mstorage/_canvas_rename.py 一并改写。
+            "display": "Canvas Amsterdam Diemen",
+            "short_display": "Canvas Diemen",
+            "property_id": "186607",
             "type": "Studio",
             # 建筑级真实街道地址，供 geocode 用（unit 名不可 geocode）。
             # 与 OurDomain South-East（Dalsteindreef 20-40）同街，是隔壁楼。
@@ -202,7 +286,7 @@ class OurCampusScraper(OurDomainScraper):
     ) -> str:
         """POST + ``floorPlans[]`` 表单体，照抄它自己前端的调用。
 
-        OurCampus 的 floorplans.aspx 里是这么发的::
+        Canvas 的 floorplans.aspx 里是这么发的::
 
             $('#FloorPlanContainer').parent().load(
                 '/onlineleasing/rcLoadContent.ashx?contentclass=availableunits&t=' + Math.random(),
@@ -215,7 +299,7 @@ class OurCampusScraper(OurDomainScraper):
         **无法用响应区分两者对错**。所以选了「和它自己前端一致」这条——那是唯一
         有证据支持的形状。基类的 GET 形状对 OurDomain 是实测有效的，不动。
 
-        另注：OurDomain 的 host 上 POST 会触发 403，OurCampus 的 host 不会
+        另注：OurDomain 的 host 上 POST 会触发 403，Canvas 的 host 不会
         （实测 HTTP 200）。同一套 RentCafe，WAF 策略按 host 配。
         """
         url = f"{base}/rcLoadContent.ashx?contentclass=availableunits"
@@ -227,6 +311,74 @@ class OurCampusScraper(OurDomainScraper):
         _record_capture(str(fp_id), html)
         return html
 
+    def _scrape_once(self, **kwargs):
+        """在基类结果上补实际费用：单元表不再给租金时去租约页取。"""
+        all_units, complete, fp_names_by_id = super()._scrape_once(**kwargs)
+        missing = [u for u in all_units.values() if not _has_amount(u.get("rent", ""))]
+        if missing:
+            self._fill_rental_options(missing, **kwargs)
+        return all_units, complete, fp_names_by_id
+
+    def _fill_rental_options(
+        self,
+        units: list[dict],
+        *,
+        display: str,
+        base: str,
+        floorplans_url: str,
+        property_id: str,
+        proxies: dict[str, str],
+        impersonate: str,
+        **_ignored,
+    ) -> None:
+        now = time.monotonic()
+        fetched = failed = 0
+        slug_url = floorplans_url.rsplit("/", 1)[0]
+        with req.Session(impersonate=impersonate, proxies=proxies) as session:
+            for unit in units:
+                uid = unit["unit_id"]
+                cached = _RENTAL_CACHE.get(uid)
+                info = cached[1] if cached and now - cached[0] < _RENTAL_TTL_SEC else None
+                if info is None and unit.get("fp_ids") and fetched < _RENTAL_MAX_PER_ROUND:
+                    url = (
+                        f"{slug_url}/oleapplication.aspx?stepname=RentalOptions"
+                        f"&myOlePropertyId={property_id}"
+                        f"&FloorPlanID={unit['fp_ids'][0]}&UnitID={uid}&header=1"
+                    )
+                    fetched += 1
+                    try:
+                        info = _parse_rental_options(_get_text(
+                            session, url, headers=_headers_for(url, referer=floorplans_url),
+                        ))
+                    except Exception as e:  # 取不到费用不影响单元本身
+                        logger.debug("[%s] 租约页失败 unit=%s: %s", display, uid, e)
+                        info = None
+                    if info is None:
+                        failed += 1
+                    else:
+                        _RENTAL_CACHE[uid] = (now, info)
+                if info is None:
+                    # "Call for Details" 之类不是价格，留着只会让展示层显示一串字
+                    unit["rent"] = ""
+                    continue
+                total = info["rent"] + info["charges"]
+                unit["rent"] = f"€{total:.2f}"
+                unit["base_rent"] = f"€{info['rent']:.2f}"
+                unit["service_charges"] = f"€{info['charges']:.2f}"
+                if info.get("available") and not unit.get("avail_date"):
+                    unit["avail_date"] = info["available"]
+                if info["lottery"]:
+                    unit["status"] = "Available in lottery"
+                elif unit.get("status") == "Available in lottery":
+                    logger.warning(
+                        "[%s] Canvas 单元 %s 按钮判为抽签，但租约页没有抽签说明",
+                        display, uid,
+                    )
+        if fetched:
+            logger.info(
+                "[%s] Canvas 租约页取费用 %d 个（失败 %d）", display, fetched, failed,
+            )
+
     def _building_for_task(self, task: ScrapeTask) -> dict[str, str]:
         # 基类的报错文案写死了 "OurDomain"，这里换成本 source 的名字，
         # 免得配置写错时把人指向另一个平台的文档。
@@ -235,7 +387,7 @@ class OurCampusScraper(OurDomainScraper):
             task.extra.get("slug") and task.extra.get("property_id")
         ):
             raise ValueError(
-                f"Unknown OurCampus city_key={task.city_key!r}；"
+                f"Unknown Canvas city_key={task.city_key!r}；"
                 f"已知 key: {sorted(self.BUILDINGS)}，"
                 "或提供 extra.slug + extra.property_id"
             )

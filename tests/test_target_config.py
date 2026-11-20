@@ -94,10 +94,10 @@ class TestValidConfigIsSilent:
     def test_the_real_production_values(self):
         """生产在用的这一组必须干净，否则升级上去满屏 ERROR。"""
         assert tc.validate({
-            "SOURCES": "codomo,ourdomain,ourcampus,xior",
+            "SOURCES": "codomo,ourdomain,canvas,xior",
             "CODOMO_CITIES": "Eindhoven,29|Amsterdam,24",
             "OURDOMAIN_CITIES": "Amsterdam Diemen,diemen",
-            "OURCAMPUS_CITIES": "OurCampus Amsterdam Diemen,diemen",
+            "CANVAS_CITIES": "Canvas Amsterdam Diemen,diemen",
             "SHARD_SIZES": "xior:4",
             "SOURCE_MIN_INTERVALS": "xior:180",
         }) == []
@@ -324,7 +324,7 @@ class TestRegistryDrift:
         attr = {
             "CODOMO_CITIES": "codomo_cities",
             "OURDOMAIN_CITIES": "ourdomain_cities",
-            "OURCAMPUS_CITIES": "ourcampus_cities",
+            "CANVAS_CITIES": "canvas_cities",
             "XIOR_CITIES": "xior_cities",
             "MAGIS_CITIES": "magis_cities",
             "STUDENTEXPERIENCE_CITIES": "studentexperience_cities",

@@ -374,7 +374,7 @@ def user_new() -> Any:
         type_options=localize_options("Type", opts["Type"]),
         city_options=city_names,
         # 平台清单来自 config.KNOWN_SOURCES —— 别在模板里再写死一份，
-        # ourcampus 就是这么被漏了三次的
+        # canvas 就是这么被漏了三次的
         source_options=[(k, source_display_name(k)) for k in KNOWN_SOURCES],
         contract_options=localize_options("Contract", opts["Contract"]),
         tenant_options=localize_options("Tenant", opts["Tenant"]),
@@ -558,7 +558,7 @@ def user_edit(user_id: str) -> Any:
         type_options=localize_options("Type", opts["Type"]),
         city_options=city_names,
         # 平台清单来自 config.KNOWN_SOURCES —— 别在模板里再写死一份，
-        # ourcampus 就是这么被漏了三次的
+        # canvas 就是这么被漏了三次的
         source_options=[(k, source_display_name(k)) for k in KNOWN_SOURCES],
         contract_options=localize_options("Contract", opts["Contract"]),
         tenant_options=localize_options("Tenant", opts["Tenant"]),

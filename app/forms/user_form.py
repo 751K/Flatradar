@@ -311,9 +311,9 @@ def build_user_from_form(
         # ── OurDomain ──
         ourdomain_email=form.get("AUTO_BOOK_OURDOMAIN_EMAIL", ""),
         ourdomain_password=_secret("AUTO_BOOK_OURDOMAIN_PASSWORD", ex_ab.ourdomain_password if ex_ab else ""),
-        # ── OurCampus（RENTCafe，另一个租户）──
-        ourcampus_email=form.get("AUTO_BOOK_OURCAMPUS_EMAIL", ""),
-        ourcampus_password=_secret("AUTO_BOOK_OURCAMPUS_PASSWORD", ex_ab.ourcampus_password if ex_ab else ""),
+        # ── Canvas（RENTCafe，另一个租户）──
+        canvas_email=form.get("AUTO_BOOK_CANVAS_EMAIL", ""),
+        canvas_password=_secret("AUTO_BOOK_CANVAS_PASSWORD", ex_ab.canvas_password if ex_ab else ""),
         # ── Plaza（用户名，不是邮箱）──
         plaza_username=form.get("AUTO_BOOK_PLAZA_USERNAME", ""),
         plaza_password=_secret("AUTO_BOOK_PLAZA_PASSWORD", ex_ab.plaza_password if ex_ab else ""),

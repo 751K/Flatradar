@@ -238,7 +238,7 @@ class TestSharedFrontendHelpers:
         """map.html 里不许再出现第二套判据。
 
         这个仓库有过 sourceLabel 在 map / calendar / stats 各写一份、
-        三份都漏掉 ourcampus 的先例。
+        三份都漏掉 canvas 的先例。
         """
         assert "indexOf('lottery')" not in self._mapjs(), \
             "map.html 里又写了一份分桶判据"

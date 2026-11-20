@@ -48,7 +48,7 @@ _REPEAT_INTERVAL = float(os.environ.get("WATCHDOG_REPEAT_INTERVAL", "21600"))
 # 全局静默的判据在 mcore/health.py 的 SILENT_SECONDS —— **按时间不按轮数**。
 # 这里原先是 `_SILENT_ROUNDS = 6`（连续 6 轮全站 0 条），2026-08-25 换掉：
 # 高峰期一轮 60 秒，6 轮就是 6 分钟，而「全站 0 条」现在本来就是常态
-# （feed 只列可订房源、OurCampus 三个月 1 条、Xior 常态零可订）。当天报了
+# （feed 只列可订房源、Canvas 三个月 1 条、Xior 常态零可订）。当天报了
 # 两次，两次都是正常状态。理由与阈值见那个常量的注释。
 
 LEVEL_WARN = "warn"

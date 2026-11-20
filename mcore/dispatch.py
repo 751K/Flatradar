@@ -51,7 +51,7 @@ def apply_proxyless_gate(tasks: list) -> list:
     2026-08-26 生产实况：webshare 两个账号同时 402，五次「降级直连原生 IP」，
     **一轮都没抓成**——过 Cloudflare 的 source 在直连下必然失败，而
     ``dispatch_scrape_tasks`` 的判据是「全员失败就上抛 ProxyError」，于是它们
-    的必然失败把同一轮里本来能成的 OurDomain / OurCampus 一起掀掉了。
+    的必然失败把同一轮里本来能成的 OurDomain / Canvas 一起掀掉了。
 
     摘掉之后这一轮就只剩打得通的那些，成功数不再是 0，整轮也就不会被上抛的
     ProxyError 中止。代价是这些 source 在代理恢复前完全不抓——但它们本来也

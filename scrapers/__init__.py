@@ -380,7 +380,7 @@ __all__ = [
     "AbstractScraper",
     "BlockedError",
     "CodomoScraper",
-    "OurCampusScraper",
+    "CanvasScraper",
     "OurDomainScraper",
     "XiorScraper",
     "ProxyError",

@@ -1,7 +1,7 @@
-"""OurCampusBooker：与 OurDomain 同一套流程，只做到「开始申请」。
+"""CanvasBooker：与 OurDomain 同一套流程，只做到「开始申请」。
 
 它**没有注册**进 ``BOOKER_REGISTRY``——「开始申请能占住单元」这个前提还没实测
-（见 ``bookers/rentcafe.py`` 里 ``OurCampusBooker`` 的说明）。这里钉的是已经
+（见 ``bookers/rentcafe.py`` 里 ``CanvasBooker`` 的说明）。这里钉的是已经
 有实证的部分：OC 的单元表只认 POST、按钮文字决定能不能开始、终点停在
 Applicant Info 且不碰证件和保存。
 """
@@ -13,30 +13,30 @@ from unittest.mock import patch
 import pytest
 
 from bookers.base import BookingRequest
-from bookers.rentcafe import OurCampusBooker, OurDomainBooker
+from bookers.rentcafe import CanvasBooker, OurDomainBooker
 from bookers.rentcafe_units import find_unit, parse_apply_now_options
 from config import AutoBookConfig
 from bookers.applicant_profile import ApplicantProfile
 from models import Listing
-from scrapers.ourcampus import OurCampusScraper
+from scrapers.canvas import CanvasScraper
 from tests.test_ourdomain_booker import _FakeSession as _ODFakeSession
 from users import UserConfig
 
 #: 生产留档原样取出的 availableunits 响应（fp=1113259，单元 #2301，Join Lottery）。
 LOTTERY_UNITS = (
-    Path(__file__).parent / "fixtures" / "ourcampus_availableunits_lottery.html"
+    Path(__file__).parent / "fixtures" / "canvas_availableunits_lottery.html"
 ).read_text(encoding="utf-8")
 #: 同一份响应，按钮换成 08-27 实测的 Book Now——两者只差这几个字。
 BOOK_NOW_UNITS = LOTTERY_UNITS.replace("Join Lottery", "Book Now")
 
-CITY = OurCampusScraper.BUILDINGS["diemen"]["display"]
-OC_HOST = "new-ourcampus-amsterdam-diemen-rentcafewebsiteuk.securerc.co.uk"
+CITY = CanvasScraper.BUILDINGS["diemen"]["display"]
+OC_HOST = "canvas-student-amsterdam-diemen-3p-rentcafewebsiteuk.securerc.co.uk"
 
 
 def _user(*, email="me@oc.nl", password="pw", profile=None, consent="") -> UserConfig:
     return UserConfig(id="u1", name="U", auto_book=AutoBookConfig(
         enabled=True, dry_run=False,
-        ourcampus_email=email, ourcampus_password=password,
+        canvas_email=email, canvas_password=password,
         applicant_profile=profile or ApplicantProfile(),
         screening_consent_at=consent,
     ))
@@ -44,22 +44,22 @@ def _user(*, email="me@oc.nl", password="pw", profile=None, consent="") -> UserC
 
 def _listing(lid="oc_456556", city=CITY) -> Listing:
     return Listing(
-        id=lid, name="OurCampus Diemen #2301", status="Available to book",
+        id=lid, name="Canvas Diemen #2301", status="Available to book",
         price_raw="€ 823", available_from="2026-10-08", features=[],
-        url=f"https://{OC_HOST}/onlineleasing/new-ourcampus-amsterdam-diemen/floorplans.aspx",
-        city=city, source="ourcampus",
+        url=f"https://{OC_HOST}/onlineleasing/shell-ourcampus-amsterdam-diemen-3p/floorplans.aspx",
+        city=city, source="canvas",
     )
 
 
 class _FakeSession(_ODFakeSession):
-    def __init__(self, api_key, source="ourcampus"):
+    def __init__(self, api_key, source="canvas"):
         super().__init__(api_key, source)
         _FakeSession.instances.append(self)   # 父类记在它自己的列表上
         self.units_html = BOOK_NOW_UNITS
         self.posted_units = []
 
     def ole_url(self, page):
-        return f"https://{OC_HOST}/onlineleasing/new-ourcampus-amsterdam-diemen/{page}"
+        return f"https://{OC_HOST}/onlineleasing/shell-ourcampus-amsterdam-diemen-3p/{page}"
 
     def content_url(self, query):
         return f"https://{OC_HOST}/onlineleasing/rcLoadContent.ashx?{query}"
@@ -92,7 +92,7 @@ def _reset():
     _FakeSession.instances = []
 
 
-def _book(listing=None, user=None, session_cls=_FakeSession, booker_cls=OurCampusBooker):
+def _book(listing=None, user=None, session_cls=_FakeSession, booker_cls=CanvasBooker):
     req = BookingRequest(listing=listing or _listing(), user=user or _user())
     with patch("bookers.rentcafe.RentCafeSession", session_cls), \
          patch("applicant_docs.load", lambda uid: ("p.pdf", b"x")):
@@ -120,26 +120,26 @@ class TestParsingTheRealRow:
 
 class TestPlatformHooks:
     def test_id_prefix_matches_the_scraper(self):
-        assert OurCampusBooker.id_prefix == OurCampusScraper.ID_PREFIX
+        assert CanvasBooker.id_prefix == CanvasScraper.ID_PREFIX
 
-    def test_building_resolves_from_ourcampus_metadata(self):
-        b = OurCampusBooker()
+    def test_building_resolves_from_canvas_metadata(self):
+        b = CanvasBooker()
         assert b._building_key(_listing()) == "diemen"
         assert OurDomainBooker()._building_key(_listing()) == "", (
             "OurDomain 的楼栋表里不该认得 OC 的楼")
 
     def test_entry_is_the_oc_host_not_ourdomain(self):
         """拿错 BASE 会登录到 OurDomain 的门户上去开申请。"""
-        b = OurCampusBooker()
+        b = CanvasBooker()
         url = b._floorplans_url(b._building(_listing()))
-        assert url == f"https://{OC_HOST}/onlineleasing/new-ourcampus-amsterdam-diemen/floorplans.aspx"
+        assert url == f"https://{OC_HOST}/onlineleasing/shell-ourcampus-amsterdam-diemen-3p/floorplans.aspx"
 
-    def test_account_comes_from_the_ourcampus_fields(self):
+    def test_account_comes_from_the_canvas_fields(self):
         ab = AutoBookConfig(ourdomain_email="od@x", ourdomain_password="od",
-                            ourcampus_email="oc@x", ourcampus_password="oc")
-        assert OurCampusBooker()._account_for(ab, "diemen") == ("oc@x", "oc")
+                            canvas_email="oc@x", canvas_password="oc")
+        assert CanvasBooker()._account_for(ab, "diemen") == ("oc@x", "oc")
 
-    def test_ourdomain_credentials_do_not_leak_into_ourcampus(self):
+    def test_ourdomain_credentials_do_not_leak_into_canvas(self):
         ab = AutoBookConfig(ourdomain_email="od@x", ourdomain_password="od")
         r = _book(user=UserConfig(id="u", name="U", auto_book=ab))
         assert r.phase == "not_configured"
@@ -181,7 +181,7 @@ class TestStopsAtApplicantInfo:
 
     def test_pay_url_is_the_application_entry(self):
         r = _book()
-        assert r.pay_url.endswith("new-ourcampus-amsterdam-diemen/oleapplication.aspx")
+        assert r.pay_url.endswith("shell-ourcampus-amsterdam-diemen-3p/oleapplication.aspx")
         assert r.contract_start_date == "8-10-2026"
 
     def test_message_does_not_claim_the_unit_is_held(self):
@@ -270,7 +270,7 @@ class TestUnitTable403RotatesFingerprint:
     def test_gives_up_as_blocked_after_bounded_reopens(self):
         r, cooled, s = self._run(set(self.POOL))
         assert r.phase == "blocked" and r.success is False
-        assert s.opens == OurCampusBooker._UNITS_403_REOPENS + 1, "重开次数必须有上限"
+        assert s.opens == CanvasBooker._UNITS_403_REOPENS + 1, "重开次数必须有上限"
         assert cooled == self.POOL[: s.opens]
         assert "chrome124" in r.message
 
@@ -282,10 +282,10 @@ class TestUnitTable403RotatesFingerprint:
 # ── 未注册 ───────────────────────────────────────────────────────────
 
 def test_registered_so_the_panel_entry_is_reachable():
-    """2026-09-17 起注册：面板上有 OurCampus 的凭据入口，二者必须成对出现
+    """2026-09-17 起注册：面板上有 Canvas 的凭据入口，二者必须成对出现
     （tests/test_user_form_autobook_layout.py 按 registry 数面板）。"""
     from bookers import BOOKER_REGISTRY
-    assert BOOKER_REGISTRY["ourcampus"] is OurCampusBooker
+    assert BOOKER_REGISTRY["canvas"] is CanvasBooker
 
 
 def test_not_in_auto_book_sources_until_the_flow_works():
@@ -297,7 +297,7 @@ def test_not_in_auto_book_sources_until_the_flow_works():
     available）。这条挂了说明有人开放了它——先确认那一段真跑通过。
     """
     from monitor import _AUTO_BOOK_SOURCES
-    assert "ourcampus" not in _AUTO_BOOK_SOURCES
+    assert "canvas" not in _AUTO_BOOK_SOURCES
 
 
 def test_credentials_typed_in_the_panel_are_persisted(admin_client):
@@ -305,16 +305,16 @@ def test_credentials_typed_in_the_panel_are_persisted(admin_client):
     但库里是空的，验证时还以为是登录逻辑坏了。"""
     r = admin_client.post("/users/new", data={
         "name": "oc-ui", "csrf_token": "test_csrf",
-        "AUTO_BOOK_OURCAMPUS_EMAIL": "me@oc.nl",
-        "AUTO_BOOK_OURCAMPUS_PASSWORD": "pw-oc",
+        "AUTO_BOOK_CANVAS_EMAIL": "me@oc.nl",
+        "AUTO_BOOK_CANVAS_PASSWORD": "pw-oc",
     }, headers={"X-CSRF-Token": "test_csrf"}, follow_redirects=True)
     assert r.status_code == 200
 
     from users import load_users
     u = next((x for x in load_users() if x.name == "oc-ui"), None)
     assert u is not None
-    assert u.auto_book.ourcampus_email == "me@oc.nl"
-    assert u.auto_book.ourcampus_password == "pw-oc"
+    assert u.auto_book.canvas_email == "me@oc.nl"
+    assert u.auto_book.canvas_password == "pw-oc"
 
 
 # ── 凭据存取 ─────────────────────────────────────────────────────────
@@ -327,17 +327,17 @@ class TestCredentialStorage:
         from users import _user_to_row
 
         u = UserConfig(name="t")
-        u.auto_book = AutoBookConfig(ourcampus_email="oc@x", ourcampus_password="pw")
+        u.auto_book = AutoBookConfig(canvas_email="oc@x", canvas_password="pw")
         ab = json.loads(_user_to_row(u)["auto_book_json"])
-        assert ab["ourcampus_password"] != "pw", "明文进库了"
-        assert decrypt(ab["ourcampus_password"]) == "pw"
+        assert ab["canvas_password"] != "pw", "明文进库了"
+        assert decrypt(ab["canvas_password"]) == "pw"
 
     def test_load_decrypts(self):
         from crypto import encrypt
         from users import _ab_from_dict
 
-        ab = _ab_from_dict({"ourcampus_email": "oc@x", "ourcampus_password": encrypt("pw")})
-        assert (ab.ourcampus_email, ab.ourcampus_password) == ("oc@x", "pw")
+        ab = _ab_from_dict({"canvas_email": "oc@x", "canvas_password": encrypt("pw")})
+        assert (ab.canvas_email, ab.canvas_password) == ("oc@x", "pw")
 
     def test_blank_password_keeps_the_stored_one(self, admin_client):
         """密码框留空 = 不改密码（和其余平台一致）。每次保存都要重打一遍太荒谬，
@@ -345,19 +345,19 @@ class TestCredentialStorage:
         from users import load_users, save_users
 
         u = UserConfig(name="oc-keep")
-        u.auto_book = AutoBookConfig(ourcampus_email="oc@x", ourcampus_password="pw")
+        u.auto_book = AutoBookConfig(canvas_email="oc@x", canvas_password="pw")
         save_users(load_users() + [u])
         uid = next(x.id for x in load_users() if x.name == "oc-keep")
 
         r = admin_client.post(f"/users/{uid}", data={
             "name": "oc-keep", "csrf_token": "test_csrf",
-            "AUTO_BOOK_OURCAMPUS_EMAIL": "oc@x",
-            "AUTO_BOOK_OURCAMPUS_PASSWORD": "",
+            "AUTO_BOOK_CANVAS_EMAIL": "oc@x",
+            "AUTO_BOOK_CANVAS_PASSWORD": "",
         }, headers={"X-CSRF-Token": "test_csrf"}, follow_redirects=True)
         assert r.status_code == 200
 
         got = next(x for x in load_users() if x.id == uid).auto_book
-        assert (got.ourcampus_email, got.ourcampus_password) == ("oc@x", "pw")
+        assert (got.canvas_email, got.canvas_password) == ("oc@x", "pw")
 
 
 # ── 条款页说明 ───────────────────────────────────────────────────────
@@ -374,7 +374,7 @@ class TestTermsPageNotices:
 
     def test_ignores_scripts_and_unrelated_text(self):
         from bookers.rentcafe import terms_page_notices
-        html = ("<script>var lottery = 'reserve';</script><p>Welcome to OurCampus.</p>"
+        html = ("<script>var lottery = 'reserve';</script><p>Welcome to Canvas.</p>"
                 "<p>We will hold your deposit until move-in.</p>")
         assert terms_page_notices(html) == ["We will hold your deposit until move-in."]
 
@@ -402,7 +402,7 @@ class TestTermsPageNotices:
 class TestServerMessages:
     """RENTCafe 用一段 JS 说话，不用 HTTP 状态码，正文里可能一个字都没有。
 
-    2026-09-17 OurCampus 实测：登录后重选单元被拒，整个响应 1237 字节，全部信息
+    2026-09-17 Canvas 实测：登录后重选单元被拒，整个响应 1237 字节，全部信息
     都在 ``$.showMessage({...text:"..."})`` 里。不解析它，用户只会看到
     「不知道为什么失败」。
     """

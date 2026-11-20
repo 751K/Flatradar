@@ -1,6 +1,6 @@
 # RENTCafe 预订流程与验证状态
 
-本文记录 Xior、OurDomain、OurCampus 共用的 RENTCafe（SecureRC）自动预订流程：入口
+本文记录 Xior、OurDomain、Canvas 共用的 RENTCafe（SecureRC）自动预订流程：入口
 差异、请求契约、验证码、已知边界与未验证事项。实现以
 [bookers/rentcafe.py](../bookers/rentcafe.py)、[bookers/rentcafe_form.py](../bookers/rentcafe_form.py)、
 [bookers/rentcafe_units.py](../bookers/rentcafe_units.py) 和
@@ -18,7 +18,7 @@
 |---|---|---|
 | Xior | `XiorBooker` | `applyOnlineURL` 已预填单元参数，选房在**登录之后** |
 | OurDomain | `OurDomainBooker` | 入口自行构造，选房在**登录之前** |
-| OurCampus | `OurCampusBooker` | 与 OurDomain 相同，单元表只认 POST + `floorPlans[]` |
+| Canvas | `CanvasBooker` | 与 OurDomain 相同，单元表只认 POST + `floorPlans[]` |
 
 **三个平台都未开放给用户。** `monitor._AUTO_BOOK_SOURCES` 由
 [mcore/sources.py](../mcore/sources.py) 的 `SourceSpec.auto_bookable` 派生，当前只有
@@ -50,9 +50,9 @@ Xior 于 2026-08-03 使用真实账号与真实单元完整走过一次六步流
 |---|---|---|
 | Xior | ⑥（被证件要求拦住） | 代传证件后能否保存 |
 | OurDomain | ③（入口段，2026-08-04） | ④ Start Application 起未执行 |
-| OurCampus | Start Application、登录（2026-09-17） | 登录后落到 Applicant Info |
+| Canvas | Start Application、登录（2026-09-17） | 登录后落到 Applicant Info |
 
-OurCampus 的 v3 表现与 Xior 不同：2026-09-17 实测 Start Application 一次通过、
+Canvas 的 v3 表现与 Xior 不同：2026-09-17 实测 Start Application 一次通过、
 不回退 v2，约 15 秒；凭据错误时 16 秒内报 `auth_failed`。按平台分别观察，不要互相
 套用。
 
@@ -87,15 +87,15 @@ OurDomain 的条款步骤是独立页面，且入口需要自行构造（平台�
 **二者位置不同，写错不会报错**，只会带一组错位参数提交。因此两个平台各自保留解析
 函数（[bookers/rentcafe_units.py](../bookers/rentcafe_units.py)），不要合并。
 
-### 3.3 OurCampus：同 OurDomain，但登录后重选有副作用
+### 3.3 Canvas：同 OurDomain，但登录后重选有副作用
 
-OurCampus 的单元表只认 POST + `floorPlans[]` 表单体，与抓取侧的
-`OurCampusScraper._fetch_units_html` 同一形状。
+Canvas 的单元表只认 POST + `floorPlans[]` 表单体，与抓取侧的
+`CanvasScraper._fetch_units_html` 同一形状。
 
 2026-09-17 实测：登录后若未落到 Applicant Info，兜底的「重选单元」会让服务端返回
 `Unit is not available. Please select another unit.`，而同一时刻抓取侧仍列着该房源
 ——**是这个兜底动作本身破坏了上下文**。排查时用
-`tools/ourcampus_booker_probe.py --diagnose` 摊开登录后的页面，不要把它当成房源消失。
+`tools/canvas_booker_probe.py --diagnose` 摊开登录后的页面，不要把它当成房源消失。
 
 ## 4. 流程结构
 
@@ -234,7 +234,7 @@ token 均填入 `g-recaptcha-response-v3`。该表编码在
 `callReCaptchaV2Rentable()`，把标志置为 `true` 并渲染 v2 checkbox。因此正常路径下
 每次提交只需 1 个 v3 token，回退 v2 时再加 1 个。
 
-**各平台表现不同**：Xior 的 v3 token 每次被拒、v2 回退是常态（约 100 秒/次）；OurCampus
+**各平台表现不同**：Xior 的 v3 token 每次被拒、v2 回退是常态（约 100 秒/次）；Canvas
 2026-09-17 实测 v3 一次通过（约 15 秒）。成本估算按平台实际表现取，不要用一个数套
 三个平台。
 
@@ -286,7 +286,7 @@ application process, all administration fees will need to be paid」。
 验证过「不付款就一定不锁定」，因此代码在 `application_started` 的文案里也不说
 「已锁定」。
 
-OurCampus 2026-09-17 的情况更明确：条款页写着
+Canvas 2026-09-17 的情况更明确：条款页写着
 `submitting this application enters you into the lottery for this unit; it does not
 reserve the apartment`，且 Furnished 房源已改为抽签，所以它的 booker 只负责把申请
 开到填表页，不承诺占住。
@@ -318,7 +318,7 @@ RENTCafe 另设 IP 级尝试次数限制，连续失败锁定 30 分钟，因此
 3. **application fee 的金额与支付方式**，页面未给出。
 4. **登录锁定的作用域是账号还是 IP。** 已确认存在连续输错密码后的锁定；若是 IP 级，
    同一出口上的其他用户会被牵连。
-5. **OurDomain / OurCampus 的剩余项**：登录后单元上下文是否保留、账号是全局一套
+5. **OurDomain / Canvas 的剩余项**：登录后单元上下文是否保留、账号是全局一套
    还是每栋楼一套、申请表字段是否与 Xior 相同（`STU_*` 三项很可能不存在，缺失时
    抛 `FormShapeChangedError` 是正确行为，宁可中止也不提交字段不全的申请）。
 

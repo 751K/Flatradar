@@ -504,13 +504,14 @@ class StorageBase:
         # listings.city_normalized：归一后的城市名。
         #
         # `city` 这一列在四个平台上存的不是同一种东西——H2S 存真城市
-        # （Eindhoven），Xior / OurDomain / OurCampus 存楼盘名（Utrecht Willem
+        # （Eindhoven），Xior / OurDomain / Canvas 存楼盘名（Utrecht Willem
         # Dreeslaan、Amsterdam Diemen）。而筛选是精确匹配，勾「Utrecht」就收不到
         # Xior 在 Utrecht 的那些房。原值仍然保留并照常展示，筛选走这一列。
         self._add_column_if_missing(
             "listings", "city_normalized", "TEXT NOT NULL DEFAULT ''",
         )
         self._rename_holland2stay_to_codomo()
+        self._rename_ourcampus_to_canvas()
         self._backfill_city_normalized()
         self.retire_surplus_sessions_globally()
         self._retire_legacy_notification_backlog()
@@ -524,6 +525,18 @@ class StorageBase:
                 "CREATE INDEX IF NOT EXISTS idx_listings_city_effective "
                 "ON listings(COALESCE(NULLIF(city_normalized,''), city))"
             )
+
+    def _rename_ourcampus_to_canvas(self) -> None:
+        """平台 key ``ourcampus`` → ``canvas``，只跑一次。见 mstorage/_canvas_rename.py。"""
+        from ._canvas_rename import MIGRATION_KEY, rename_ourcampus
+
+        if self.get_meta(MIGRATION_KEY, default=""):
+            return
+        stats = rename_ourcampus(self._conn)
+        self.set_meta(MIGRATION_KEY, _dt.now(_tz.utc).isoformat())
+        if any(stats.values()):
+            logger.info("平台改名 ourcampus → canvas：%s",
+                        ", ".join(f"{k} {v}" for k, v in stats.items() if v))
 
     def _rename_holland2stay_to_codomo(self) -> None:
         """平台 key ``holland2stay`` → ``codomo``，只跑一次。见 mstorage/_codomo_rename.py。"""

@@ -71,7 +71,7 @@ def settings() -> Any:
         selected_sources = request.form.getlist("source_selected")
         # 用 config.KNOWN_SOURCES（模块级已导入；**别在这里再 import 一次**，
         # 函数内的 import 会把它变成整个函数的局部变量，GET 分支渲染时就会
-        # UnboundLocalError）。原先这里写死了三个平台，漏掉 ourcampus，从面板
+        # UnboundLocalError）。原先这里写死了三个平台，漏掉 canvas，从面板
         # 保存一次就会把它从 SOURCES 里悄悄删掉。
         sources = [s for s in selected_sources if s in KNOWN_SOURCES]
         if not sources:

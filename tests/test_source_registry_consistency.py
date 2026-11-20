@@ -15,7 +15,7 @@ def test_source_registries_cover_the_same_platforms():
 
 def test_source_order_is_stable():
     assert KNOWN_SOURCES == (
-        "codomo", "ourdomain", "ourcampus", "xior", "magis",
+        "codomo", "ourdomain", "canvas", "xior", "magis",
         "studentexperience", "plaza",
     )
 

@@ -64,7 +64,7 @@ from mcore.registry import (  # noqa: F401  （从 config 拆出，保留 re-exp
     FIN_UNFURNISHED as _FIN_UNFURNISHED,
     KNOWN_CODOMO_CITIES,
     KNOWN_MAGIS_CITIES,
-    KNOWN_OURCAMPUS_CITIES,
+    KNOWN_CANVAS_CITIES,
     KNOWN_OURDOMAIN_CITIES,
     KNOWN_PLAZA_CITIES,
     KNOWN_STUDENTEXPERIENCE_CITIES,
@@ -223,7 +223,7 @@ class TargetFilter:
 # 各平台曾各有一个字段完全相同的 dataclass，保留旧名作别名。
 CodomoCityFilter = TargetFilter
 OurDomainCityFilter = TargetFilter
-OurCampusCityFilter = TargetFilter
+CanvasCityFilter = TargetFilter
 MagisCityFilter = TargetFilter
 PlazaCityFilter = TargetFilter
 StudentExperienceCityFilter = TargetFilter
@@ -298,7 +298,7 @@ class Config:
     source_peak_min_intervals: dict[str, int] = field(default_factory=dict)
     codomo_cities: list[CodomoCityFilter] = field(default_factory=list)
     ourdomain_cities: list[OurDomainCityFilter] = field(default_factory=list)
-    ourcampus_cities: list[OurCampusCityFilter] = field(default_factory=list)
+    canvas_cities: list[CanvasCityFilter] = field(default_factory=list)
     xior_cities: list[XiorCityFilter] = field(default_factory=list)
     magis_cities: list[MagisCityFilter] = field(default_factory=list)
     studentexperience_cities: list[StudentExperienceCityFilter] = field(
@@ -563,7 +563,7 @@ def load_config(*, environ=None) -> Config:
     CODOMO_CITIES           格式 "城市名,key|城市名,key"，默认 "Eindhoven,29"
                             （旧键 CITIES 仍认）
     OURDOMAIN_CITIES        格式 "显示名,key|显示名,key"，启用 ourdomain 时默认 Amsterdam Diemen
-    OURCAMPUS_CITIES        同上格式，启用 ourcampus 时默认 OurCampus Amsterdam Diemen
+    CANVAS_CITIES        同上格式，启用 canvas 时默认 Canvas Amsterdam Diemen
     SHADOW_SOURCES          逗号分隔。列出的 source 照常抓取入库但**不发通知**，
                             用于新平台的静默验证。必须是 SOURCES 的子集
     DB_PATH                 str，默认 "data/listings.db"
@@ -601,10 +601,10 @@ def load_config(*, environ=None) -> Config:
 
     # 影子 source：抓但不通知。只保留同时也在 sources 里的，否则是配置笔误。
     #
-    # 但"静默丢弃"会造出一个很难看穿的假象：SHADOW_SOURCES 里列着 ourcampus，
+    # 但"静默丢弃"会造出一个很难看穿的假象：SHADOW_SOURCES 里列着 canvas，
     # 而 SOURCES 里没有它——看配置像是"影子模式跑着"，实际上它压根没被抓，
     # 数据健康面板上自然也没有它的卡片。2026-08-04 线上就是这个状态，
-    # 而且是从设置面板保存一次（旧版白名单漏了 ourcampus）无声造成的。
+    # 而且是从设置面板保存一次（旧版白名单漏了 canvas）无声造成的。
     # 所以留一条 WARNING：影子名单里的 source 不在 sources 里，一定要说出来。
     _shadow_raw = _target_parse(
         "SHADOW_SOURCES", parse_sources, environ.get("SHADOW_SOURCES", ""))

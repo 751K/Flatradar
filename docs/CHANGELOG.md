@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.3.0 (2026-11-20)
+
+* **OurCampus 改名 Canvas**
+
+    OurCampus 已并入 Greystar 的 Canvas 品牌（ourcampus.nl 跳到 canvas-world.com），
+    平台 key 由 `ourcampus` 改为 `canvas`，楼盘名改为 `Canvas Amsterdam Diemen`，
+    订阅键改为 `CANVAS_CITIES`（`.env` 里的旧键 `OURCAMPUS_CITIES` 仍然认）。
+    新增一次性迁移（meta 标记 `canvas_rename_v1`），改写存量房源的平台与楼盘名、
+    用户的平台 / 楼盘筛选、自动预订凭据键（`ourcampus_*` → `canvas_*`，密文原样搬）
+    和平台设置，并删除旧门户遗留的熔断与告警状态。房源 id 前缀保持 `oc_`，存量房源
+    不会被当成新房源重推。iOS / Android 的平台表需同步加上 `canvas`。
+
+* **接上 Canvas 新门户**
+
+    RentCafe 门户换了 host、slug 和 property ID（186609 → 186607），旧地址返回
+    403，自 9 月中起就抓不到。爬虫改指新地址，floorplan 仍每轮从页面发现。侦察
+    记录见 [CANVAS.md](CANVAS.md)。
+
+* **Contact 按钮判为抽签**
+
+    新门户上每套房的按钮都是 `Contact`，租金列写 `Call for Details`；下一步的租约页
+    写明提交申请即进入该单元的抽签。以前没见过的按钮文字会按「可订」放行，现在
+    `Contact` 与 `Join Lottery` 同档，判为 `Available in lottery`。
+
+* **Canvas 报到手价**
+
+    单元表不再给租金时，按单元请求一次租约页，取基础租金与各项费用（服务费、水电暖、
+    管理费）相加作为价格，并写入 `Base rent` / `Service costs amount` 明细与可入住
+    日期。费用按单元缓存 12 小时，常态下只为新出现的单元发请求；取不到时价格留空，
+    不把 `Call for Details` 当价格。拿到明细的房源不再附加服务费区间说明。
+
 ## v2.2.5 (2026-11-17)
 
 * **Codomo 翻页固定排序，修复约两成轮次判不完整**

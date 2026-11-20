@@ -254,9 +254,11 @@ def _ab_from_dict(d: dict) -> AutoBookConfig:
         # OurDomain
         ourdomain_email=d.get("ourdomain_email", ""),
         ourdomain_password=decrypt(d.get("ourdomain_password", "")),
-        # OurCampus。与 Plaza 同理，不回退到 H2S 凭据。
-        ourcampus_email=d.get("ourcampus_email", ""),
-        ourcampus_password=decrypt(d.get("ourcampus_password", "")),
+        # Canvas（原 OurCampus）。与 Plaza 同理，不回退到 H2S 凭据。
+        # 旧键 ourcampus_* 由 mstorage/_canvas_rename.py 改名；这里兜底读一次，
+        # 免得迁移前写入的配置在过渡期里读成空。
+        canvas_email=d.get("canvas_email") or d.get("ourcampus_email", ""),
+        canvas_password=decrypt(d.get("canvas_password") or d.get("ourcampus_password", "")),
         # Plaza。**不回退到 H2S 凭据**——那是当年把 H2S 凭据
         # 抄给 Xior / OurDomain 留下的历史包袱，Plaza 从一开始就独立，别把新平台
         # 接进旧的回退链里。而且 Plaza 用的是用户名不是邮箱，抄过来必然登录失败，
@@ -352,7 +354,7 @@ def _user_to_row(u: UserConfig) -> dict:
             d[field_name] = encrypt(d[field_name])
     ab = d.get("auto_book") or {}
     for _pw_key in ("xior_password", "ourdomain_password",
-                    "ourcampus_password", "plaza_password"):
+                    "canvas_password", "plaza_password"):
         if ab.get(_pw_key):
             ab[_pw_key] = encrypt(ab[_pw_key])
     # 申请人档案：**默认全部加密**，例外清单见 config._PLAINTEXT_PROFILE_FIELDS。

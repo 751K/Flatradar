@@ -5,7 +5,7 @@
 不经过 DB。
 
 最关键的一条契约：**「抓到 0 条」不等于「坏了」**。
-Xior 四栋楼常态零可订，OurCampus 官网自述排队 16–18 个月。把它们钉在告警上
+Xior 四栋楼常态零可订，Canvas 官网自述排队 16–18 个月。把它们钉在告警上
 会让真信号被噪音淹掉，而告警一旦被无视，等于没有告警。
 """
 from __future__ import annotations
@@ -85,7 +85,7 @@ class TestJudgeStatus:
         # 本来有房、突然全没了——上游改版打坏解析器就是这个特征。
         (_rows(_zero(3) + _ok(5, listings=284)), health.STATUS_WARN,
          {"zero_streak": 3, "max_listings": 284}),
-        # Xior / OurCampus 常态零可订，不该被永久钉在告警上。
+        # Xior / Canvas 常态零可订，不该被永久钉在告警上。
         (_rows(_zero(20)), health.STATUS_OK,
          {"zero_streak": 20, "max_listings": 0}),
     ])
@@ -347,7 +347,7 @@ class TestWatchdog:
         """判据是**多久**没抓到，不是**几轮**。
 
         高峰期一轮 60 秒，而「全站 0 条」现在本来就是常态：feed 只列可订房源、
-        OurCampus 三个月 1 条、Xior 常态零可订。按轮数算的话六分钟就报一次
+        Canvas 三个月 1 条、Xior 常态零可订。按轮数算的话六分钟就报一次
         ——2026-08-25 当天报了两次，两次都是正常状态。
         """
         self._with_a_listing(st)
@@ -853,7 +853,7 @@ class TestSilenceIsMeasuredInTime:
     6 分钟也可以是 39 分钟。而现在「全站 0 条」是常态，不是故障——
 
         feed 只列可订/抽签，平台上没有可订房源时正确地返回 0
-        OurCampus 官网自述排队 16–18 个月，三个月抓到 1 条
+        Canvas 官网自述排队 16–18 个月，三个月抓到 1 条
         Xior 常态零可订
 
     判据换成时间之后，它才回到本来的含义：**库里有房源，却已经很久没有任何

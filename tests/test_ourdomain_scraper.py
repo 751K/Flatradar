@@ -350,7 +350,7 @@ class TestEndpointGoneIsNotReportedAsNetworkTrouble:
     加了专门的 404 分支，注释里写着「不是代理或网络问题，**别往那个方向查**」。
 
     **但那个教训只落地在了 H2S 一家。** RentCafe 这两个 source（OurDomain /
-    OurCampus）走 ``resp.raise_for_status()``，slug 或 property_id 改了、端点搬了，
+    Canvas）走 ``resp.raise_for_status()``，slug 或 property_id 改了、端点搬了，
     报出来的还是一句泛泛的失败，排查照样会往代理方向走。
 
     RentCafe 的 404 尤其容易发生：URL 里嵌着 ``slug`` 和 ``myolePropertyID``，

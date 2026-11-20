@@ -219,7 +219,7 @@ class TestFallbackWhenNormalizedMissing:
 #
 # `city` 这一列在四个平台上存的不是同一种东西。
 #
-# H2S 存真城市（Eindhoven），Xior / OurDomain / OurCampus 存楼盘名
+# H2S 存真城市（Eindhoven），Xior / OurDomain / Canvas 存楼盘名
 # （Utrecht Willem Dreeslaan、Amsterdam Diemen）。而 `allowed_cities` 是精确
 # 匹配，于是勾了「Utrecht」的用户永远收不到 Xior 在 Utrecht 那 25 套房的通知
 # ——数据在库里、平台也勾了、抓取一切正常，面板上看不出任何异常。
@@ -235,10 +235,10 @@ class TestCanonicalCity:
         ("Eindhoven Zernikestraat", "Eindhoven"),
         ("Amsterdam Naritaweg", "Amsterdam"),
         ("Groningen Eendrachtskade", "Groningen"),
-        # OurDomain / OurCampus
+        # OurDomain / Canvas
         ("Amsterdam Diemen", "Amsterdam"),
         ("Amsterdam South-East", "Amsterdam"),
-        ("OurCampus Amsterdam Diemen", "Amsterdam"),
+        ("Canvas Amsterdam Diemen", "Amsterdam"),
         # H2S 本来就是城市名，原样通过
         ("Eindhoven", "Eindhoven"),
         ("The Hague", "The Hague"),

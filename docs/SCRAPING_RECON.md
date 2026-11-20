@@ -48,6 +48,10 @@ OurDomain 分别见 [CODOMO.md](CODOMO.md)、[XIOR.md](XIOR.md) 和 [OURDOMAIN.m
 
 ### 1.2 OurCampus
 
+> 2026-11-20：OurCampus 已并入 Greystar 的 Canvas 品牌，预订后台迁到新的 RentCafe
+> 地址，原地址不再可用。新地址、荷兰其他 Canvas 楼盘和按钮语义变化见
+> [CANVAS.md](CANVAS.md)。下文是改名前的记录。
+
 OurCampus 抓取器继承 OurDomain 的 RENTCafe 解析器，并覆盖单元表请求方式：
 OurCampus 使用包含 `floorPlans[]` 的 POST 请求。代码复用指纹处理、状态解析及完整性
 判断；具体实现见 [scrapers/ourcampus.py](../scrapers/ourcampus.py) 和
